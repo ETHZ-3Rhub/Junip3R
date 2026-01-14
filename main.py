@@ -110,9 +110,12 @@ def load_instance_types(config_file: Path):
 bundle_dir = getattr(sys, '_MEIPASS', os.getcwd())
 res_folder = Path(os.path.abspath(os.path.join(bundle_dir, 'res')))
 app_icon_file = res_folder / "junip3r_icon.png"
+#app_icon_file = Path("C:/Users/Me/Downloads/Junip3R Logo V4 Cropped.png")
 
 app = QApplication(sys.argv)
-app.setWindowIcon(QIcon(str(app_icon_file)))
+
+app_icon = QIcon(str(app_icon_file))
+app.setWindowIcon(app_icon)
 
 
 if len(sys.argv) > 1:
@@ -199,11 +202,7 @@ class MockFrameSelectionRepository(IFrameSelectionRepository):
         self._selected_frames[video_id] = frames
 
 
-videos = [
-    Video("video_0", Path("C:/Users/Me/Projects/BehaviourTrackingData/data/videos/epm_2023/EPM_Frame5.avi")),
-    Video("video_1", Path("C:/Users/Me/Projects/BehaviourTrackingData/data/videos/nor_2024_new/GPMN07_NORt_241214_1.avi")),
-    Video("video_2", Path("C:/Users/Me/Projects/BehaviourTrackingData/data/videos/epm_2023 - Copy/EPM_Frame5.avi")),
-]
+videos = []
 
 frame_extractor_model = FrameExtractorModel()
 frame_extractor_model._video_repository = MockVideoRepository(videos)
