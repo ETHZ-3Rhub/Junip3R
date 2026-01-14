@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Set
 
-import cv2
 import yaml
 from PySide6.QtCore import QObject
 from PySide6.QtGui import QColor

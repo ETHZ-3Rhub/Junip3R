@@ -24,6 +24,8 @@ class PoseImage(QLabel):
         self.model: Optional[PoseEditorModel] = None
 
         self.show_all_labels = False
+        self.hovered_point = None
+
         self.context_mode = False
         self.context_index = 0
 
@@ -255,6 +257,11 @@ class PoseImage(QLabel):
         if isinstance(current_member, BoundingBoxDelegate):
             needs_update = True
 
+        hovered_point = self.find_keypoint_at_pos(p_cp)
+        if hovered_point != self.hovered_point:
+            self.hovered_point = hovered_point
+            needs_update = True
+
         if needs_update:
             self.update()
 
@@ -373,7 +380,7 @@ class PoseImage(QLabel):
                 p1_i = self._p_or_dragging_p(kp1)
                 p2_i = self._p_or_dragging_p(kp2)
 
-                if p1_i is None or p2_i is None or kp1.visibility < 0.5 or kp2.visibility < 0.5:
+                if p1_i is None or p2_i is None or kp1.visibility < 0.5:
                     continue
 
                 self.renderer.draw_skeleton_line(painter, p1_i, p2_i, opacity=1)
@@ -419,11 +426,9 @@ class PoseImage(QLabel):
                 self.renderer.draw_point_label(painter, p_image, point.name)
 
     def draw_hovered_label(self, painter):
-        hover_point = self.find_keypoint_at_pos(self.mouse_pos_cp)
-
-        if hover_point is not None:
-            p_image = hover_point.p
-            label_str = hover_point.name
+        if self.hovered_point is not None:
+            p_image = self.hovered_point.p
+            label_str = self.hovered_point.name
             self.renderer.draw_point_label(painter, p_image, label_str)
 
     def draw_bounding_box_in_progress(self, painter):
