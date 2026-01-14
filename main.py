@@ -1,11 +1,12 @@
 import colorsys
+import os
 import sys
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Set
 
 import yaml
 from PySide6.QtCore import QObject
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import QMainWindow, QApplication, QFileDialog
 
 from app.frame_extractor.data.repository.abc import IVideoRepository, IFrameSelectionRepository
@@ -106,7 +107,12 @@ def load_instance_types(config_file: Path):
     return instance_types, expected_instance_types, tags
 
 
+bundle_dir = getattr(sys, '_MEIPASS', os.getcwd())
+res_folder = Path(os.path.abspath(os.path.join(bundle_dir, 'res')))
+app_icon_file = res_folder / "junip3r_icon.png"
+
 app = QApplication(sys.argv)
+app.setWindowIcon(QIcon(str(app_icon_file)))
 
 
 if len(sys.argv) > 1:
