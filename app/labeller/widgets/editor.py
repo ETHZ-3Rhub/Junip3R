@@ -8,6 +8,7 @@ from app.labeller.model.pose_editor.controller import Controller
 from app.labeller.data.app_model import AppModel
 from app.labeller.layout.editor import Ui_Editor
 from app.labeller.model.pose_editor.pose_editor_model import PoseEditorModel
+from app.labeller.widgets.yolo_export import YoloExport
 
 
 class Editor(Ui_Editor, QWidget):
@@ -84,6 +85,11 @@ class Editor(Ui_Editor, QWidget):
         self.pose_editor.set_model(self.pose_editor_model)
         self.selection_controls.set_model(self.pose_editor_model)
         self.image_navigation.set_model(self.model)
+
+    def export_yolo(self):
+        print("Exporting YOLO")
+        dialog = YoloExport(self.model, self)
+        dialog.exec()
 
     def _next_image(self):
         if self.model is not None:

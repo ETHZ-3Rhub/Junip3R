@@ -1,6 +1,6 @@
-from typing import Protocol, List, Set
+from typing import Protocol, List, Set, Tuple, Dict
 
-from app.frame_extractor.data.types.data import Video
+from app.frame_extractor.data.types.data import Video, Frame
 
 
 class IVideoRepository(Protocol):
@@ -8,9 +8,14 @@ class IVideoRepository(Protocol):
     def set_videos(self, videos: List[Video]): ...
 
 
-class IFrameSelectionRepository(Protocol):
-    def get_selected_frames(self, video_id: str) -> Set[int]: ...
-    def set_selected_frames(self, video_id: str, frames: Set[int]): ...
+class IFrameRepository(Protocol):
+    def get_frames(self) -> List[Frame]: ...
+    def set_frames(self, frames: List[Frame]): ...
+
+
+class ITagRepository(Protocol):
+    def get_tags(self, image_name: str) -> Tuple[Dict[str, str], List[str]]: ...
+    def set_tags(self, image_name: str, kw_tags: Dict[str, str], tags: List[str]): ...
 
 
 class IFrameExtractorConfigRepository(Protocol):

@@ -33,7 +33,6 @@ class AppModel(QObject):
         self._point_selection_repository: Optional[IPointSelectionRepository] = None
 
         self._image_index = 0
-        self._instances = None
 
         self._new_instance_type_index: int = 0
 
@@ -72,9 +71,7 @@ class AppModel(QObject):
         self.new_instance_type_index_changed.emit(image_index, index)
 
     def get_instances(self, image_index: int) -> List[IInstance]:
-        if self._instances is None:
-            self._instances = self._label_repository.get_instances(image_index)
-        return self._instances
+        return self._label_repository.get_instances(image_index)
 
     def get_instance(self, image_index: int, instance_id: str) -> Optional[IInstance]:
         return next((i for i in self.get_instances(image_index) if i.id == instance_id), None)
@@ -127,7 +124,6 @@ class AppModel(QObject):
         if image_index < 0 or image_index >= self.get_num_images():
             return
         self._image_index = image_index
-        self._instances = None
         self._new_instance_type_index = self.determine_new_instance_type_index(self._image_index)
         self.image_changed.emit(self._image_index)
 

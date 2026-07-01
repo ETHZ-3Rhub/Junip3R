@@ -1,6 +1,6 @@
 from typing import Optional, List
 
-from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex
+from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget
 
@@ -211,9 +211,9 @@ class SelectionControls(Ui_SelectionControls, QWidget):
 
         self.model: Optional[PoseEditorModel] = None
 
-        self.instance_list_model: Optional[InstanceListModel] = InstanceListModel()
-        self.point_list_model: Optional[PointListModel] = PointListModel()
-        self.type_list_model: Optional[TypeListModel] = TypeListModel()
+        self.instance_list_model: InstanceListModel = InstanceListModel()
+        self.point_list_model: PointListModel = PointListModel()
+        self.type_list_model: TypeListModel = TypeListModel()
 
         self.frm_tag_list.setVisible(False)
 
@@ -227,6 +227,8 @@ class SelectionControls(Ui_SelectionControls, QWidget):
         self.lst_points.selectionModel().currentChanged.connect(self._select_point)
 
         self.dpd_instance_type.currentIndexChanged.connect(self._select_instance_type)
+
+        self.point_list_model.modelReset.connect(self._point_list_model_reset)
 
     def set_model(self, model: Optional[PoseEditorModel]):
         if self.model is not None:
@@ -252,7 +254,6 @@ class SelectionControls(Ui_SelectionControls, QWidget):
             point_index = None
 
         self._selection_changed(instance_id, point_index)
-
 
     def _selection_changed(self, instance_id: Optional[str] = None, point_index: Optional[int] = None):
         instance_row = self.instance_list_model.find_row_by_id(instance_id)
@@ -295,6 +296,11 @@ class SelectionControls(Ui_SelectionControls, QWidget):
         selected_instance = self.model.get_selected_instance()
         if selected_instance is not None:
             selected_instance.type = instance_type
+
+    def _point_list_model_reset(self):
+        instance_id, point_index = self.model.get_selection()
+        if instance_id is not None:
+            self.lst_points.setCurrentIndex(self.point_list_model.index(point_index))
 
     def eventFilter(self, obj, event):
         # Prevent the instance type dropdown from changing the selected type when the user scrolls

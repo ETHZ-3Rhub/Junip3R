@@ -310,9 +310,9 @@ class Controller:
         stack.push(SetInstance(self._model, image_index, instance))
 
     def undo(self, image_index: int):
-        stack = self._undo_stacks[image_index]
+        stack = self._get_undo_stack(image_index)
         stack.undo()
 
     def redo(self, image_index: int):
-        stack = self._undo_stacks[image_index]
+        stack = self._get_undo_stack(image_index)
         stack.redo()

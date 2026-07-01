@@ -19,4 +19,4 @@ class ImageRepository(IImageRepository):
         return cv2.imread(str(image_file))
 
     def get_image_name(self, image_index: int) -> str:
-        return self._image_files[image_index].name
+        return self._image_files[image_index].stem

@@ -22,7 +22,7 @@ class YOLOLabelRepository(ILabelRepository):
     @classmethod
     def from_image_repository(cls, instance_types: List[IInstanceType], project_folder: Path, image_repository: IImageRepository):
         image_names = [
-            Path(image_repository.get_image_name(image_index)).stem
+            image_repository.get_image_name(image_index)
             for image_index in range(image_repository.get_num_images())
         ]
         return cls.from_image_names(instance_types, project_folder, image_names)

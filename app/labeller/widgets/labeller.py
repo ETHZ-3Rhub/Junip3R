@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QMainWindow
 
 from app.labeller.data.app_model import AppModel
 from app.labeller.layout.labeller import Ui_Labeller
+from app.labeller.widgets.yolo_export import YoloExport
 
 
 class Labeller(Ui_Labeller, QMainWindow):
@@ -16,6 +17,7 @@ class Labeller(Ui_Labeller, QMainWindow):
         self.window_action.setVisible(False)
         self.action_open_frame_extractor.setVisible(False)
         self.action_open_frame_extractor.triggered.connect(self.open_frame_extractor)
+        self.action_export_as_yolo_dataset.triggered.connect(self.export_yolo)
 
     def set_model(self, model: AppModel):
         self.editor.set_model(model)
@@ -28,3 +30,6 @@ class Labeller(Ui_Labeller, QMainWindow):
     def open_frame_extractor(self):
         if self.frame_extractor_callback is not None:
             self.frame_extractor_callback()
+
+    def export_yolo(self):
+        self.editor.export_yolo()

@@ -45,7 +45,6 @@ class PoseImage(QLabel):
         self.image_frame = ImageFrame()
 
         self.renderer = Renderer(self.camera, self.image_frame)
-        #self.setCursor(Qt.CursorShape.BlankCursor)
 
         self.auto_zoom_locations = {}
 
@@ -380,7 +379,7 @@ class PoseImage(QLabel):
                 p1_i = self._p_or_dragging_p(kp1)
                 p2_i = self._p_or_dragging_p(kp2)
 
-                if p1_i is None or p2_i is None or kp1.visibility < 0.5:
+                if p1_i is None or p2_i is None or kp1.visibility < 0.5 or kp2.visibility < 0.5:
                     continue
 
                 self.renderer.draw_skeleton_line(painter, p1_i, p2_i, opacity=1)

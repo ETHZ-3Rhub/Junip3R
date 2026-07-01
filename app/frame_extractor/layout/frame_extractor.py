@@ -18,15 +18,16 @@ from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
     QTransform)
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox,
     QFrame, QGridLayout, QHBoxLayout, QLabel,
-    QListView, QMainWindow, QMenu, QMenuBar,
-    QPushButton, QSizePolicy, QSlider, QSpinBox,
-    QSplitter, QStatusBar, QVBoxLayout, QWidget)
+    QLayout, QListView, QMainWindow, QMenu,
+    QMenuBar, QPushButton, QSizePolicy, QSlider,
+    QSpinBox, QSplitter, QStatusBar, QVBoxLayout,
+    QWidget)
 
 class Ui_FrameExtractor(object):
     def setupUi(self, FrameExtractor):
         if not FrameExtractor.objectName():
             FrameExtractor.setObjectName(u"FrameExtractor")
-        FrameExtractor.resize(1195, 703)
+        FrameExtractor.resize(1089, 703)
         FrameExtractor.setAcceptDrops(True)
         self.action_open_labeller = QAction(FrameExtractor)
         self.action_open_labeller.setObjectName(u"action_open_labeller")
@@ -40,7 +41,7 @@ class Ui_FrameExtractor(object):
         self.splitter.setChildrenCollapsible(False)
         self.frame = QFrame(self.splitter)
         self.frame.setObjectName(u"frame")
-        self.frame.setMinimumSize(QSize(150, 0))
+        self.frame.setMinimumSize(QSize(0, 0))
         self.frame.setFrameShape(QFrame.StyledPanel)
         self.frame.setFrameShadow(QFrame.Raised)
         self.verticalLayout_2 = QVBoxLayout(self.frame)
@@ -150,7 +151,7 @@ class Ui_FrameExtractor(object):
         self.verticalLayout_4.setContentsMargins(0, 0, 0, 0)
         self.frame_5 = QFrame(self.frame_4)
         self.frame_5.setObjectName(u"frame_5")
-        self.frame_5.setFrameShape(QFrame.StyledPanel)
+        self.frame_5.setFrameShape(QFrame.NoFrame)
         self.frame_5.setFrameShadow(QFrame.Raised)
         self.horizontalLayout_3 = QHBoxLayout(self.frame_5)
         self.horizontalLayout_3.setObjectName(u"horizontalLayout_3")
@@ -177,7 +178,7 @@ class Ui_FrameExtractor(object):
 
         self.frame_6 = QFrame(self.frame_4)
         self.frame_6.setObjectName(u"frame_6")
-        self.frame_6.setFrameShape(QFrame.StyledPanel)
+        self.frame_6.setFrameShape(QFrame.NoFrame)
         self.frame_6.setFrameShadow(QFrame.Raised)
         self.horizontalLayout_2 = QHBoxLayout(self.frame_6)
         self.horizontalLayout_2.setSpacing(6)
@@ -238,11 +239,12 @@ class Ui_FrameExtractor(object):
         self.splitter.addWidget(self.frame_2)
         self.frame_3 = QFrame(self.splitter)
         self.frame_3.setObjectName(u"frame_3")
-        self.frame_3.setMinimumSize(QSize(150, 0))
+        self.frame_3.setMinimumSize(QSize(0, 0))
         self.frame_3.setFrameShape(QFrame.StyledPanel)
         self.frame_3.setFrameShadow(QFrame.Raised)
         self.verticalLayout = QVBoxLayout(self.frame_3)
         self.verticalLayout.setObjectName(u"verticalLayout")
+        self.verticalLayout.setSizeConstraint(QLayout.SetDefaultConstraint)
         self.label_2 = QLabel(self.frame_3)
         self.label_2.setObjectName(u"label_2")
 
@@ -253,27 +255,48 @@ class Ui_FrameExtractor(object):
 
         self.verticalLayout.addWidget(self.lst_frames)
 
-        self.frame_8 = QFrame(self.frame_3)
-        self.frame_8.setObjectName(u"frame_8")
-        self.frame_8.setFrameShape(QFrame.NoFrame)
-        self.frame_8.setFrameShadow(QFrame.Raised)
-        self.gridLayout_2 = QGridLayout(self.frame_8)
-        self.gridLayout_2.setObjectName(u"gridLayout_2")
-        self.gridLayout_2.setContentsMargins(0, 0, 0, 0)
-        self.chb_include_context = QCheckBox(self.frame_8)
+        self.label_3 = QLabel(self.frame_3)
+        self.label_3.setObjectName(u"label_3")
+
+        self.verticalLayout.addWidget(self.label_3)
+
+        self.dpd_target_frames_mode = QComboBox(self.frame_3)
+        self.dpd_target_frames_mode.addItem("")
+        self.dpd_target_frames_mode.addItem("")
+        self.dpd_target_frames_mode.addItem("")
+        self.dpd_target_frames_mode.setObjectName(u"dpd_target_frames_mode")
+
+        self.verticalLayout.addWidget(self.dpd_target_frames_mode)
+
+        self.chb_include_context = QCheckBox(self.frame_3)
         self.chb_include_context.setObjectName(u"chb_include_context")
-        sizePolicy.setHeightForWidth(self.chb_include_context.sizePolicy().hasHeightForWidth())
-        self.chb_include_context.setSizePolicy(sizePolicy)
+        sizePolicy6 = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        sizePolicy6.setHorizontalStretch(0)
+        sizePolicy6.setVerticalStretch(0)
+        sizePolicy6.setHeightForWidth(self.chb_include_context.sizePolicy().hasHeightForWidth())
+        self.chb_include_context.setSizePolicy(sizePolicy6)
         self.chb_include_context.setChecked(True)
 
-        self.gridLayout_2.addWidget(self.chb_include_context, 0, 2, 1, 1)
+        self.verticalLayout.addWidget(self.chb_include_context)
 
-        self.btn_extract_all = QPushButton(self.frame_8)
-        self.btn_extract_all.setObjectName(u"btn_extract_all")
+        self.frm_context_size = QFrame(self.frame_3)
+        self.frm_context_size.setObjectName(u"frm_context_size")
+        self.frm_context_size.setFrameShape(QFrame.NoFrame)
+        self.frm_context_size.setFrameShadow(QFrame.Raised)
+        self.gridLayout_2 = QGridLayout(self.frm_context_size)
+        self.gridLayout_2.setObjectName(u"gridLayout_2")
+        self.gridLayout_2.setContentsMargins(0, 0, 0, 0)
+        self.lbl_context_size = QLabel(self.frm_context_size)
+        self.lbl_context_size.setObjectName(u"lbl_context_size")
+        sizePolicy7 = QSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+        sizePolicy7.setHorizontalStretch(0)
+        sizePolicy7.setVerticalStretch(0)
+        sizePolicy7.setHeightForWidth(self.lbl_context_size.sizePolicy().hasHeightForWidth())
+        self.lbl_context_size.setSizePolicy(sizePolicy7)
 
-        self.gridLayout_2.addWidget(self.btn_extract_all, 0, 0, 1, 2)
+        self.gridLayout_2.addWidget(self.lbl_context_size, 1, 0, 1, 3)
 
-        self.sld_context_size = QSlider(self.frame_8)
+        self.sld_context_size = QSlider(self.frm_context_size)
         self.sld_context_size.setObjectName(u"sld_context_size")
         self.sld_context_size.setMaximum(10)
         self.sld_context_size.setValue(1)
@@ -281,20 +304,15 @@ class Ui_FrameExtractor(object):
         self.sld_context_size.setTickPosition(QSlider.TicksBelow)
         self.sld_context_size.setTickInterval(1)
 
-        self.gridLayout_2.addWidget(self.sld_context_size, 2, 0, 1, 3)
-
-        self.lbl_context_size = QLabel(self.frame_8)
-        self.lbl_context_size.setObjectName(u"lbl_context_size")
-        sizePolicy6 = QSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
-        sizePolicy6.setHorizontalStretch(0)
-        sizePolicy6.setVerticalStretch(0)
-        sizePolicy6.setHeightForWidth(self.lbl_context_size.sizePolicy().hasHeightForWidth())
-        self.lbl_context_size.setSizePolicy(sizePolicy6)
-
-        self.gridLayout_2.addWidget(self.lbl_context_size, 1, 0, 1, 2)
+        self.gridLayout_2.addWidget(self.sld_context_size, 3, 0, 1, 3)
 
 
-        self.verticalLayout.addWidget(self.frame_8)
+        self.verticalLayout.addWidget(self.frm_context_size)
+
+        self.btn_extract_frames = QPushButton(self.frame_3)
+        self.btn_extract_frames.setObjectName(u"btn_extract_frames")
+
+        self.verticalLayout.addWidget(self.btn_extract_frames)
 
         self.btn_open_labeller = QPushButton(self.frame_3)
         self.btn_open_labeller.setObjectName(u"btn_open_labeller")
@@ -308,7 +326,7 @@ class Ui_FrameExtractor(object):
         FrameExtractor.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(FrameExtractor)
         self.menubar.setObjectName(u"menubar")
-        self.menubar.setGeometry(QRect(0, 0, 1195, 22))
+        self.menubar.setGeometry(QRect(0, 0, 1089, 22))
         self.menuWindow = QMenu(self.menubar)
         self.menuWindow.setObjectName(u"menuWindow")
         FrameExtractor.setMenuBar(self.menubar)
@@ -372,9 +390,14 @@ class Ui_FrameExtractor(object):
         self.btn_select_frame.setShortcut(QCoreApplication.translate("FrameExtractor", u"Return", None))
 #endif // QT_CONFIG(shortcut)
         self.label_2.setText(QCoreApplication.translate("FrameExtractor", u"Selected Frames", None))
-        self.chb_include_context.setText(QCoreApplication.translate("FrameExtractor", u"With Context", None))
-        self.btn_extract_all.setText(QCoreApplication.translate("FrameExtractor", u"Extract Frames (All Videos)", None))
+        self.label_3.setText(QCoreApplication.translate("FrameExtractor", u"Extract Frames", None))
+        self.dpd_target_frames_mode.setItemText(0, QCoreApplication.translate("FrameExtractor", u"New Frames", None))
+        self.dpd_target_frames_mode.setItemText(1, QCoreApplication.translate("FrameExtractor", u"All Frames", None))
+        self.dpd_target_frames_mode.setItemText(2, QCoreApplication.translate("FrameExtractor", u"Selected Frames", None))
+
+        self.chb_include_context.setText(QCoreApplication.translate("FrameExtractor", u"Extract Context Video", None))
         self.lbl_context_size.setText(QCoreApplication.translate("FrameExtractor", u"Context Size: 1 seconds", None))
+        self.btn_extract_frames.setText(QCoreApplication.translate("FrameExtractor", u"Extract Frames", None))
         self.btn_open_labeller.setText(QCoreApplication.translate("FrameExtractor", u"Start Labelling \u2b95", None))
         self.menuWindow.setTitle(QCoreApplication.translate("FrameExtractor", u"Window", None))
     # retranslateUi

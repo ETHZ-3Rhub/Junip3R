@@ -12,6 +12,10 @@ class JuniperLabelRepository(ILabelRepository):
         self._instance_types = {t.name: t for t in instance_types}
         self._label_files = label_files
 
+    @property
+    def num_images(self) -> int:
+        return len(self._label_files)
+
     @classmethod
     def from_image_names(cls, instance_types: List[IInstanceType], project_folder: Path, image_names: List[str]):
         label_files = [project_folder / f"{image_name}.txt" for image_name in image_names]
@@ -20,7 +24,7 @@ class JuniperLabelRepository(ILabelRepository):
     @classmethod
     def from_image_repository(cls, instance_types: List[IInstanceType], project_folder: Path, image_repository: IImageRepository):
         image_names = [
-            Path(image_repository.get_image_name(image_index)).stem
+            image_repository.get_image_name(image_index)
             for image_index in range(image_repository.get_num_images())
         ]
         return cls.from_image_names(instance_types, project_folder, image_names)
