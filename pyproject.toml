@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=72", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "junip3r"
+version = "0.1.0"
+authors = [
+  { name="Marcel Schmutz", email="mschmut@ethz.ch" },
+]
+description = "A GUI application for labelling pose estimation data including bounding boxes and keypoints"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-only" }
+dependencies = [
+  "PySide6>=6.7,<7",
+  "numpy>=2.2,<3",
+  "opencv-python>=4.10,<5",
+  "PyYAML>=6.0,<7",
+  "scikit-learn>=1.6,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1,<10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--tb=short -v"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["junip3r*"]
+
+[tool.setuptools.package-data]
+junip3r = [
+  "res/*.png",
+  "res/*.ico",
+  "res/*.qss",
+]
