@@ -116,6 +116,7 @@ class Ui_SelectionControls(object):
         self.dpd_instance_type.addItem("")
         self.dpd_instance_type.addItem("")
         self.dpd_instance_type.setObjectName(u"dpd_instance_type")
+        self.dpd_instance_type.setFont(font)
 
         self.verticalLayout_5.addWidget(self.dpd_instance_type)
 

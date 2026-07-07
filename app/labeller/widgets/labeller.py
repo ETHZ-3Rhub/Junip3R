@@ -1,35 +1,45 @@
 from typing import Optional, Callable
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QMainWindow
 
-from app.labeller.data.app_model import AppModel
 from app.labeller.layout.labeller import Ui_Labeller
-from app.labeller.widgets.yolo_export import YoloExport
+from app.labeller.model.editor_model import EditorModel
 
 
 class Labeller(Ui_Labeller, QMainWindow):
-    def __init__(self):
-        super().__init__()
+    switch_to = Signal(str)
+    closed = Signal()
+
+    def __init__(self, show_frame_extractor: bool = False, parent=None):
+        super().__init__(parent)
         self.setupUi(self)
 
         self.frame_extractor_callback: Optional[Callable[[], None]] = None
         self.window_action = next(a for a in self.menubar.actions() if a.menu() and a.menu().title() == "Window")
-        self.window_action.setVisible(False)
-        self.action_open_frame_extractor.setVisible(False)
-        self.action_open_frame_extractor.triggered.connect(self.open_frame_extractor)
+
+        self.window_action.setVisible(show_frame_extractor)
+        self.action_open_frame_extractor.setVisible(show_frame_extractor)
+        self.action_open_project_setup.setVisible(False)
+
+        self.action_open_frame_extractor.triggered.connect(self.switch_to_frame_extractor)
         self.action_export_as_yolo_dataset.triggered.connect(self.export_yolo)
 
-    def set_model(self, model: AppModel):
-        self.editor.set_model(model)
+        self.btn_open_frame_extractor.clicked.connect(self.switch_to_frame_extractor)
 
-    def set_frame_extractor_callback(self, callback: Callable[[], None] = None):
-        self.frame_extractor_callback = callback
-        self.window_action.setVisible(self.frame_extractor_callback is not None)
-        self.action_open_frame_extractor.setVisible(self.frame_extractor_callback is not None)
+    def set_model(self, model: EditorModel):
+        if model.get_num_images() > 0:
+            self.editor.set_model(model)
+            self.stk_content.setCurrentIndex(0)
+        else:
+            self.editor.set_model(None)
+            self.stk_content.setCurrentIndex(1)
 
-    def open_frame_extractor(self):
-        if self.frame_extractor_callback is not None:
-            self.frame_extractor_callback()
+    def switch_to_frame_extractor(self):
+        self.switch_to.emit("frame_extractor")
 
     def export_yolo(self):
         self.editor.export_yolo()
+
+    def closeEvent(self, event):
+        self.closed.emit()

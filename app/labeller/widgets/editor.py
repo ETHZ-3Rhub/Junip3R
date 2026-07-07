@@ -1,13 +1,13 @@
+from copy import deepcopy
 from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QWidget
 
-from app.labeller.model.pose_editor.controller import Controller
-from app.labeller.data.app_model import AppModel
 from app.labeller.layout.editor import Ui_Editor
-from app.labeller.model.pose_editor.pose_editor_model import PoseEditorModel
+from app.labeller.model.image_model import ImageModel
+from app.labeller.model.editor_model import EditorModel
 from app.labeller.widgets.yolo_export import YoloExport
 
 
@@ -16,8 +16,8 @@ class Editor(Ui_Editor, QWidget):
         super().__init__(parent)
         self.setupUi(self)
 
-        self.model: Optional[AppModel] = None
-        self.pose_editor_model: Optional[PoseEditorModel] = None
+        self.model: Optional[EditorModel] = None
+        self.image_model: Optional[ImageModel] = None
 
         self.act_left = QAction(self)
         self.act_left.setShortcut(QKeySequence(Qt.Key.Key_Left))
@@ -79,15 +79,19 @@ class Editor(Ui_Editor, QWidget):
         self.auto_zoom_action.triggered.connect(self.pose_editor.pose_image.auto_zoom)
         self.addAction(self.auto_zoom_action)
 
-    def set_model(self, model: AppModel):
+    def set_model(self, model: EditorModel):
         self.model = model
-        self.pose_editor_model = PoseEditorModel(model, Controller(model))
-        self.pose_editor.set_model(self.pose_editor_model)
-        self.selection_controls.set_model(self.pose_editor_model)
+
+        if model is not None:
+            self.image_model = ImageModel(model)
+        else:
+            self.image_model = None
+
+        self.pose_editor.set_model(self.image_model)
+        self.selection_controls.set_model(self.image_model)
         self.image_navigation.set_model(self.model)
 
     def export_yolo(self):
-        print("Exporting YOLO")
         dialog = YoloExport(self.model, self)
         dialog.exec()
 
@@ -100,35 +104,41 @@ class Editor(Ui_Editor, QWidget):
             self.model.previous_image()
 
     def _next_point(self):
-        if self.pose_editor_model is not None:
-            self.pose_editor_model.next_point()
+        if self.image_model is not None:
+            self.image_model.select_next_point()
 
     def _previous_point(self):
-        if self.pose_editor_model is not None:
-            self.pose_editor_model.previous_point()
+        if self.image_model is not None:
+            self.image_model.select_previous_point()
 
     def _copy_instance(self):
-        if self.pose_editor_model is None:
+        if self.image_model is None:
             return
-        self.pose_editor_model.copy_instance()
+        instance_id, _ = self.image_model.get_selection()
+        if instance_id is None:
+            return
+        instance = self.image_model.get_instance(instance_id)
+        self._copied_instance = deepcopy(instance)
 
     def _paste_instance(self):
-        if self.pose_editor_model is None:
+        if self.image_model is None:
             return
-        self.pose_editor_model.paste_instance()
+        if self._copied_instance is None:
+            return
+        self.image_model.paste_instance(self._copied_instance)
 
     def _delete_instance(self):
-        if self.pose_editor_model is None:
+        if self.image_model is None:
             return
-        instance = self.pose_editor_model.get_selected_instance()
-        if instance.instance_id is None:
+        instance_id, _ = self.image_model.get_selection()
+        if instance_id is None:
             return
-        instance.delete()
+        self.image_model.delete_instance(instance_id)
 
     def _undo(self):
-        if self.pose_editor_model is not None:
-            self.pose_editor_model.undo()
+        if self.image_model is not None:
+            self.image_model.undo()
 
     def _redo(self):
-        if self.pose_editor_model is not None:
-            self.pose_editor_model.redo()
+        if self.image_model is not None:
+            self.image_model.redo()

@@ -8,7 +8,7 @@ import yaml
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QFileDialog, QDialogButtonBox, QMessageBox, QListWidgetItem
 
-from app.labeller.data.app_model import AppModel
+from app.labeller.model.app_model import AppModel
 from app.labeller.data.types.abc import IInstanceType, IInstance
 from app.labeller.layout.yolo_export import Ui_DYOLOExport
 

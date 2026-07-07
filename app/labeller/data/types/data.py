@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
 from app.labeller.data.types.abc import BoundingBoxType, IKeypointType, IInstanceType, IBoundingBox, IKeypoint, IInstance
 
@@ -16,6 +16,15 @@ class InstanceType(IInstanceType):
     box_type: BoundingBoxType = BoundingBoxType.AUTOMATIC
     keypoints: List[IKeypointType] = field(default_factory=list)
     skeleton: List[Tuple[int, int]] = field(default_factory=list)
+    skeleton_color: Tuple[int, int, int] = (0, 0, 0)
+
+    @property
+    def num_members(self) -> int:
+        num_keypoints = len(self.keypoints)
+        return num_keypoints if self.box_type == BoundingBoxType.AUTOMATIC else num_keypoints + 1
+
+    def __repr__(self):
+        return f"InstanceType(name={self.name}, box_type={self.box_type}, keypoints={self.keypoints}, skeleton={self.skeleton})"
 
 
 class BoundingBox(IBoundingBox):
@@ -47,8 +56,19 @@ class BoundingBox(IBoundingBox):
 
 @dataclass(slots=True)
 class Keypoint(IKeypoint):
-    p: Tuple[float, float] = None
+    _p: Optional[Tuple[float, float]] = None
     visibility: float = 0.0
+
+    @property
+    def p(self) -> Optional[Tuple[float, float]]:
+        return self._p if self.visibility > 0.5 else None
+
+    @p.setter
+    def p(self, p: Optional[Tuple[float, float]]):
+        self._p = p
+
+    def __repr__(self):
+        return f"Keypoint(p={self.p}, visibility={self.visibility})"
 
 
 class Instance(IInstance):
@@ -58,3 +78,6 @@ class Instance(IInstance):
         self.type = type_
         self.box = box or BoundingBox()
         self.keypoints = keypoints or [Keypoint() for _ in range(len(type_.keypoints))]
+
+    def __repr__(self):
+        return f"Instance(id={self.id}, name={self.name}, type={self.type}, box={self.box}, keypoints={self.keypoints})"

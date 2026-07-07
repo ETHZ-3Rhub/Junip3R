@@ -204,6 +204,11 @@
        </item>
        <item>
         <widget class="QComboBox" name="dpd_instance_type">
+         <property name="font">
+          <font>
+           <pointsize>12</pointsize>
+          </font>
+         </property>
          <item>
           <property name="text">
            <string>Face</string>
