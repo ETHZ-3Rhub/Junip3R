@@ -449,11 +449,14 @@ SELECTION_STRATEGIES: Dict[str, ISelectionStrategy] = {
 
 
 class FrameExtractor(Ui_FrameExtractor, QMainWindow):
+    switch_to = Signal(str)
+    closed = Signal()
+
     selection_requested = Signal(SelectionJob)
     extraction_requested = Signal(ExtractionJob)
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, show_labeller: bool = False, parent=None):
+        super().__init__(parent)
         self.setupUi(self)
 
         self.play_icon = QIcon.fromTheme(QIcon.ThemeIcon.MediaPlaybackStart)
@@ -467,13 +470,12 @@ class FrameExtractor(Ui_FrameExtractor, QMainWindow):
 
         self.lbl_video.setScaledContents(False)
 
-        self.labeller_callback: Optional[Callable[[], None]] = None
         self.window_action = next(a for a in self.menubar.actions() if a.menu() and a.menu().title() == "Window")
-        self.window_action.setVisible(False)
-        self.action_open_labeller.setVisible(False)
+        self.window_action.setVisible(show_labeller)
+        self.action_open_labeller.setVisible(show_labeller)
         self.action_open_labeller.triggered.connect(self.open_labeller)
 
-        self.btn_open_labeller.setVisible(False)
+        self.btn_open_labeller.setVisible(show_labeller)
         self.btn_open_labeller.clicked.connect(self.open_labeller)
 
         self.project_folder: Optional[Path] = None
@@ -566,15 +568,8 @@ class FrameExtractor(Ui_FrameExtractor, QMainWindow):
 
         QTimer.singleShot(0, self.check_video_files)
 
-    def set_labeller_callback(self, callback: Callable[[], None] = None):
-        self.labeller_callback = callback
-        self.window_action.setVisible(self.labeller_callback is not None)
-        self.action_open_labeller.setVisible(self.labeller_callback is not None)
-        self.btn_open_labeller.setVisible(self.labeller_callback is not None)
-
     def open_labeller(self):
-        if self.labeller_callback is not None:
-            self.labeller_callback()
+        self.switch_to.emit("labeller")
 
     def dragEnterEvent(self, event):
         # Accept video files
@@ -978,3 +973,7 @@ class FrameExtractor(Ui_FrameExtractor, QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.show_frame(self._current_frame)
+
+    def closeEvent(self, event):
+        self.closed.emit()
+        event.accept()

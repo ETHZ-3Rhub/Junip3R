@@ -2,8 +2,8 @@ from typing import Optional
 
 from PySide6.QtWidgets import QWidget
 
-from app.labeller.data.app_model import AppModel
 from app.labeller.layout.image_navigation import Ui_ImageNavigation
+from app.labeller.model.editor_model import EditorModel
 
 
 class ImageNavigation(Ui_ImageNavigation, QWidget):
@@ -11,23 +11,23 @@ class ImageNavigation(Ui_ImageNavigation, QWidget):
         super().__init__(parent)
         self.setupUi(self)
 
-        self.model: Optional[AppModel] = None
+        self.model: Optional[EditorModel] = None
 
         self.sld_image_number.valueChanged.connect(self._select_image)
 
         self.btn_next_image.clicked.connect(self._next_image)
         self.btn_previous_image.clicked.connect(self._previous_image)
 
-    def set_model(self, model: AppModel):
+    def set_model(self, model: EditorModel):
         if self.model is not None:
-            self.model.image_changed.disconnect(self._image_changed)
+            self.model.image_index_changed.disconnect(self._image_changed)
             self.sld_image_number.setMinimum(0)
             self.sld_image_number.setMaximum(0)
 
         self.model = model
 
         if self.model is not None:
-            self.model.image_changed.connect(self._image_changed)
+            self.model.image_index_changed.connect(self._image_changed)
             self.sld_image_number.setMinimum(1)
             self.sld_image_number.setMaximum(self.model.get_num_images())
             self._image_changed(self.model.get_image_index())

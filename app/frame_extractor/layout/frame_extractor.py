@@ -346,7 +346,7 @@ class Ui_FrameExtractor(object):
     # setupUi
 
     def retranslateUi(self, FrameExtractor):
-        FrameExtractor.setWindowTitle(QCoreApplication.translate("FrameExtractor", u"Labell3R Frame Extractor", None))
+        FrameExtractor.setWindowTitle(QCoreApplication.translate("FrameExtractor", u"Junip3R Frame Extractor", None))
         self.action_open_labeller.setText(QCoreApplication.translate("FrameExtractor", u"Start Labelling", None))
         self.label.setText(QCoreApplication.translate("FrameExtractor", u"Videos", None))
         self.btn_add_videos.setText(QCoreApplication.translate("FrameExtractor", u"Add Videos", None))

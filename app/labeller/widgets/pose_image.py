@@ -6,8 +6,9 @@ from PySide6.QtGui import Qt, QPainter
 from PySide6.QtWidgets import QLabel
 
 from app.labeller.data.types.abc import BoundingBoxType
-from app.labeller.model.pose_editor.pose_editor_model import PoseEditorModel
-from app.labeller.model.pose_editor.delegates import InstanceDelegate, BoundingBoxDelegate, KeypointDelegate
+from app.labeller.model.image_model import ImageModel
+from app.labeller.model.delegate_model import InstanceDelegate, BoundingBoxDelegate, KeypointDelegate, \
+    InstanceMemberDelegate
 from app.labeller.widgets.renderer import Renderer, Camera, ImageFrame
 
 POINT_RADIUS = 6
@@ -21,7 +22,7 @@ class PoseImage(QLabel):
         self.setMouseTracking(True)
         self.setFocusPolicy(QtGui.Qt.FocusPolicy.StrongFocus)
 
-        self.model: Optional[PoseEditorModel] = None
+        self.model: Optional[ImageModel] = None
 
         self.show_all_labels = False
         self.hovered_point = None
@@ -48,7 +49,7 @@ class PoseImage(QLabel):
 
         self.auto_zoom_locations = {}
 
-    def set_model(self, model: PoseEditorModel):
+    def set_model(self, model: ImageModel):
         if self.model is not None:
             self.model.reset.disconnect(self.reset)
             self.model.instance_added.disconnect(self.update)
@@ -80,22 +81,61 @@ class PoseImage(QLabel):
             self.image_frame.set_size(100, 100)
         self.update()
 
+    def _get_instances(self) -> List[InstanceDelegate]:
+        if self.model is None:
+            return []
+
+        instances = self.model.get_instances()
+        delegates = [InstanceDelegate.from_instance(instance) for i, instance in enumerate(instances)]
+        return delegates
+
+    def _get_instance(self, instance_id: Optional[str]) -> InstanceDelegate:
+        assert self.model is not None, "Model not set"
+
+        if instance_id is None:
+            return InstanceDelegate.from_instance_type(self.model.get_new_instance_type())
+
+        instance = self.model.get_instance(instance_id)
+        assert instance is not None, f"Instance {instance_id} not found"
+
+        return InstanceDelegate.from_instance(instance)
+
+    def _get_selected_instance(self) -> InstanceDelegate:
+        assert self.model is not None, "Model not set"
+
+        instance_id, _ = self.model.get_selection()
+        return self._get_instance(instance_id)
+
+    def _get_selected_member(self) -> InstanceMemberDelegate:
+        assert self.model is not None, "Model not set"
+
+        instance_id, member_index = self.model.get_selection()
+
+        instance = self._get_instance(instance_id)
+
+        assert member_index is not None, "No member selected"
+        return instance.members[member_index]
+
     def auto_zoom(self):
-        selected_instance_id, selected_member_index = self.model.get_selection()
-        selected_instance = self.model.get_instance(selected_instance_id)
-        if not selected_instance:
+        if self.model is None:
             return
-        selected_member = selected_instance.members[selected_member_index]
-        if not isinstance(selected_member, KeypointDelegate):
+
+        instance = self._get_selected_instance()
+        member = self._get_selected_member()
+        if not isinstance(member, KeypointDelegate):
             return
-        key = (selected_instance.type.name, selected_member.keypoint_index)
+
+        key = (instance.type.name, member.keypoint_index)
         if key not in self.auto_zoom_locations:
             return
         self.camera.center_x, self.camera.center_y, self.camera.zoom = self.auto_zoom_locations[key]
         self.update()
 
     def find_keypoint_at_pos(self, p_cp: Tuple[float, float]) -> Optional[KeypointDelegate]:
-        instances = self.model.get_instances()
+        if self.model is None:
+            return None
+
+        instances = self._get_instances()
         for instance in reversed(instances):
             for keypoint in reversed(instance.keypoints):
                 kp_p_i = keypoint.p
@@ -112,13 +152,15 @@ class PoseImage(QLabel):
         return None
 
     def find_bounding_box_at_pos(self, p_cp: Tuple[float, float]) -> Optional[BoundingBoxDelegate]:
-        instances = self.model.get_instances()
+        if self.model is None:
+            return None
+
+        instances = self._get_instances()
         for instance in reversed(instances):
-            box = instance.box.box
-            if box is None:
+            if instance.box.box is None:
                 continue
 
-            p1_i, p2_i = box
+            p1_i, p2_i = instance.box.box
             p1_ip = self.image_frame.image01_to_imagepx(*p1_i)
             p2_ip = self.image_frame.image01_to_imagepx(*p2_i)
             p1 = self.image_frame.imagepx_to_world(*p1_ip)
@@ -131,6 +173,9 @@ class PoseImage(QLabel):
         return None
 
     def place(self, p_cp: Tuple[float, float], visible=True):
+        if self.model is None:
+            return
+
         p = self.camera.view_to_world(*p_cp)
         p_ip = self.image_frame.world_to_imagepx(*p)
         p_i = self.image_frame.imagepx_to_image01(*p_ip)
@@ -138,7 +183,7 @@ class PoseImage(QLabel):
         p_i = (max(0.0, p_i[0]), max(0.0, p_i[1]))
         p_i = (min(1.0, p_i[0]), min(1.0, p_i[1]))
 
-        selected_member = self.model.get_selected_member()
+        selected_member = self._get_selected_member()
 
         if not selected_member:
             self.model.set_selection(None, 0)
@@ -148,31 +193,38 @@ class PoseImage(QLabel):
             if self.bounding_box_start_pos_i is None:
                 self.bounding_box_start_pos_i = p_i
             else:
-                selected_member.set((self.bounding_box_start_pos_i, p_i))
+                self.model.set_bounding_box(selected_member.instance_id, (self.bounding_box_start_pos_i, p_i))
                 self.bounding_box_start_pos_i = None
         elif isinstance(selected_member, KeypointDelegate):
-            selected_member.set(p_i, 2.0 if visible else 1.0)
-            selected_instance = self.model.get_selected_instance()
+            self.model.place_keypoint(selected_member.instance_id, selected_member.keypoint_index, p_i, visibility=2 if visible else 1)
+            selected_instance = self._get_selected_instance()
             self.auto_zoom_locations[(selected_instance.type.name, selected_member.keypoint_index)] = (self.camera.center_x, self.camera.center_y, self.camera.zoom)
 
     def delete(self, p_cp: Tuple[int, int]):
+        if self.model is None:
+            return
+
         if self.bounding_box_start_pos_i is not None:
             self.bounding_box_start_pos_i = None
             return
 
         keypoint = self.find_keypoint_at_pos(p_cp)
         if keypoint is not None:
-            keypoint.delete()
+            self.model.delete_keypoint(keypoint.instance_id, keypoint.keypoint_index)
             return
 
         box = self.find_bounding_box_at_pos(p_cp)
         if box is not None:
-            box.delete()
+            self.model.delete_bounding_box(box.instance_id)
+            return
 
     def toggle_visibility(self, p_cp: Tuple[int, int]):
+        if self.model is None:
+            return
+
         keypoint = self.find_keypoint_at_pos(p_cp)
         if keypoint is not None:
-            keypoint.visibility = 1.0 if keypoint.visibility == 2.0 else 2.0
+            self.model.toggle_keypoint_visibility(keypoint.instance_id, keypoint.keypoint_index)
 
     def stop_context_mode(self):
         self.context_mode = False
@@ -219,15 +271,16 @@ class PoseImage(QLabel):
         p_cp = (event.pos().x(), event.pos().y())
         if event.button() == QtGui.Qt.MouseButton.LeftButton:
             if self.dragging_point is not None and self.dragging_point_start_pos_i is not None:
-                dragging_point_start_pos_ip = self.image_frame.image01_to_imagepx(*self.dragging_point_start_pos_i)
-                dragging_point_start_pos = self.image_frame.imagepx_to_world(*dragging_point_start_pos_ip)
-                dragging_point_start_pos_cp = self.camera.world_to_view(*dragging_point_start_pos)
+                if self.model is not None:
+                    dragging_point_start_pos_ip = self.image_frame.image01_to_imagepx(*self.dragging_point_start_pos_i)
+                    dragging_point_start_pos = self.image_frame.imagepx_to_world(*dragging_point_start_pos_ip)
+                    dragging_point_start_pos_cp = self.camera.world_to_view(*dragging_point_start_pos)
 
-                dist = (p_cp[0] - dragging_point_start_pos_cp[0]) ** 2 + (p_cp[1] - dragging_point_start_pos_cp[1]) ** 2
-                if dist > DRAG_THRESHOLD:
-                    self.dragging_point.move(self.dragging_point_current_pos_i)
-                else:
-                    self.place(dragging_point_start_pos_cp)
+                    dist = (p_cp[0] - dragging_point_start_pos_cp[0]) ** 2 + (p_cp[1] - dragging_point_start_pos_cp[1]) ** 2
+                    if dist > DRAG_THRESHOLD:
+                        self.model.move_keypoint(self.dragging_point.instance_id, self.dragging_point.keypoint_index, self.dragging_point_current_pos_i)
+                    else:
+                        self.place(dragging_point_start_pos_cp)
 
             self.dragging_point = None
             self.dragging_point_start_pos_i = None
@@ -252,7 +305,7 @@ class PoseImage(QLabel):
             self.dragging_point_current_pos_i = p_i
             needs_update = True
 
-        current_member = self.model.get_selected_member()
+        current_member = self._get_selected_member()
         if isinstance(current_member, BoundingBoxDelegate):
             needs_update = True
 
@@ -280,45 +333,49 @@ class PoseImage(QLabel):
             self.update()
         super().keyReleaseEvent(event)
 
+    def _zoom(self, zoom_factor: float, mouse_pos_cp: Tuple[float, float]):
+        zoom = self.camera.zoom * zoom_factor
+        mouse_x, mouse_y = mouse_pos_cp
+        self.camera.set_zoom_around(zoom, mouse_x, mouse_y)
+        self.update()
+
+    def _move_context(self, delta: int):
+        if self.model is None:
+            return
+
+        self.context_mode = True
+
+        context = self.model.get_context()
+        if not context:
+            return
+
+        before, current, after = context
+
+        context_min = -len(before)
+        context_max = len(after)
+
+        self.context_index += delta
+        if self.context_index < context_min:
+            self.context_index = context_min
+        if self.context_index > context_max:
+            self.context_index = context_max
+
+        self.update()
+
     def wheelEvent(self, event):
         if not self.hasFocus():
             self.setFocus(Qt.FocusReason.MouseFocusReason)
 
         if event.modifiers() & QtGui.Qt.KeyboardModifier.ControlModifier:
-            context = self.model.get_context()
-            if not context:
-                return
-
-            before, current, after = context
-
-            context_min = -len(before)
-            context_max = len(after)
-
-            self.context_mode = True
-            if event.angleDelta().y() > 0:
-                self.context_index -= 1
-                if self.context_index < context_min:
-                    self.context_index = context_min
-            else:
-                self.context_index += 1
-                if self.context_index > context_max:
-                    self.context_index = context_max
-            self.update()
+            delta = -1 if event.angleDelta().y() > 0 else 1
+            self._move_context(delta)
             return
 
-        zoom = self.camera.zoom
-        if event.angleDelta().y() > 0:
-            zoom *= 1.1
-        else:
-            zoom /= 1.1
+        zoom_factor = 1.1 if event.angleDelta().y() > 0 else 1 / 1.1
+        mouse_pos_cp = (event.position().x(), event.position().y())
+        self._zoom(zoom_factor, mouse_pos_cp)
 
-        mouse_pos = event.position()
-        mouse_x = mouse_pos.x()
-        mouse_y = mouse_pos.y()
-
-        self.camera.set_zoom_around(zoom, mouse_x, mouse_y)
-        self.update()
-        super().wheelEvent(event)
+        event.accept()
 
     def focusOutEvent(self, e):
         # If focus leaves the label while viewing context, snap back
@@ -373,6 +430,8 @@ class PoseImage(QLabel):
 
     def draw_instances(self, painter: QPainter, instances: List[InstanceDelegate]):
         for instance in instances:
+            color = QtGui.QColor(*instance.type.skeleton_color)
+
             for point_index1, point_index2 in instance.skeleton:
                 kp1 = instance.keypoints[point_index1]
                 kp2 = instance.keypoints[point_index2]
@@ -382,7 +441,7 @@ class PoseImage(QLabel):
                 if p1_i is None or p2_i is None or kp1.visibility < 0.5 or kp2.visibility < 0.5:
                     continue
 
-                self.renderer.draw_skeleton_line(painter, p1_i, p2_i, opacity=1)
+                self.renderer.draw_skeleton_line(painter, p1_i, p2_i, color, opacity=1)
 
         for instance in instances:
             if instance.type.box_type == BoundingBoxType.AUTOMATIC:
@@ -447,7 +506,7 @@ class PoseImage(QLabel):
         self.renderer.draw_bounding_box(painter, p1_i, p2_i)
 
     def draw_crosshair(self, painter):
-        current_member = self.model.get_selected_member()
+        current_member = self._get_selected_member()
 
         if not isinstance(current_member, BoundingBoxDelegate):
             self.setCursor(Qt.CursorShape.ArrowCursor)
@@ -480,7 +539,7 @@ class PoseImage(QLabel):
 
             self.renderer.draw_image(painter, image)
 
-            instances = self.model.get_instances()
+            instances = self._get_instances()
             self.draw_instances(painter, instances)
             if self.show_all_labels:
                 self.draw_all_labels(painter, instances)

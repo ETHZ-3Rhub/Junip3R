@@ -194,12 +194,12 @@ class Renderer:
 
         painter.drawEllipse(QPoint(x, y), POINT_RADIUS, POINT_RADIUS)
 
-    def draw_skeleton_line(self, painter: QtGui.QPainter, p1_image01, p2_image01, opacity=1.0):
+    def draw_skeleton_line(self, painter: QtGui.QPainter, p1_image01, p2_image01, color: QColor, opacity=1.0):
         x1, y1 = self._image01_to_view_px(p1_image01)
         x2, y2 = self._image01_to_view_px(p2_image01)
 
         painter.setOpacity(opacity)
-        painter.setPen(QPen(QColor(0, 0, 0), 2))
+        painter.setPen(QPen(color, 2))
         painter.drawLine(x1, y1, x2, y2)
 
     def draw_point_label(self, painter: QtGui.QPainter, p_image01, label_str: str):

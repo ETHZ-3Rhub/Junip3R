@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import QApplication
 
 
-from app.labeller.data.app_model import AppModel
+from app.labeller.model.app_model import AppModel
 from app.labeller.data.repository.abc import IPointSelectionRepository, ISettingsRepository
 from app.labeller.data.repository.config import LabellerConfigRepository
 from app.labeller.data.repository.context import ContextRepository
@@ -17,18 +17,26 @@ from app.labeller.data.repository.image import ImageRepository
 from app.labeller.data.repository.label import JuniperLabelRepository
 from app.labeller.data.types.abc import BoundingBoxType
 from app.labeller.data.types.data import InstanceType, KeypointType
+from app.labeller.model.editor_model import EditorModel
 from app.labeller.widgets.labeller import Labeller
 
 
 class MockSelectionRepository(IPointSelectionRepository):
     def __init__(self):
         self._selections: Dict[int, Tuple[Optional[str], Optional[int]]] = {}
+        self._new_instance_type_index: Dict[int, Optional[int]] = {}
 
     def get_selection(self, image_index: int) -> Tuple[Optional[str], Optional[int]]:
         return self._selections.get(image_index, (None, None))
 
     def set_selection(self, image_index: int, instance_id: str, point_index: int):
         self._selections[image_index] = (instance_id, point_index)
+
+    def get_new_instance_type_index(self, image_index: int) -> int:
+        return self._new_instance_type_index.get(image_index) or 0
+
+    def set_new_instance_type_index(self, image_index: int, instance_type_index: int):
+        self._new_instance_type_index[image_index] = instance_type_index
 
 
 class MockSettingsRepository(ISettingsRepository):
@@ -49,13 +57,15 @@ def color_from_hue(hue: float) -> Tuple[int, int, int]:
     return int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)
 
 
-def color_from_string(color_string: str) -> Optional[Tuple[int, int, int]]:
+def color_from_string(color_string: str) -> Tuple[int, int, int]:
     if color_string.startswith("#"):
         return int(color_string[1:3], 16), int(color_string[3:5], 16), int(color_string[5:7], 16)
     else:
         color = QColor(color_string)
         if not color.isValid():
-            return None
+            return 0, 0, 0
+        else:
+            return color.red(), color.green(), color.blue()
 
 
 def load_instance_types(config_file: Path):
@@ -70,6 +80,11 @@ def load_instance_types(config_file: Path):
         skeleton = instance_type_dict["skeleton"]
         skeleton = [(points.index(skeleton_point[0]), points.index(skeleton_point[1])) for skeleton_point in skeleton]
 
+        if "skeleton_color" in instance_type_dict:
+            skeleton_color = color_from_string(instance_type_dict["skeleton_color"])
+        else:
+            skeleton_color = (0, 0, 0)
+
         if "bounding_box_type" not in instance_type_dict:
             bounding_box_type = BoundingBoxType.AUTOMATIC
         else:
@@ -83,14 +98,14 @@ def load_instance_types(config_file: Path):
         point_types = []
         for point_index, point in enumerate(points):
             color = None
-            if point_index in colors:
+            if point_index < len(colors):
                 color = color_from_string(colors[point_index])
             if color is None:
                 point_percentage = point_index / len(points)
                 color = color_from_hue(point_percentage)
             point_types.append(KeypointType(point, color))
 
-        instance_types.append(InstanceType(name, bounding_box_type, point_types, skeleton))
+        instance_types.append(InstanceType(name, bounding_box_type, point_types, skeleton, skeleton_color))
 
     instance_type_names = [instance_type.name for instance_type in instance_types]
     expected_instance_types = [
@@ -103,53 +118,60 @@ def load_instance_types(config_file: Path):
     return instance_types, expected_instance_types, tags
 
 
-bundle_dir = getattr(sys, '_MEIPASS', os.getcwd())
-res_folder = Path(os.path.abspath(os.path.join(bundle_dir, 'res')))
-app_icon_file = res_folder / "junip3r_icon.png"
-#app_icon_file = Path("C:/Users/Me/Downloads/Junip3R Logo V4 Cropped.png")
+def from_config_file(config_file: Path, show_frame_extractor: bool = False, parent=None) -> Labeller:
+    project_folder = Path("_testdata/project")
+    config_file = project_folder / "config.yaml"
 
-app = QApplication(sys.argv)
+    instance_types, expected_instance_types, tags = load_instance_types(config_file)
+    labeller_config_repository = LabellerConfigRepository(instance_types, expected_instance_types, tags)
 
-app_icon = QIcon(str(app_icon_file))
-app.setWindowIcon(app_icon)
+    image_file_endings = [".png", ".jpg", ".jpeg"]
+    image_folder = project_folder / "images"
+    image_files = [f for f in image_folder.glob("*") if f.suffix.lower() in image_file_endings]
+    image_repository = ImageRepository(image_files)
 
-project_folder = Path("_testdata/project")
-config_file = project_folder / "config.yaml"
+    context_file_endings = [".avi", ".mp4", ".mkv"]
+    context_folder = project_folder / "context"
+    def find_context_file(image_file: Path) -> Optional[Path]:
+        for ending in context_file_endings:
+            context_file = context_folder / (image_file.stem + ending)
+            if context_file.exists():
+                return context_file
+        return None
+    context_files = [find_context_file(f) for f in image_files]
+    context_repository = ContextRepository(context_files)
 
-instance_types, expected_instance_types, tags = load_instance_types(config_file)
-labeller_config_repository = LabellerConfigRepository(instance_types, expected_instance_types, tags)
+    label_folder = project_folder / "labels"
+    label_files = [label_folder / (image_file.stem + ".json") for image_file in image_files]
+    label_repository = JuniperLabelRepository(instance_types, label_files)
 
-image_file_endings = [".png", ".jpg", ".jpeg"]
-image_folder = project_folder / "images"
-image_files = [f for f in image_folder.glob("*") if f.suffix.lower() in image_file_endings]
-image_repository = ImageRepository(image_files)
+    labeller_model = AppModel()
+    labeller_model._image_repository = image_repository
+    labeller_model._context_repository = context_repository
+    labeller_model._config_repository = labeller_config_repository
+    labeller_model._label_repository = label_repository
+    labeller_model._selection_repository = MockSelectionRepository()
+    labeller_model._settings_repository = MockSettingsRepository()
 
-context_file_endings = [".avi", ".mp4", ".mkv"]
-context_folder = project_folder / "context"
-def find_context_file(image_file: Path) -> Optional[Path]:
-    for ending in context_file_endings:
-        context_file = context_folder / (image_file.stem + ending)
-        if context_file.exists():
-            return context_file
-    return None
-context_files = [find_context_file(f) for f in image_files]
-context_repository = ContextRepository(context_files)
+    editor_model = EditorModel(labeller_model)
 
-label_folder = project_folder / "labels"
-label_files = [label_folder / (image_file.stem + ".json") for image_file in image_files]
-label_repository = JuniperLabelRepository(instance_types, label_files)
+    labeller = Labeller(show_frame_extractor=show_frame_extractor, parent=parent)
+    labeller.set_model(editor_model)
 
-labeller_model = AppModel()
-labeller_model._image_repository = image_repository
-labeller_model._context_repository = context_repository
-labeller_model._config_repository = labeller_config_repository
-labeller_model._label_repository = label_repository
-labeller_model._point_selection_repository = MockSelectionRepository()
-labeller_model._settings_repository = MockSettingsRepository()
+    return labeller
 
-labeller = Labeller()
-labeller.set_model(labeller_model)
 
-labeller.show()
+if __name__ == "__main__":
+    bundle_dir = getattr(sys, '_MEIPASS', os.getcwd())
+    res_folder = Path(os.path.abspath(os.path.join(bundle_dir, 'res')))
+    app_icon_file = res_folder / "junip3r_icon.png"
 
-sys.exit(app.exec())
+    app = QApplication(sys.argv)
+
+    app_icon = QIcon(str(app_icon_file))
+    app.setWindowIcon(app_icon)
+
+    labeller = from_config_file(Path("_testdata/project/config.yaml"), show_frame_extractor=True)
+    labeller.show()
+
+    sys.exit(app.exec())
