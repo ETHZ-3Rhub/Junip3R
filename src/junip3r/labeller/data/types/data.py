@@ -16,6 +16,7 @@ class InstanceType(IInstanceType):
     box_type: BoundingBoxType = BoundingBoxType.AUTOMATIC
     keypoints: List[IKeypointType] = field(default_factory=list)
     skeleton: List[Tuple[int, int]] = field(default_factory=list)
+    box_color: Tuple[int, int, int] = (0, 0, 0)
     skeleton_color: Tuple[int, int, int] = (0, 0, 0)
 
     @property

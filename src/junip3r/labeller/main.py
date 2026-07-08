@@ -85,10 +85,13 @@ def load_instance_types(config_file: Path):
         skeleton = instance_type_dict["skeleton"]
         skeleton = [(points.index(skeleton_point[0]), points.index(skeleton_point[1])) for skeleton_point in skeleton]
 
+        box_color = (0, 0, 0)
+        if "box_color" in instance_type_dict:
+            box_color = color_from_string(instance_type_dict["box_color"])
+
+        skeleton_color = (0, 0, 0)
         if "skeleton_color" in instance_type_dict:
             skeleton_color = color_from_string(instance_type_dict["skeleton_color"])
-        else:
-            skeleton_color = (0, 0, 0)
 
         if "bounding_box_type" not in instance_type_dict:
             bounding_box_type = BoundingBoxType.AUTOMATIC
@@ -110,7 +113,7 @@ def load_instance_types(config_file: Path):
                 color = color_from_hue(point_percentage)
             point_types.append(KeypointType(point, color))
 
-        instance_types.append(InstanceType(name, bounding_box_type, point_types, skeleton, skeleton_color))
+        instance_types.append(InstanceType(name, bounding_box_type, point_types, skeleton, box_color, skeleton_color))
 
     instance_type_names = [instance_type.name for instance_type in instance_types]
     expected_instance_types = [

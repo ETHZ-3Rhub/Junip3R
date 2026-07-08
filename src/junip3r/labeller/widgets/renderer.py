@@ -273,12 +273,12 @@ class Renderer:
         painter.drawLine(0, y, self.camera.view_w, y)
         painter.drawLine(x, 0, x, self.camera.view_h)
 
-    def draw_bounding_box(self, painter: QtGui.QPainter, p1_image01, p2_image01, opacity=1.0):
+    def draw_bounding_box(self, painter: QtGui.QPainter, p1_image01, p2_image01, color: QColor, opacity=1.0):
         x1, y1 = self._image01_to_view_px(p1_image01)
         x2, y2 = self._image01_to_view_px(p2_image01)
 
         painter.setOpacity(opacity)
-        painter.setPen(QPen(QColor(0, 0, 255), 2))
+        painter.setPen(QPen(color, 2))
         painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
 
         # ensure positive width/height for Qt rect drawing

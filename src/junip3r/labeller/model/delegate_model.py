@@ -18,8 +18,9 @@ class InstanceMemberDelegate(Protocol):
 
 
 class BoundingBoxDelegate(InstanceMemberDelegate):
-    def __init__(self, instance_id: Optional[str], box: Tuple[Tuple[float, float], Tuple[float, float]] = None):
+    def __init__(self, instance_id: Optional[str], color: Tuple[int, int, int], box: Tuple[Tuple[float, float], Tuple[float, float]] = None):
         self._instance_id = instance_id
+        self._color = color
         self._box = box
 
     @property
@@ -32,7 +33,7 @@ class BoundingBoxDelegate(InstanceMemberDelegate):
 
     @property
     def color(self):
-        return 0, 0, 255
+        return self._color
 
     @property
     def box(self):
@@ -93,10 +94,10 @@ class InstanceDelegate:
 
         members = []
         if require_box:
-            box = BoundingBoxDelegate(instance_id, instance.box.box)
+            box = BoundingBoxDelegate(instance_id, type_.box_color, instance.box.box)
             members.append(box)
         else:
-            box = BoundingBoxDelegate(instance_id, instance.box.box)
+            box = BoundingBoxDelegate(instance_id, type_.box_color, instance.box.box)
 
         keypoints = [
             KeypointDelegate(instance_id, kp_type, kp_index, kp.p, kp.visibility)
@@ -116,10 +117,10 @@ class InstanceDelegate:
 
         members = []
         if require_box:
-            box = BoundingBoxDelegate(instance_id)
+            box = BoundingBoxDelegate(instance_id, type_.box_color)
             members.append(box)
         else:
-            box = BoundingBoxDelegate(instance_id)
+            box = BoundingBoxDelegate(instance_id, type_.box_color)
 
         keypoints = [
             KeypointDelegate(instance_id, kp_type, kp_index)

@@ -449,8 +449,9 @@ class PoseImage(QLabel):
 
             box = instance.box.box
             if box is not None:
+                color = QtGui.QColor(*instance.type.box_color)
                 p1, p2 = box
-                self.renderer.draw_bounding_box(painter, p1, p2)
+                self.renderer.draw_bounding_box(painter, p1, p2, color, opacity=1)
 
         for instance in instances:
             for point in instance.keypoints:
@@ -493,6 +494,9 @@ class PoseImage(QLabel):
         if self.bounding_box_start_pos_i is None:
             return
 
+        instance = self._get_selected_instance()
+        color = QtGui.QColor(*instance.type.box_color)
+
         p1_i = self.bounding_box_start_pos_i
 
         p2_cp = self.mouse_pos_cp
@@ -503,7 +507,7 @@ class PoseImage(QLabel):
         p2_i = (max(0.0, p2_i[0]), max(0.0, p2_i[1]))
         p2_i = (min(1.0, p2_i[0]), min(1.0, p2_i[1]))
 
-        self.renderer.draw_bounding_box(painter, p1_i, p2_i)
+        self.renderer.draw_bounding_box(painter, p1_i, p2_i, color, opacity=1)
 
     def draw_crosshair(self, painter):
         current_member = self._get_selected_member()
