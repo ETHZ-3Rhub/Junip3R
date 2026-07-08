@@ -1,7 +1,7 @@
 import logging
 import uuid
 from copy import deepcopy
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Literal
 
 import numpy as np
 from PySide6.QtCore import QObject, Signal
@@ -32,7 +32,7 @@ class Selector:
         self.instance_ids = [i.id for i in instances] + [None]
         self.instance_types = [i.type for i in instances] + [new_instance_type]
 
-    def next(self, manual: bool = False) -> Tuple[Optional[str], int]:
+    def next_point(self, manual: bool = False) -> Tuple[Optional[str], int]:
         instance_type = self.instance_types[self.instance_index]
 
         # If there is a next point on the current instance, go there
@@ -50,7 +50,7 @@ class Selector:
         # If there is no next instance, stay on the current selection
         return self.instance_id, self.point_index
 
-    def prev(self, manual: bool = False) -> Tuple[Optional[str], int]:
+    def prev_point(self, manual: bool = False) -> Tuple[Optional[str], int]:
         # If there is a previous point on the current instance, return it
         if self.point_index > 0:
             return self.instance_id, self.point_index - 1
@@ -66,6 +66,23 @@ class Selector:
 
         # If there is no previous instance, stay on the current selection
         return self.instance_id, self.point_index
+
+    def next_instance(self) -> Tuple[Optional[str], int]:
+        # If there is a next instance, go there
+        if self.instance_index < len(self.instance_types) - 1:
+            return self.instance_ids[self.instance_index + 1], 0
+
+        # If there is no next instance, got to new instance
+        return None, 0
+
+    def prev_instance(self) -> Tuple[Optional[str], int]:
+        # If there is a previous instance, go there
+        if self.instance_index > 0:
+            return self.instance_ids[self.instance_index - 1], 0
+
+        # If there is no previous instance, go to new instance
+        return None, 0
+
 
 
 class WorkflowEngine:
@@ -557,7 +574,7 @@ class EditorModel(QObject):
             f"set_bounding_box image={image_index} instance_id={instance_id!r} box={box}",
             extra={"event_category": "operation", "event_name": "set_bounding_box"},
         )
-        self._set_bounding_box(image_index, instance_id, box, self._determine_next_selection(image_index, manual=False))
+        self._set_bounding_box(image_index, instance_id, box, self._determine_next_selection(image_index, mode="auto"))
 
     def delete_bounding_box(self, image_index: int, instance_id: Optional[str]):
         logger.info(
@@ -587,6 +604,11 @@ class EditorModel(QObject):
         instance = self._model.get_instance(image_index, instance_id)
         assert instance is not None, "Instance not found"
         if instance.box.box is None and all(kp.p is None for kp in instance.keypoints):
+            selected_instance_id, _ = self._model.get_selection(image_index)
+            if selected_instance_id == instance_id:
+                # If deleting selected instance, select new instance first, so the selection doesn't point to a deleted instance
+                stack.push(SetSelection(self._model, image_index,
+                                        self._determine_next_selection(image_index, mode="instance")))
             stack.push(DeleteInstance(self._model, image_index, instance_id))
 
         # Update selection if specified
@@ -600,7 +622,7 @@ class EditorModel(QObject):
             f"place_keypoint image={image_index} instance_id={instance_id!r} point={point_index} p={p} visibility={visibility}",
             extra={"event_category": "operation", "event_name": "place_keypoint"},
         )
-        self._set_keypoint(image_index, instance_id, point_index, p, visibility, self._determine_next_selection(image_index, manual=False))
+        self._set_keypoint(image_index, instance_id, point_index, p, visibility, self._determine_next_selection(image_index, mode="auto"))
 
     def move_keypoint(self, image_index: int, instance_id: str, point_index: int, p: Tuple[float, float]):
         logger.info(
@@ -655,6 +677,11 @@ class EditorModel(QObject):
         instance = self._model.get_instance(image_index, instance_id)
         assert instance is not None, "Instance not found"
         if instance.box.box is None and all(kp.p is None for kp in instance.keypoints):
+            selected_instance_id, _ = self._model.get_selection(image_index)
+            if selected_instance_id == instance_id:
+                # If deleting selected instance, select new instance first, so the selection doesn't point to a deleted instance
+                stack.push(SetSelection(self._model, image_index,
+                                        self._determine_next_selection(image_index, mode="instance")))
             stack.push(DeleteInstance(self._model, image_index, instance_id))
 
         # Update selection if specified
@@ -669,8 +696,15 @@ class EditorModel(QObject):
             extra={"event_category": "operation", "event_name": "delete_instance"},
         )
         stack = self._get_undo_stack(image_index)
-        command = DeleteInstance(self._model, image_index, instance_id)
-        stack.push(command)
+        stack.beginMacro("Delete Instance")
+
+        selected_instance_id, _ = self._model.get_selection(image_index)
+        if selected_instance_id == instance_id:
+            # If deleting selected instance, select new instance first, so the selection doesn't point to a deleted instance
+            stack.push(SetSelection(self._model, image_index, self._determine_next_selection(image_index, mode="instance")))
+        stack.push(DeleteInstance(self._model, image_index, instance_id))
+
+        stack.endMacro()
 
     def set_instance_type(self, image_index: int, instance_id: str, instance_type_name: str):
         logger.info(
@@ -720,14 +754,14 @@ class EditorModel(QObject):
             f"select_previous_point image={image_index}",
             extra={"event_category": "ui", "event_name": "select_previous_point"},
         )
-        self.set_selection(image_index, *self._determine_previous_selection(image_index, manual=True))
+        self.set_selection(image_index, *self._determine_previous_selection(image_index, mode="manual"))
 
     def select_next_point(self, image_index: int):
         logger.debug(
             f"select_next_point image={image_index}",
             extra={"event_category": "ui", "event_name": "select_next_point"},
         )
-        self.set_selection(image_index, *self._determine_next_selection(image_index, manual=True))
+        self.set_selection(image_index, *self._determine_next_selection(image_index, mode="manual"))
 
     def set_settings(self, image_index: int, brightness: float, contrast: float):
         logger.info(
@@ -771,7 +805,7 @@ class EditorModel(QObject):
         )
         self._get_undo_stack(image_index).redo()
 
-    def _determine_next_selection(self, image_index: int, manual: bool = False) -> Tuple[Optional[str], int]:
+    def _determine_next_selection(self, image_index: int, mode: Literal["auto", "manual", "instance"]) -> Tuple[Optional[str], int]:
         instance_id, point_index = self.get_selection(image_index)
         if point_index is None:
             return instance_id, 0
@@ -779,9 +813,16 @@ class EditorModel(QObject):
         instances = self.get_instances(image_index)
         selector = Selector(instances, self.get_new_instance_type(image_index), instance_id, point_index)
 
-        return selector.next(manual)
+        if mode == "auto":
+            return selector.next_point(manual=False)
+        elif mode == "manual":
+            return selector.next_point(manual=True)
+        elif mode == "instance":
+            return selector.next_instance()
+        else:
+            raise ValueError(f"Invalid mode: {mode}")
 
-    def _determine_previous_selection(self, image_index: int, manual: bool = False):
+    def _determine_previous_selection(self, image_index: int, mode: Literal["auto", "manual", "instance"]):
         instance_id, point_index = self.get_selection(image_index)
         if point_index is None:
             return instance_id, 0
@@ -789,4 +830,11 @@ class EditorModel(QObject):
         instances = self.get_instances(image_index)
         selector = Selector(instances, self.get_new_instance_type(image_index), instance_id, point_index)
 
-        return selector.prev(manual)
+        if mode == "auto":
+            return selector.prev_point(manual=False)
+        elif mode == "manual":
+            return selector.prev_point(manual=True)
+        elif mode == "instance":
+            return selector.prev_instance()
+        else:
+            raise ValueError(f"Invalid mode: {mode}")
