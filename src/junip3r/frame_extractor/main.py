@@ -1,13 +1,18 @@
+import logging
 import sys
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
+from junip3r.logging_setup import create_logging_manager
 from junip3r.frame_extractor.data.repository.image_repository import ImageRepository
 from junip3r.frame_extractor.data.repository.tag_repository import TagRepository
 from junip3r.frame_extractor.data.repository.video_repository import VideoRepository
 from junip3r.frame_extractor.model.frame_extractor_model import FrameExtractorModel
 from junip3r.frame_extractor.widgets.frame_extractor import FrameExtractor
+
+
+logger = logging.getLogger(__name__)
 
 
 def from_config_file(config_file: Path, show_labeller: bool = False, parent=None) -> FrameExtractor:
@@ -27,9 +32,16 @@ def from_config_file(config_file: Path, show_labeller: bool = False, parent=None
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
+    log_manager = create_logging_manager(run_mode="standalone")
+    try:
+        app = QApplication(sys.argv)
 
-    frame_extractor = from_config_file(Path("../../../_testdata/project/config.yaml"))
-    frame_extractor.show()
+        log_manager.start_app_run("frame_extractor")
+        logger.info("starting standalone frame extractor", extra={"event_category": "lifecycle", "event_name": "app_start", "app_name": "frame_extractor"})
 
-    sys.exit(app.exec())
+        frame_extractor = from_config_file(Path("../../../_testdata/project/config.yaml"))
+        frame_extractor.show()
+
+        sys.exit(app.exec())
+    finally:
+        log_manager.close()

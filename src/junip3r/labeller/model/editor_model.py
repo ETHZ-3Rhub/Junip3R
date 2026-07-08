@@ -88,9 +88,9 @@ class WorkflowEngine:
         """Return current cursor position for undo/redo."""
         return self._cursor
 
-    def restore_state(self, cursor: int):
+    def restore_state(self, state: int):
         """Restore cursor to a saved position (undo/redo)."""
-        self._cursor = cursor
+        self._cursor = state
 
     def select(self, existing_types: List[str], selected_type: str) -> str:
         """

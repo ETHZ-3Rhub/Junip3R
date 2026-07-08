@@ -1,4 +1,5 @@
 import colorsys
+import logging
 import os
 import sys
 from pathlib import Path
@@ -9,6 +10,7 @@ from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import QApplication
 
 
+from junip3r.logging_setup import create_logging_manager
 from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.data.repository.abc import IPointSelectionRepository, ISettingsRepository
 from junip3r.labeller.data.repository.config import LabellerConfigRepository
@@ -19,6 +21,9 @@ from junip3r.labeller.data.types.data import BoundingBoxType
 from junip3r.labeller.data.types.data import InstanceType, KeypointType
 from junip3r.labeller.model.editor_model import EditorModel
 from junip3r.labeller.widgets.labeller import Labeller
+
+
+logger = logging.getLogger(__name__)
 
 
 class MockSelectionRepository(IPointSelectionRepository):
@@ -137,7 +142,8 @@ def from_config_file(config_file: Path, show_frame_extractor: bool = False, pare
             if context_file.exists():
                 return context_file
         return None
-    context_files = [find_context_file(f) for f in image_files]
+
+    context_files = [cf for cf in (find_context_file(f) for f in image_files) if cf is not None]
     context_repository = ContextRepository(context_files)
 
     label_folder = project_folder / "labels"
@@ -161,16 +167,23 @@ def from_config_file(config_file: Path, show_frame_extractor: bool = False, pare
 
 
 if __name__ == "__main__":
-    bundle_dir = getattr(sys, '_MEIPASS', os.getcwd())
-    res_folder = Path(os.path.abspath(os.path.join(bundle_dir, '../res')))
-    app_icon_file = res_folder / "junip3r_icon.png"
+    log_manager = create_logging_manager(run_mode="standalone")
+    try:
+        bundle_dir = getattr(sys, '_MEIPASS', os.getcwd())
+        res_folder = Path(os.path.abspath(os.path.join(bundle_dir, '../res')))
+        app_icon_file = res_folder / "junip3r_icon.png"
 
-    app = QApplication(sys.argv)
+        app = QApplication(sys.argv)
 
-    app_icon = QIcon(str(app_icon_file))
-    app.setWindowIcon(app_icon)
+        app_icon = QIcon(str(app_icon_file))
+        app.setWindowIcon(app_icon)
 
-    labeller = from_config_file(Path("../../../_testdata/project/config.yaml"), show_frame_extractor=True)
-    labeller.show()
+        log_manager.start_app_run("labeller")
+        logger.info("starting standalone labeller", extra={"event_category": "lifecycle", "event_name": "app_start", "app_name": "labeller"})
 
-    sys.exit(app.exec())
+        labeller = from_config_file(Path("../../../_testdata/project/config.yaml"), show_frame_extractor=True)
+        labeller.show()
+
+        sys.exit(app.exec())
+    finally:
+        log_manager.close()
