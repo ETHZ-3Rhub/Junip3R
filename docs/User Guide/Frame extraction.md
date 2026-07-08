@@ -1,2 +1,0 @@
-# Frame extraction
-

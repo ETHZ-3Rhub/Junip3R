@@ -1,0 +1,96 @@
+instance_types:
+- bounding_box_type: automatic
+  name: epm
+  points:
+  - tl
+  - tr
+  - bl
+  - br
+  - lt
+  - lb
+  - rt
+  - rb
+  - ctl
+  - ctr
+  - cbl
+  - cbr
+- bounding_box_type: manual
+  name: mouse
+  points:
+  - nose
+  - headcentre
+  - neck
+  - earl
+  - earr
+  - bodycentre
+  - bcl
+  - bcr
+  - hipl
+  - hipr
+  - tailbase
+  - tailcentre
+  - tailtip
+  skeleton:
+  - - nose
+    - headcentre
+  - - nose
+    - earl
+  - - nose
+    - earr
+  - - earl
+    - neck
+  - - earr
+    - neck
+  - - headcentre
+    - neck
+  - - headcentre
+    - earl
+  - - headcentre
+    - earr
+  - - neck
+    - bodycentre
+  - - neck
+    - bcl
+  - - neck
+    - bcr
+  - - bodycentre
+    - bcl
+  - - bodycentre
+    - bcr
+  - - bcl
+    - hipl
+  - - bcr
+    - hipr
+  - - bodycentre
+    - hipl
+  - - bodycentre
+    - hipr
+  - - bodycentre
+    - tailbase
+  - - hipl
+    - tailbase
+  - - hipr
+    - tailbase
+  - - tailbase
+    - tailcentre
+  - - tailcentre
+    - tailtip
+  colors:
+  - "#00ff4c"
+  - "#00ff4c"
+  - "#00ff4c"
+  - "#0000ff"
+  - "#ff0000"
+  - "#00ff4c"
+  - "#0000ff"
+  - "#ff0000"
+  - "#0000ff"
+  - "#ff0000"
+  - "#00ff4c"
+  - "#00ff4c"
+  - "#00ff4c"
+  box_color: "#ff0000"
+  skeleton_color: "#999999"
+instances:
+- epm
+- mouse
