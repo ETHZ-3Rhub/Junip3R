@@ -1,0 +1,66 @@
+site_name: Junip3R
+site_description: Multi-source video and data recording for scientific research
+site_url: https://ethz-3rhub.github.io/Junip3R
+repo_url: https://github.com/ETHZ-3Rhub/Junip3R
+repo_name: ETHZ-3Rhub/Junip3R
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+    - content.action.edit
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_symbol_type_heading: true
+            members_order: source
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - tables
+
+nav:
+  - Home: index.md
+  - User Guide:
+      - Overview: user-guide/index.md
+  - Plugin Development:
+      - Getting Started: plugin-dev/index.md
+  - Architecture: architecture/index.md
+  - API Reference: api-reference/index.md
+  - Changelog: ../CHANGELOG.md
+
