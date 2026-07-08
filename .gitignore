@@ -1,3 +1,5 @@
 .idea/
 *.pyc
 _testdata/
+build/
+dist/
