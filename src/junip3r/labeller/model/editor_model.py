@@ -1,3 +1,4 @@
+import logging
 import uuid
 from copy import deepcopy
 from typing import Optional, List, Dict, Tuple
@@ -10,6 +11,8 @@ from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.data.repository.abc import TemporalContext
 from junip3r.labeller.data.types.abc import IInstanceType, IInstance, BoundingBoxType
 from junip3r.labeller.data.types.data import Instance, Keypoint
+
+logger = logging.getLogger(__name__)
 
 
 class Selector:
@@ -511,6 +514,10 @@ class EditorModel(QObject):
         return self._model.get_new_instance_type(image_index)
 
     def set_new_instance_type(self, image_index: int, instance_type_name: str):
+        logger.info(
+            f"set_new_instance_type image={image_index} type={instance_type_name!r}",
+            extra={"event_category": "operation", "event_name": "set_new_instance_type"},
+        )
         self._model.set_new_instance_type(image_index, instance_type_name)
         instance_id, point_index = self._model.get_selection(image_index)
         if instance_id is None:
@@ -533,6 +540,10 @@ class EditorModel(QObject):
         return self._model.get_settings(image_index)
 
     def rename_instance(self, image_index: int, instance_id: Optional[str], name: str):
+        logger.info(
+            f"rename_instance image={image_index} instance_id={instance_id!r} name={name!r}",
+            extra={"event_category": "operation", "event_name": "rename_instance"},
+        )
         stack = self._get_undo_stack(image_index)
         stack.beginMacro("Rename Instance")
         if instance_id is None:
@@ -542,9 +553,17 @@ class EditorModel(QObject):
         stack.endMacro()
 
     def set_bounding_box(self, image_index: int, instance_id: Optional[str], box: Tuple[Tuple[float, float], Tuple[float, float]] = None):
+        logger.info(
+            f"set_bounding_box image={image_index} instance_id={instance_id!r} box={box}",
+            extra={"event_category": "operation", "event_name": "set_bounding_box"},
+        )
         self._set_bounding_box(image_index, instance_id, box, self._determine_next_selection(image_index, manual=False))
 
     def delete_bounding_box(self, image_index: int, instance_id: Optional[str]):
+        logger.info(
+            f"delete_bounding_box image={image_index} instance_id={instance_id!r}",
+            extra={"event_category": "operation", "event_name": "delete_bounding_box"},
+        )
         self._set_bounding_box(image_index, instance_id, None, None)
 
     def _set_bounding_box(self, image_index: int, instance_id: Optional[str],
@@ -577,18 +596,34 @@ class EditorModel(QObject):
         stack.endMacro()
 
     def place_keypoint(self, image_index: int, instance_id: Optional[str], point_index: int, p: Tuple[float, float], visibility: float = 2.0):
+        logger.info(
+            f"place_keypoint image={image_index} instance_id={instance_id!r} point={point_index} p={p} visibility={visibility}",
+            extra={"event_category": "operation", "event_name": "place_keypoint"},
+        )
         self._set_keypoint(image_index, instance_id, point_index, p, visibility, self._determine_next_selection(image_index, manual=False))
 
     def move_keypoint(self, image_index: int, instance_id: str, point_index: int, p: Tuple[float, float]):
+        logger.info(
+            f"move_keypoint image={image_index} instance_id={instance_id!r} point={point_index} p={p}",
+            extra={"event_category": "operation", "event_name": "move_keypoint"},
+        )
         instance = self._model.get_instance(image_index, instance_id)
         assert instance is not None, "Instance not found"
         visibility = instance.keypoints[point_index].visibility
         self._set_keypoint(image_index, instance_id, point_index, p, visibility, None)
 
     def delete_keypoint(self, image_index: int, instance_id: Optional[str], point_index: int):
+        logger.info(
+            f"delete_keypoint image={image_index} instance_id={instance_id!r} point={point_index}",
+            extra={"event_category": "operation", "event_name": "delete_keypoint"},
+        )
         self._set_keypoint(image_index, instance_id, point_index, None, 0.0, None)
 
     def toggle_keypoint_visibility(self, image_index: int, instance_id: str, point_index: int):
+        logger.info(
+            f"toggle_keypoint_visibility image={image_index} instance_id={instance_id!r} point={point_index}",
+            extra={"event_category": "operation", "event_name": "toggle_keypoint_visibility"},
+        )
         instance = self._model.get_instance(image_index, instance_id)
         if instance is None:
             return
@@ -619,7 +654,6 @@ class EditorModel(QObject):
         # If instance is empty after setting keypoint, delete it
         instance = self._model.get_instance(image_index, instance_id)
         assert instance is not None, "Instance not found"
-        print(instance.box.box, [kp.p for kp in instance.keypoints])
         if instance.box.box is None and all(kp.p is None for kp in instance.keypoints):
             stack.push(DeleteInstance(self._model, image_index, instance_id))
 
@@ -630,11 +664,19 @@ class EditorModel(QObject):
         stack.endMacro()
 
     def delete_instance(self, image_index: int, instance_id: str):
+        logger.info(
+            f"delete_instance image={image_index} instance_id={instance_id!r}",
+            extra={"event_category": "operation", "event_name": "delete_instance"},
+        )
         stack = self._get_undo_stack(image_index)
         command = DeleteInstance(self._model, image_index, instance_id)
         stack.push(command)
 
     def set_instance_type(self, image_index: int, instance_id: str, instance_type_name: str):
+        logger.info(
+            f"set_instance_type image={image_index} instance_id={instance_id!r} type={instance_type_name!r}",
+            extra={"event_category": "operation", "event_name": "set_instance_type"},
+        )
         if instance_id is None:
             self._set_new_instance_type(image_index, instance_type_name)
         else:
@@ -652,10 +694,18 @@ class EditorModel(QObject):
         stack.push(SetInstanceType(self._model, image_index, instance_id, instance_type_name))
 
     def paste_instance(self, image_index: int, instance: IInstance):
+        logger.info(
+            f"paste_instance image={image_index} instance_id={instance.id!r} type={instance.type.name!r}",
+            extra={"event_category": "operation", "event_name": "paste_instance"},
+        )
         stack = self._get_undo_stack(image_index)
         stack.push(SetInstance(self._model, image_index, instance))
 
     def set_selection(self, image_index: int, instance_id: Optional[str], point_index: int):
+        logger.debug(
+            f"set_selection image={image_index} instance_id={instance_id!r} point={point_index}",
+            extra={"event_category": "ui", "event_name": "set_selection"},
+        )
         self._model.set_selection(image_index, instance_id, point_index)
 
     def set_instance_selection(self, image_index: int, instance_id: Optional[str]):
@@ -666,27 +716,59 @@ class EditorModel(QObject):
         self.set_selection(image_index, instance_id, point_index)
 
     def select_previous_point(self, image_index: int):
+        logger.debug(
+            f"select_previous_point image={image_index}",
+            extra={"event_category": "ui", "event_name": "select_previous_point"},
+        )
         self.set_selection(image_index, *self._determine_previous_selection(image_index, manual=True))
 
     def select_next_point(self, image_index: int):
+        logger.debug(
+            f"select_next_point image={image_index}",
+            extra={"event_category": "ui", "event_name": "select_next_point"},
+        )
         self.set_selection(image_index, *self._determine_next_selection(image_index, manual=True))
 
     def set_settings(self, image_index: int, brightness: float, contrast: float):
+        logger.info(
+            f"set_settings image={image_index} brightness={brightness} contrast={contrast}",
+            extra={"event_category": "operation", "event_name": "set_settings"},
+        )
         self._model.set_settings(image_index, brightness, contrast)
 
     def set_image_index(self, image_index: int):
+        logger.info(
+            f"set_image_index index={image_index}",
+            extra={"event_category": "operation", "event_name": "set_image_index"},
+        )
         self._model.set_image_index(image_index)
 
     def next_image(self):
-        self._model.next_image()
+        logger.debug("next_image", extra={"event_category": "ui", "event_name": "next_image"})
+        current_image_index = self._model.get_image_index()
+        if current_image_index >= self._model.get_num_images() - 1:
+            return
+        self.set_image_index(current_image_index + 1)
 
     def previous_image(self):
-        self._model.previous_image()
+        logger.debug("previous_image", extra={"event_category": "ui", "event_name": "previous_image"})
+        current_image_index = self._model.get_image_index()
+        if current_image_index <= 0:
+            return
+        self.set_image_index(current_image_index - 1)
 
     def undo(self, image_index: int):
+        logger.info(
+            f"undo image={image_index}",
+            extra={"event_category": "operation", "event_name": "undo"},
+        )
         self._get_undo_stack(image_index).undo()
 
     def redo(self, image_index: int):
+        logger.info(
+            f"redo image={image_index}",
+            extra={"event_category": "operation", "event_name": "redo"},
+        )
         self._get_undo_stack(image_index).redo()
 
     def _determine_next_selection(self, image_index: int, manual: bool = False) -> Tuple[Optional[str], int]:

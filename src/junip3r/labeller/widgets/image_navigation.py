@@ -33,7 +33,6 @@ class ImageNavigation(Ui_ImageNavigation, QWidget):
             self._image_changed(self.model.get_image_index())
 
     def _image_changed(self, image_index: int):
-        self.sld_image_number.setValue(image_index + 1)
         if self.model is not None:
             image_name = self.model.get_image_name(image_index)
             num_images = self.model.get_num_images()
@@ -42,6 +41,10 @@ class ImageNavigation(Ui_ImageNavigation, QWidget):
             num_images = 0
         self.lbl_current_image.setText(image_name)
         self.lbl_image_number.setText(f"{image_index + 1}/{num_images}")
+
+        self.sld_image_number.blockSignals(True)
+        self.sld_image_number.setValue(image_index + 1)
+        self.sld_image_number.blockSignals(False)
 
     def _select_image(self):
         if self.model is not None:

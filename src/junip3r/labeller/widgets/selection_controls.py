@@ -230,18 +230,10 @@ class TypeListModel(QAbstractListModel):
     def __init__(self):
         super().__init__()
         self._model: Optional[ImageModel] = None
-
         self._instance_types: List[IInstanceType] = []
 
     def set_model(self, model: Optional[ImageModel]):
-        #if self._model is not None:
-        #    self._model.reset.disconnect(self.refresh)
-
         self._model = model
-
-        #if self._model is not None:
-        #    self._model.reset.connect(self.refresh)
-
         self.refresh()
 
     def refresh(self):
@@ -283,11 +275,14 @@ class SelectionControls(Ui_SelectionControls, QWidget):
 
         self.dpd_instance_type.installEventFilter(self)
 
-        self.lst_instances.selectionModel().currentChanged.connect(self._select_instance)
-        self.lst_points.selectionModel().currentChanged.connect(self._select_point)
+        # Only react to user interactions (not programmatic selection changes).
+        self.lst_instances.clicked.connect(self._select_instance)
+        self.lst_instances.activated.connect(self._select_instance)
+        self.lst_points.clicked.connect(self._select_point)
+        self.lst_points.activated.connect(self._select_point)
+        self.dpd_instance_type.activated.connect(self._select_instance_type)
 
-        self.dpd_instance_type.currentIndexChanged.connect(self._select_instance_type)
-
+        self.instance_list_model.modelReset.connect(self._instance_list_model_reset)
         self.point_list_model.modelReset.connect(self._point_list_model_reset)
 
     def set_model(self, model: Optional[ImageModel]):
@@ -317,6 +312,7 @@ class SelectionControls(Ui_SelectionControls, QWidget):
         assert self.model is not None, "Model not set"
 
         instance_row = self.instance_list_model.find_row_by_id(instance_id)
+
         self.lst_instances.setCurrentIndex(self.instance_list_model.index(instance_row))
         if point_index is not None:
             self.lst_points.setCurrentIndex(self.point_list_model.index(point_index))
@@ -346,7 +342,7 @@ class SelectionControls(Ui_SelectionControls, QWidget):
         if selected_instance_id is None:
             self.dpd_instance_type.setCurrentText(instance_type.name)
 
-    def _select_instance(self):
+    def _select_instance(self, *_):
         if self.model is None:
             return
 
@@ -362,7 +358,7 @@ class SelectionControls(Ui_SelectionControls, QWidget):
         instance_id = self.lst_instances.currentIndex().data(InstanceListModel.InstanceIDRole)
         self.model.set_instance_selection(instance_id)
 
-    def _select_point(self):
+    def _select_point(self, *_):
         if self.model is None:
             return
 
@@ -375,17 +371,22 @@ class SelectionControls(Ui_SelectionControls, QWidget):
             return
         self.model.set_point_selection(row)
 
-    def _select_instance_type(self):
+    def _select_instance_type(self, *_):
         if self.model is None:
             return
 
         instance_type = self.dpd_instance_type.currentData(TypeListModel.InstanceTypeRole)
         instance_id = self.lst_instances.currentIndex().data(InstanceListModel.InstanceIDRole)
 
-        if instance_id is None:
-            self.model.set_new_instance_type(instance_type.name)
-        else:
-            self.model.set_instance_type(instance_id, instance_type.name)
+        self.model.set_instance_type(instance_id, instance_type.name)
+
+    def _instance_list_model_reset(self):
+        if self.model is None:
+            return
+
+        instance_id, _ = self.model.get_selection()
+        row = self.instance_list_model.find_row_by_id(instance_id)
+        self.lst_instances.setCurrentIndex(self.instance_list_model.index(row))
 
     def _point_list_model_reset(self):
         if self.model is None:
@@ -402,3 +403,4 @@ class SelectionControls(Ui_SelectionControls, QWidget):
                 event.ignore()
                 return True
         return False
+
