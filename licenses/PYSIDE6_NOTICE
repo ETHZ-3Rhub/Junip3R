@@ -1,0 +1,11 @@
+This application (Junip3R) utilizes the PySide6 library, which is licensed under
+the GNU Lesser General Public License version 3 (LGPLv3).
+
+PySide6 is copyright (C) The Qt Company Ltd and/or its subsidiaries.
+
+The LGPLv3 license is built upon the GNU General Public License version 3 (GPLv3).
+In accordance with the LGPLv3 terms, copies of both the GPLv3 and LGPLv3 text
+files are provided alongside this notice.
+
+You can obtain the upstream source code for PySide6 at:
+https://qt.io
