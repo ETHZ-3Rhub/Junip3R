@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional, Dict, Tuple
 
 import yaml
+from PySide6 import QtWidgets
 from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -169,24 +170,43 @@ def from_config_file(config_file: Path, show_frame_extractor: bool = False, pare
     return labeller
 
 
-if __name__ == "__main__":
+def main():
     log_manager = create_logging_manager(run_mode="standalone")
+
     try:
+        app = QApplication(sys.argv)
+
+        dialog = QtWidgets.QFileDialog()
+        dialog.setFileMode(QtWidgets.QFileDialog.FileMode.ExistingFile)  # type: ignore[arg-type]
+        dialog.setNameFilter("Junip3R Config File (*.yaml)")
+        dialog.setWindowTitle("Select Config File")
+        dialog.setAcceptMode(QtWidgets.QFileDialog.AcceptMode.AcceptOpen)
+
+        if dialog.exec():
+            file_path = dialog.selectedFiles()[0]
+            config_file = Path(file_path)
+        else:
+            exit(1)
+
         bundle_dir = getattr(sys, '_MEIPASS', os.getcwd())
         res_folder = Path(os.path.abspath(os.path.join(bundle_dir, '../res')))
         app_icon_file = res_folder / "junip3r_icon.png"
 
-        app = QApplication(sys.argv)
 
         app_icon = QIcon(str(app_icon_file))
         app.setWindowIcon(app_icon)
 
         log_manager.start_app_run("labeller")
-        logger.info("starting standalone labeller", extra={"event_category": "lifecycle", "event_name": "app_start", "app_name": "labeller"})
+        logger.info("starting standalone labeller",
+                    extra={"event_category": "lifecycle", "event_name": "app_start", "app_name": "labeller"})
 
-        labeller = from_config_file(Path("../../../_testdata/project/config.yaml"), show_frame_extractor=True)
+        labeller = from_config_file(config_file, show_frame_extractor=False)
         labeller.show()
 
         sys.exit(app.exec())
     finally:
         log_manager.close()
+
+
+if __name__ == "__main__":
+    main()

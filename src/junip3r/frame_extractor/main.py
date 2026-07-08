@@ -2,6 +2,7 @@ import logging
 import sys
 from pathlib import Path
 
+from PySide6 import QtWidgets
 from PySide6.QtWidgets import QApplication
 
 from junip3r.logging_setup import create_logging_manager
@@ -31,17 +32,34 @@ def from_config_file(config_file: Path, show_labeller: bool = False, parent=None
     return frame_extractor
 
 
-if __name__ == "__main__":
+def main():
     log_manager = create_logging_manager(run_mode="standalone")
     try:
         app = QApplication(sys.argv)
 
-        log_manager.start_app_run("frame_extractor")
-        logger.info("starting standalone frame extractor", extra={"event_category": "lifecycle", "event_name": "app_start", "app_name": "frame_extractor"})
+        dialog = QtWidgets.QFileDialog()
+        dialog.setFileMode(QtWidgets.QFileDialog.FileMode.ExistingFile)  # type: ignore[arg-type]
+        dialog.setNameFilter("Junip3R Config File (*.yaml)")
+        dialog.setWindowTitle("Select Config File")
+        dialog.setAcceptMode(QtWidgets.QFileDialog.AcceptMode.AcceptOpen)
 
-        frame_extractor = from_config_file(Path("../../../_testdata/project/config.yaml"))
+        if dialog.exec():
+            file_path = dialog.selectedFiles()[0]
+            config_file = Path(file_path)
+        else:
+            exit(1)
+
+        log_manager.start_app_run("frame_extractor")
+        logger.info("starting standalone frame extractor",
+                    extra={"event_category": "lifecycle", "event_name": "app_start", "app_name": "frame_extractor"})
+
+        frame_extractor = from_config_file(config_file)
         frame_extractor.show()
 
         sys.exit(app.exec())
     finally:
         log_manager.close()
+
+
+if __name__ == "__main__":
+    main()

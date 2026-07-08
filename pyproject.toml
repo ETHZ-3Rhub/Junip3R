@@ -26,6 +26,11 @@ dev = [
   "pyinstaller>=6.0.0,<7"
 ]
 
+[project.scripts]
+junip3r = "junip3r.main:main"
+junip3r_label = "junip3r.labeller.main:main"
+junip3r_frame_extractor = "junip3r.frame_extractor.main:main"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
