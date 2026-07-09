@@ -2,6 +2,7 @@ import colorsys
 import logging
 import os
 import sys
+from importlib.resources import files
 from pathlib import Path
 from typing import Optional, Dict, Tuple
 
@@ -188,12 +189,8 @@ def main():
         else:
             exit(1)
 
-        bundle_dir = getattr(sys, '_MEIPASS', os.getcwd())
-        res_folder = Path(os.path.abspath(os.path.join(bundle_dir, '../res')))
-        app_icon_file = res_folder / "junip3r_icon.png"
-
-
-        app_icon = QIcon(str(app_icon_file))
+        res_folder = files("junip3r.res")
+        app_icon = QIcon(str(res_folder / "junip3r_logo.png"))
         app.setWindowIcon(app_icon)
 
         log_manager.start_app_run("labeller")

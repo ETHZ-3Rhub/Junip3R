@@ -1,8 +1,10 @@
 import logging
 import sys
+from importlib.resources import files
 from pathlib import Path
 
 from PySide6 import QtWidgets
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from junip3r.logging_setup import create_logging_manager
@@ -36,6 +38,9 @@ def main():
     log_manager = create_logging_manager(run_mode="standalone")
     try:
         app = QApplication(sys.argv)
+
+        res_folder = files("junip3r.res")
+        app_icon = QIcon(str(res_folder / "junip3r_logo.png"))
 
         dialog = QtWidgets.QFileDialog()
         dialog.setFileMode(QtWidgets.QFileDialog.FileMode.ExistingFile)  # type: ignore[arg-type]

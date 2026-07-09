@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from importlib.resources import files
 from pathlib import Path
 from typing import Optional, Literal, Any, cast
 
@@ -109,15 +110,12 @@ class AppController(QObject):
 
 
 def main() -> int:
-    bundle_dir = getattr(sys, '_MEIPASS', os.getcwd())
-    res_folder = Path(os.path.abspath(os.path.join(bundle_dir, 'res')))
-    app_icon_file = res_folder / "junip3r_logo.png"
-
     log_manager = create_logging_manager(run_mode="integrated")
 
     app = QApplication(sys.argv)
 
-    app_icon = QIcon(str(app_icon_file))
+    res_folder = files("junip3r.res")
+    app_icon = QIcon(str(res_folder / "junip3r_logo.png"))
     app.setWindowIcon(app_icon)
 
     dialog = QtWidgets.QFileDialog()
