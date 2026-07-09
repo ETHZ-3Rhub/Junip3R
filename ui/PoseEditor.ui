@@ -186,7 +186,8 @@ background-color:none;</string>
                <string/>
               </property>
               <property name="icon">
-               <iconset theme="view-restore"/>
+               <iconset theme="view-restore">
+                <normaloff>.</normaloff>.</iconset>
               </property>
              </widget>
             </item>
@@ -246,7 +247,7 @@ background-color:none;</string>
   <customwidget>
    <class>PoseImage</class>
    <extends>QLabel</extends>
-   <header>app/labeller/widgets/pose_image.h</header>
+   <header>src/junip3r/labeller/widgets/pose_image.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

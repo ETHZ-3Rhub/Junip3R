@@ -80,19 +80,19 @@
   <customwidget>
    <class>PoseEditor</class>
    <extends>QWidget</extends>
-   <header>app/labeller/widgets/pose_editor.h</header>
+   <header>src/junip3r/labeller/widgets/pose_editor.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>ImageNavigation</class>
    <extends>QWidget</extends>
-   <header>app/labeller/widgets/image_navigation.h</header>
+   <header>src/junip3r/labeller/widgets/image_navigation.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>SelectionControls</class>
    <extends>QWidget</extends>
-   <header>app/labeller/widgets/selection_controls.h</header>
+   <header>src/junip3r/labeller/widgets/selection_controls.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

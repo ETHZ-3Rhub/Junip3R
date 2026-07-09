@@ -221,7 +221,7 @@
   <customwidget>
    <class>Editor</class>
    <extends>QWidget</extends>
-   <header>app/labeller/widgets/editor.h</header>
+   <header>src/junip3r/labeller/widgets/editor.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>
