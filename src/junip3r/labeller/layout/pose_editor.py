@@ -3,7 +3,7 @@
 ################################################################################
 ## Form generated from reading UI file 'PoseEditor.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.7.2
+## Created by: Qt User Interface Compiler version 6.11.1
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -65,29 +65,29 @@ class Ui_PoseEditor(object):
         self.label_4 = QLabel(self.frm_post_processing_inner)
         self.label_4.setObjectName(u"label_4")
 
-        self.formLayout.setWidget(0, QFormLayout.LabelRole, self.label_4)
+        self.formLayout.setWidget(0, QFormLayout.ItemRole.LabelRole, self.label_4)
 
         self.sld_brightness = QSlider(self.frm_post_processing_inner)
         self.sld_brightness.setObjectName(u"sld_brightness")
         self.sld_brightness.setOrientation(Qt.Horizontal)
 
-        self.formLayout.setWidget(0, QFormLayout.FieldRole, self.sld_brightness)
+        self.formLayout.setWidget(0, QFormLayout.ItemRole.FieldRole, self.sld_brightness)
 
         self.label_5 = QLabel(self.frm_post_processing_inner)
         self.label_5.setObjectName(u"label_5")
 
-        self.formLayout.setWidget(1, QFormLayout.LabelRole, self.label_5)
+        self.formLayout.setWidget(1, QFormLayout.ItemRole.LabelRole, self.label_5)
 
         self.sld_contrast = QSlider(self.frm_post_processing_inner)
         self.sld_contrast.setObjectName(u"sld_contrast")
         self.sld_contrast.setOrientation(Qt.Horizontal)
 
-        self.formLayout.setWidget(1, QFormLayout.FieldRole, self.sld_contrast)
+        self.formLayout.setWidget(1, QFormLayout.ItemRole.FieldRole, self.sld_contrast)
 
         self.lbl_overlay = QLabel(self.frm_post_processing_inner)
         self.lbl_overlay.setObjectName(u"lbl_overlay")
 
-        self.formLayout.setWidget(2, QFormLayout.LabelRole, self.lbl_overlay)
+        self.formLayout.setWidget(2, QFormLayout.ItemRole.LabelRole, self.lbl_overlay)
 
         self.sld_overlay = QSlider(self.frm_post_processing_inner)
         self.sld_overlay.setObjectName(u"sld_overlay")
@@ -95,7 +95,7 @@ class Ui_PoseEditor(object):
         self.sld_overlay.setSingleStep(1)
         self.sld_overlay.setOrientation(Qt.Horizontal)
 
-        self.formLayout.setWidget(2, QFormLayout.FieldRole, self.sld_overlay)
+        self.formLayout.setWidget(2, QFormLayout.ItemRole.FieldRole, self.sld_overlay)
 
 
         self.horizontalLayout.addWidget(self.frm_post_processing_inner)
@@ -112,7 +112,13 @@ class Ui_PoseEditor(object):
         self.btn_restore_preferences.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.btn_restore_preferences.setStyleSheet(u"border:none;\n"
 "background-color:none;")
-        icon = QIcon(QIcon.fromTheme(u"view-restore"))
+        icon = QIcon()
+        iconThemeName = u"view-restore"
+        if QIcon.hasThemeIcon(iconThemeName):
+            icon = QIcon.fromTheme(iconThemeName)
+        else:
+            icon.addFile(u".", QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+
         self.btn_restore_preferences.setIcon(icon)
 
         self.verticalLayout_2.addWidget(self.btn_restore_preferences)

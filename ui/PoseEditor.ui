@@ -247,7 +247,7 @@ background-color:none;</string>
   <customwidget>
    <class>PoseImage</class>
    <extends>QLabel</extends>
-   <header>src/junip3r/labeller/widgets/pose_image.h</header>
+   <header>junip3r/labeller/widgets/pose_image.h</header>
   </customwidget>
  </customwidgets>
  <resources/>
