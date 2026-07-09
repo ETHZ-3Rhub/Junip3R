@@ -111,7 +111,7 @@ class AppController(QObject):
 def main() -> int:
     bundle_dir = getattr(sys, '_MEIPASS', os.getcwd())
     res_folder = Path(os.path.abspath(os.path.join(bundle_dir, 'res')))
-    app_icon_file = res_folder / "junip3r_icon.png"
+    app_icon_file = res_folder / "junip3r_logo.png"
 
     log_manager = create_logging_manager(run_mode="integrated")
 

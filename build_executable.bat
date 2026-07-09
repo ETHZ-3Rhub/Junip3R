@@ -5,6 +5,6 @@ pyinstaller^
  --add-data "licenses/*;licenses"^
  --onedir^
  --name "Junip3R"^
- --icon "src/junip3r/res/junip3r_icon.ico"^
+ --icon "src/junip3r/res/junip3r_logo.ico"^
  --noconsole^
  src/junip3r/main.py -y
