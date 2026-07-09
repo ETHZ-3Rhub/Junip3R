@@ -133,12 +133,21 @@ class Ui_FrameExtractor(object):
         self.verticalLayout_3 = QVBoxLayout(self.frame_2)
         self.verticalLayout_3.setObjectName(u"verticalLayout_3")
         self.verticalLayout_3.setContentsMargins(0, 0, 0, 0)
-        self.lbl_video = QLabel(self.frame_2)
+        self.frame_8 = QFrame(self.frame_2)
+        self.frame_8.setObjectName(u"frame_8")
+        self.frame_8.setFrameShape(QFrame.StyledPanel)
+        self.frame_8.setFrameShadow(QFrame.Raised)
+        self.verticalLayout_5 = QVBoxLayout(self.frame_8)
+        self.verticalLayout_5.setObjectName(u"verticalLayout_5")
+        self.lbl_video = QLabel(self.frame_8)
         self.lbl_video.setObjectName(u"lbl_video")
         self.lbl_video.setMinimumSize(QSize(300, 200))
         self.lbl_video.setAlignment(Qt.AlignCenter)
 
-        self.verticalLayout_3.addWidget(self.lbl_video)
+        self.verticalLayout_5.addWidget(self.lbl_video)
+
+
+        self.verticalLayout_3.addWidget(self.frame_8)
 
         self.frame_4 = QFrame(self.frame_2)
         self.frame_4.setObjectName(u"frame_4")
