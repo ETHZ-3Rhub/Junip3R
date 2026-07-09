@@ -520,7 +520,7 @@ class FrameExtractor(Ui_FrameExtractor, QMainWindow):
         self.lst_frames.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.lst_frames.customContextMenuRequested.connect(self._frame_list_context_menu)
 
-        self.btn_play.clicked.connect(self.toggle_playing)
+        self.btn_play.clicked.connect(self.toggle_playback)
         self.btn_frame_backward.clicked.connect(self.previous_frame)
         self.btn_frame_forward.clicked.connect(self.next_frame)
         self.btn_select_frame.clicked.connect(self.select_frame)
@@ -545,6 +545,8 @@ class FrameExtractor(Ui_FrameExtractor, QMainWindow):
         self.playback_timer = QtCore.QTimer()
         self.playback_timer.setInterval(1000 // 30)
         self.playback_timer.start()
+
+        self.playback_timer.timeout.connect(self.playback_frame)
 
         self.playing = False
         self._current_frame = None
@@ -611,41 +613,40 @@ class FrameExtractor(Ui_FrameExtractor, QMainWindow):
         video: Video = index.data(VideoListModel.VideoRole)
         self.frame_extractor_model.set_current_video_id(video.video_id)
 
-    def set_playing(self, playing: bool):
-        current_video = self.frame_extractor_model.get_current_video()
-        if current_video is None:
-            playing = False
-
-        self.playing = playing
-        if playing:
-            self.btn_play.setIcon(self.pause_icon)
-            self.playback_timer.timeout.connect(self.playback_frame)
-        else:
-            self.btn_play.setIcon(self.play_icon)
-            try:
-                self.playback_timer.timeout.disconnect(self.playback_frame)
-            except RuntimeError:
-                pass  # Was not connected
-
     @Slot()
-    def toggle_playing(self):
-        self.set_playing(not self.playing)
+    def toggle_playback(self):
+        if self.playing:
+            self._stop_playback()
+        else:
+            self._start_playback()
+
+    def _start_playback(self):
+        self.playing = True
+        self.btn_play.setIcon(self.pause_icon)
+
+    def _stop_playback(self):
+        self.playing = False
+        self.btn_play.setIcon(self.play_icon)
 
     @Slot()
     def previous_frame(self):
-        self.set_playing(False)
+        self._stop_playback()
         self.frame_extractor_model.previous_frame()
 
     @Slot()
     def next_frame(self):
-        self.set_playing(False)
+        self._stop_playback()
         self.frame_extractor_model.next_frame()
 
     @Slot()
     def playback_frame(self):
-        if not self.frame_extractor_model.has_next_frame():
-            self.set_playing(False)
+        if not self.playing:
             return
+
+        if not self.frame_extractor_model.has_next_frame():
+            self._stop_playback()
+            return
+
         self.frame_extractor_model.next_frame()
 
     @Slot()
@@ -663,14 +664,14 @@ class FrameExtractor(Ui_FrameExtractor, QMainWindow):
         current_video = self.frame_extractor_model.get_current_video()
         if current_video is None:
             return
-        self.set_playing(False)
+        self._stop_playback()
 
         frame_index = index.data(FrameListModel.FrameIndexRole)
         self.frame_extractor_model.set_current_frame_index(frame_index)
 
     @Slot(object, object)
     def current_video_changed(self, _video_id: Optional[str], video: Optional[Video]):
-        self.set_playing(False)
+        self._stop_playback()
         if video is None:
             self.sld_seek.setValue(0)
             self.sld_seek.setMaximum(0)

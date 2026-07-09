@@ -3,7 +3,7 @@
 ################################################################################
 ## Form generated from reading UI file 'FrameExtractor.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.7.2
+## Created by: Qt User Interface Compiler version 6.11.1
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -38,14 +38,16 @@ class Ui_FrameExtractor(object):
         self.splitter = QSplitter(self.centralwidget)
         self.splitter.setObjectName(u"splitter")
         self.splitter.setOrientation(Qt.Horizontal)
+        self.splitter.setHandleWidth(9)
         self.splitter.setChildrenCollapsible(False)
         self.frame = QFrame(self.splitter)
         self.frame.setObjectName(u"frame")
         self.frame.setMinimumSize(QSize(0, 0))
-        self.frame.setFrameShape(QFrame.StyledPanel)
+        self.frame.setFrameShape(QFrame.NoFrame)
         self.frame.setFrameShadow(QFrame.Raised)
         self.verticalLayout_2 = QVBoxLayout(self.frame)
         self.verticalLayout_2.setObjectName(u"verticalLayout_2")
+        self.verticalLayout_2.setContentsMargins(0, 0, 0, 0)
         self.label = QLabel(self.frame)
         self.label.setObjectName(u"label")
 
@@ -126,10 +128,11 @@ class Ui_FrameExtractor(object):
         sizePolicy1.setVerticalStretch(0)
         sizePolicy1.setHeightForWidth(self.frame_2.sizePolicy().hasHeightForWidth())
         self.frame_2.setSizePolicy(sizePolicy1)
-        self.frame_2.setFrameShape(QFrame.StyledPanel)
+        self.frame_2.setFrameShape(QFrame.NoFrame)
         self.frame_2.setFrameShadow(QFrame.Raised)
         self.verticalLayout_3 = QVBoxLayout(self.frame_2)
         self.verticalLayout_3.setObjectName(u"verticalLayout_3")
+        self.verticalLayout_3.setContentsMargins(0, 0, 0, 0)
         self.lbl_video = QLabel(self.frame_2)
         self.lbl_video.setObjectName(u"lbl_video")
         self.lbl_video.setMinimumSize(QSize(300, 200))
@@ -240,11 +243,12 @@ class Ui_FrameExtractor(object):
         self.frame_3 = QFrame(self.splitter)
         self.frame_3.setObjectName(u"frame_3")
         self.frame_3.setMinimumSize(QSize(0, 0))
-        self.frame_3.setFrameShape(QFrame.StyledPanel)
+        self.frame_3.setFrameShape(QFrame.NoFrame)
         self.frame_3.setFrameShadow(QFrame.Raised)
         self.verticalLayout = QVBoxLayout(self.frame_3)
         self.verticalLayout.setObjectName(u"verticalLayout")
         self.verticalLayout.setSizeConstraint(QLayout.SetDefaultConstraint)
+        self.verticalLayout.setContentsMargins(0, 0, 0, 0)
         self.label_2 = QLabel(self.frame_3)
         self.label_2.setObjectName(u"label_2")
 
