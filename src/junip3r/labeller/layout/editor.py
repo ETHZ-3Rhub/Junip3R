@@ -45,11 +45,19 @@ class Ui_Editor(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.frame.sizePolicy().hasHeightForWidth())
         self.frame.setSizePolicy(sizePolicy)
-        self.frame.setFrameShape(QFrame.StyledPanel)
+        self.frame.setFrameShape(QFrame.NoFrame)
         self.frame.setFrameShadow(QFrame.Raised)
         self.verticalLayout = QVBoxLayout(self.frame)
         self.verticalLayout.setObjectName(u"verticalLayout")
-        self.pose_editor = PoseEditor(self.frame)
+        self.verticalLayout.setContentsMargins(0, 0, 0, 0)
+        self.frame_2 = QFrame(self.frame)
+        self.frame_2.setObjectName(u"frame_2")
+        self.frame_2.setFrameShape(QFrame.StyledPanel)
+        self.frame_2.setFrameShadow(QFrame.Raised)
+        self.verticalLayout_2 = QVBoxLayout(self.frame_2)
+        self.verticalLayout_2.setObjectName(u"verticalLayout_2")
+        self.verticalLayout_2.setContentsMargins(0, 0, 0, 0)
+        self.pose_editor = PoseEditor(self.frame_2)
         self.pose_editor.setObjectName(u"pose_editor")
         sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         sizePolicy1.setHorizontalStretch(0)
@@ -57,10 +65,18 @@ class Ui_Editor(object):
         sizePolicy1.setHeightForWidth(self.pose_editor.sizePolicy().hasHeightForWidth())
         self.pose_editor.setSizePolicy(sizePolicy1)
 
-        self.verticalLayout.addWidget(self.pose_editor)
+        self.verticalLayout_2.addWidget(self.pose_editor)
+
+
+        self.verticalLayout.addWidget(self.frame_2)
 
         self.image_navigation = ImageNavigation(self.frame)
         self.image_navigation.setObjectName(u"image_navigation")
+        sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        sizePolicy2.setHorizontalStretch(0)
+        sizePolicy2.setVerticalStretch(0)
+        sizePolicy2.setHeightForWidth(self.image_navigation.sizePolicy().hasHeightForWidth())
+        self.image_navigation.setSizePolicy(sizePolicy2)
 
         self.verticalLayout.addWidget(self.image_navigation)
 
