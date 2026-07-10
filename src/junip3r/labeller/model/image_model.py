@@ -32,6 +32,9 @@ class ImageModel(QObject):
     selection_changed = Signal(object, int)  # instance_id, point_index
     settings_changed = Signal(float, float)  # brightness, contrast
 
+    context_mode_changed = Signal(bool, bool, int)  # context_loaded, context_mode, context_pos
+    inspect_mode_changed = Signal(bool)  # inspect_mode
+
     _context_load_requested = Signal(int)
 
     def __init__(self, model: EditorModel):
@@ -41,6 +44,11 @@ class ImageModel(QObject):
 
         self._is_context_loaded: bool = False
         self._context: Optional[TemporalContext] = None
+
+        self._context_mode = False
+        self._context_pos = 0
+
+        self._inspect_mode = False
 
         self._context_load_worker = ContextLoadWorker(model)
         self._context_load_worker_thread = QThread()
@@ -159,12 +167,43 @@ class ImageModel(QObject):
     def redo(self):
         self._model.redo(self._image_index)
 
+    def get_context_mode(self) -> bool:
+        return self._context_mode
+
+    def get_context_pos(self) -> int:
+        return self._context_pos
+
+    def set_context_mode(self, context_mode: bool):
+        if context_mode == self._context_mode:
+            return
+
+        self._context_mode = context_mode
+        self._context_pos = 0
+        self.context_mode_changed.emit(self._is_context_loaded, self._context_mode, self._context_pos)
+
+    def set_context_pos(self, pos: int):
+        self._context_pos = pos
+        self.context_mode_changed.emit(self._is_context_loaded, self._context_mode, self._context_pos)
+
+    def get_inspect_mode(self) -> bool:
+        return self._inspect_mode
+
+    def set_inspect_mode(self, inspect_mode: bool):
+        if inspect_mode == self._inspect_mode:
+            return
+        self._inspect_mode = inspect_mode
+        self.inspect_mode_changed.emit(self._inspect_mode)
+
     def _image_index_changed(self, image_index: int):
+        self.set_context_pos(0)
+
         self._image_index = image_index
         self._is_context_loaded = False
         self._context = None
         self._context_load_requested.emit(image_index)
+
         self.reset.emit()
+        self.context_mode_changed.emit(self._is_context_loaded, self._context_mode, self._context_pos)
 
     def _context_loaded(self, image_index: int, context: Optional[TemporalContext]):
         if image_index != self._image_index:
@@ -172,6 +211,8 @@ class ImageModel(QObject):
 
         self._context = context
         self._is_context_loaded = True
+
+        self.context_mode_changed.emit(self._is_context_loaded, self._context_mode, self._context_pos)
 
     def _instance_added(self, image_index: int, instance: IInstance):
         if image_index == self._image_index:

@@ -2,6 +2,7 @@ from typing import Tuple, List, Optional
 
 import numpy as np
 from PySide6 import QtGui
+from PySide6.QtCore import QPoint
 from PySide6.QtGui import Qt, QPainter
 from PySide6.QtWidgets import QLabel
 
@@ -24,11 +25,7 @@ class PoseImage(QLabel):
 
         self.model: Optional[ImageModel] = None
 
-        self.show_all_labels = False
         self.hovered_point = None
-
-        self.context_mode = False
-        self.context_index = 0
 
         self.brightness = 0.
         self.contrast = 0.
@@ -57,6 +54,8 @@ class PoseImage(QLabel):
             self.model.instance_updated.disconnect(self.update)
             self.model.selection_changed.disconnect(self.update)
             self.model.settings_changed.disconnect(self._settings_changed)
+            self.model.context_mode_changed.disconnect(self._context_mode_changed)
+            self.model.inspect_mode_changed.disconnect(self._inspect_mode_changed)
 
         self.model = model
 
@@ -67,6 +66,8 @@ class PoseImage(QLabel):
             self.model.instance_updated.connect(self.update)
             self.model.selection_changed.connect(self.update)
             self.model.settings_changed.connect(self._settings_changed)
+            self.model.context_mode_changed.connect(self._context_mode_changed)
+            self.model.inspect_mode_changed.connect(self._inspect_mode_changed)
 
         self.reset()
 
@@ -226,11 +227,6 @@ class PoseImage(QLabel):
         if keypoint is not None:
             self.model.toggle_keypoint_visibility(keypoint.instance_id, keypoint.keypoint_index)
 
-    def stop_context_mode(self):
-        self.context_mode = False
-        self.context_index = 0
-        self.update()
-
     def mousePressEvent(self, event):
         p_cp = (event.pos().x(), event.pos().y())
 
@@ -287,8 +283,11 @@ class PoseImage(QLabel):
             self.dragging_point_current_pos_i = None
             self.update()
 
-    def mouseMoveEvent(self, event):
-        p_cp = (event.pos().x(), event.pos().y())
+    def handle_mouse_move(self, pos: QPoint) -> None:
+        if not self.rect().contains(pos):
+            return
+
+        p_cp = (pos.x(), pos.y())
 
         self.mouse_pos_cp = p_cp
 
@@ -317,21 +316,33 @@ class PoseImage(QLabel):
         if needs_update:
             self.update()
 
+    def mouseMoveEvent(self, event):
+        self.handle_mouse_move(event.pos())
+
     def keyPressEvent(self, event):
-        if event.key() == QtGui.Qt.Key.Key_Shift:
-            self.show_all_labels = True
-            self.update()
         super().keyPressEvent(event)
 
+        if self.model is None:
+            return
+
+        if event.key() == Qt.Key.Key_Control:
+            if self.model is not None:
+                context = self.model.get_context()
+                if not context:
+                    return
+                self.model.set_context_mode(True)
+            return
+
     def keyReleaseEvent(self, event):
-        if event.key() == QtGui.Qt.Key.Key_Shift:
-            self.show_all_labels = False
-            self.update()
-        if event.key() == QtGui.Qt.Key.Key_Control:
-            self.context_mode = False
-            self.context_index = 0
-            self.update()
         super().keyReleaseEvent(event)
+
+        if self.model is None:
+            return
+
+        if event.key() == Qt.Key.Key_Control:
+            if self.model is not None:
+                self.model.set_context_mode(False)
+            return
 
     def _zoom(self, zoom_factor: float, mouse_pos_cp: Tuple[float, float]):
         zoom = self.camera.zoom * zoom_factor
@@ -343,7 +354,7 @@ class PoseImage(QLabel):
         if self.model is None:
             return
 
-        self.context_mode = True
+        self.model.set_context_mode(True)
 
         context = self.model.get_context()
         if not context:
@@ -354,12 +365,20 @@ class PoseImage(QLabel):
         context_min = -len(before)
         context_max = len(after)
 
-        self.context_index += delta
-        if self.context_index < context_min:
-            self.context_index = context_min
-        if self.context_index > context_max:
-            self.context_index = context_max
+        context_pos = self.model.get_context_pos()
 
+        context_pos += delta
+        if context_pos < context_min:
+            context_pos = context_min
+        if context_pos > context_max:
+            context_pos = context_max
+
+        self.model.set_context_pos(context_pos)
+
+    def _context_mode_changed(self, _context_mode: bool, _context_pos: int):
+        self.update()
+
+    def _inspect_mode_changed(self, _inspect_mode: bool):
         self.update()
 
     def wheelEvent(self, event):
@@ -379,10 +398,10 @@ class PoseImage(QLabel):
 
     def focusOutEvent(self, e):
         # If focus leaves the label while viewing context, snap back
-        if self.context_mode:
-            self.context_mode = False
-            self.context_index = 0
-            self.update()
+        if self.model is None:
+            return
+
+        #self.model.set_context_mode(False)
 
     def resizeEvent(self, event):
         self.camera.set_view_size(self.width(), self.height())
@@ -530,12 +549,12 @@ class PoseImage(QLabel):
 
         if self.model:
             image = None
-            if self.context_mode:
+            if self.model.get_context_mode():
                 context = self.model.get_context()
                 if context:
                     before, current, after = context
                     context_frames = before + [current] + after
-                    image = context_frames[self.context_index + len(before)]
+                    image = context_frames[self.model.get_context_pos() + len(before)]
             if image is None:
                 image = self.model.get_image()
 
@@ -545,9 +564,12 @@ class PoseImage(QLabel):
 
             instances = self._get_instances()
             self.draw_instances(painter, instances)
-            if self.show_all_labels:
+
+            if self.model.get_inspect_mode():
                 self.draw_all_labels(painter, instances)
-            self.draw_hovered_label(painter)
+            else:
+                self.draw_hovered_label(painter)
+
             self.draw_bounding_box_in_progress(painter)
             self.draw_crosshair(painter)
 

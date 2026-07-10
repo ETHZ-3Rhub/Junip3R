@@ -1,7 +1,7 @@
 from copy import deepcopy
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QObject, QEvent
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QWidget
 
@@ -11,6 +11,40 @@ from junip3r.labeller.model.editor_model import EditorModel
 from junip3r.labeller.widgets.yolo_export import YoloExport
 
 
+class ModifierTracker(QObject):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._model: Optional[ImageModel] = None
+
+    def set_model(self, model: Optional[ImageModel]):
+        self._model = model
+
+    def eventFilter(self, watched, event):
+        if self._model is None:
+            return False
+
+        if event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Control and not event.isAutoRepeat():
+                self._model.set_context_mode(True)
+            elif event.key() == Qt.Key.Key_Shift and not event.isAutoRepeat():
+                self._model.set_inspect_mode(True)
+
+        elif event.type() == QEvent.Type.KeyRelease:
+            if event.key() == Qt.Key.Key_Control:
+                self._model.set_context_mode(False)
+            elif event.key() == Qt.Key.Key_Shift:
+                self._model.set_inspect_mode(False)
+
+        elif event.type() in (
+            QEvent.Type.ApplicationDeactivate,
+            QEvent.Type.WindowDeactivate,
+        ):
+            self._model.set_context_mode(False)
+            self._model.set_inspect_mode(False)
+
+        return False
+
+
 class Editor(Ui_Editor, QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -18,6 +52,9 @@ class Editor(Ui_Editor, QWidget):
 
         self.model: Optional[EditorModel] = None
         self.image_model: Optional[ImageModel] = None
+
+        self.modifier_tracker = ModifierTracker(self)
+        self.installEventFilter(self.modifier_tracker)
 
         self.act_left = QAction(self)
         self.act_left.setShortcut(QKeySequence(Qt.Key.Key_Left))
@@ -86,6 +123,8 @@ class Editor(Ui_Editor, QWidget):
             self.image_model = ImageModel(model)
         else:
             self.image_model = None
+
+        self.modifier_tracker.set_model(self.image_model)
 
         self.pose_editor.set_model(self.image_model)
         self.selection_controls.set_model(self.image_model)
