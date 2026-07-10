@@ -1,7 +1,7 @@
 from typing import Optional
 
 from PySide6.QtCore import Qt, QObject, QEvent, QPointF
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QFrame
 
 from junip3r.labeller.layout.pose_editor import Ui_PoseEditor
 from junip3r.labeller.model.image_model import ImageModel
@@ -18,6 +18,9 @@ class PoseEditor(Ui_PoseEditor, QWidget):
 
         self.watch_widget_tree(self.frm_context)
         self.watch_widget_tree(self.frm_post_processing)
+
+        # Set overlay transparency
+        self.frm_post_processing.setMask(self.frm_post_processing.mask())
 
         self.sld_brightness.setMinimum(0)
         self.sld_brightness.setMaximum(100)
@@ -108,12 +111,27 @@ class PoseEditor(Ui_PoseEditor, QWidget):
             child.installEventFilter(self)
 
     def eventFilter(self, watched, event: QEvent) -> bool:
+        if type(watched) != QFrame:
+            return False
+
         if event.type() == QEvent.Type.MouseMove:
-            # Map the event position from the hovered widget to the image label.
             global_pos = watched.mapToGlobal(event.position().toPoint())
             image_pos = self.pose_image.mapFromGlobal(global_pos)
 
             self.pose_image.handle_mouse_move(image_pos)
+            return True
+        elif event.type() == QEvent.Type.MouseButtonPress:
+            global_pos = watched.mapToGlobal(event.position().toPoint())
+            image_pos = self.pose_image.mapFromGlobal(global_pos)
+
+            self.pose_image.handle_mouse_press(image_pos, event.button(), event.modifiers())
+            return True
+        elif event.type() == QEvent.Type.MouseButtonRelease:
+            global_pos = watched.mapToGlobal(event.position().toPoint())
+            image_pos = self.pose_image.mapFromGlobal(global_pos)
+
+            self.pose_image.handle_mouse_release(image_pos, event.button(), event.modifiers())
+            return True
 
         # Do not consume the event. Sliders and other controls still receive it.
         return False

@@ -227,16 +227,19 @@ class PoseImage(QLabel):
         if keypoint is not None:
             self.model.toggle_keypoint_visibility(keypoint.instance_id, keypoint.keypoint_index)
 
-    def mousePressEvent(self, event):
-        p_cp = (event.pos().x(), event.pos().y())
+    def handle_mouse_press(self, pos: QPoint, button, modifiers) -> None:
+        if not self.rect().contains(pos):
+            return
 
-        if event.button() == QtGui.Qt.MouseButton.MiddleButton:
+        p_cp = (pos.x(), pos.y())
+
+        if button == QtGui.Qt.MouseButton.MiddleButton:
             self.camera.drag_start(p_cp[0], p_cp[1])
             self.update()
             return
 
-        if event.button() == QtGui.Qt.MouseButton.RightButton:
-            if event.modifiers() & QtGui.Qt.KeyboardModifier.ControlModifier:
+        if button == QtGui.Qt.MouseButton.RightButton:
+            if modifiers & QtGui.Qt.KeyboardModifier.ControlModifier:
                 self.toggle_visibility(p_cp)
                 self.update()
                 return
@@ -245,7 +248,7 @@ class PoseImage(QLabel):
             self.update()
             return
 
-        if event.button() == QtGui.Qt.MouseButton.LeftButton:
+        if button == QtGui.Qt.MouseButton.LeftButton:
             point = self.find_keypoint_at_pos(p_cp)
             if point is not None:
                 p = self.camera.view_to_world(*p_cp)
@@ -255,17 +258,20 @@ class PoseImage(QLabel):
                 self.dragging_point_start_pos_i = p_i
                 self.dragging_point_current_pos_i = p_i
             else:
-                visible = not event.modifiers() & QtGui.Qt.KeyboardModifier.ControlModifier
+                visible = not modifiers & QtGui.Qt.KeyboardModifier.ControlModifier
                 self.place(p_cp, visible)
                 self.update()
 
-    def mouseReleaseEvent(self, event):
-        if event.button() == QtGui.Qt.MouseButton.MiddleButton:
+    def mousePressEvent(self, event):
+        self.handle_mouse_press(event.pos(), event.button(), event.modifiers())
+
+    def handle_mouse_release(self, pos: QPoint, button, modifiers) -> None:
+        if button == QtGui.Qt.MouseButton.MiddleButton:
             self.camera.drag_end()
             return
 
-        p_cp = (event.pos().x(), event.pos().y())
-        if event.button() == QtGui.Qt.MouseButton.LeftButton:
+        p_cp = (pos.x(), pos.y())
+        if button == QtGui.Qt.MouseButton.LeftButton:
             if self.dragging_point is not None and self.dragging_point_start_pos_i is not None:
                 if self.model is not None:
                     dragging_point_start_pos_ip = self.image_frame.image01_to_imagepx(*self.dragging_point_start_pos_i)
@@ -282,6 +288,9 @@ class PoseImage(QLabel):
             self.dragging_point_start_pos_i = None
             self.dragging_point_current_pos_i = None
             self.update()
+
+    def mouseReleaseEvent(self, event):
+        self.handle_mouse_release(event.pos(), event.button(), event.modifiers())
 
     def handle_mouse_move(self, pos: QPoint) -> None:
         if not self.rect().contains(pos):
