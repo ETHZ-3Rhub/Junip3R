@@ -51,10 +51,6 @@ class PoseEditorLayout(QWidget):
             alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
         )
 
-        #self.pose_image.lower()
-        #self.context_overlay.raise_()
-        #self.settings_overlay.raise_()
-
         return overlay_layout
 
     @staticmethod
