@@ -1,500 +1,216 @@
-from typing import Tuple, List, Optional
+from dataclasses import dataclass
+from typing import Optional, List, Tuple
 
 import numpy as np
 from PySide6 import QtGui
-from PySide6.QtCore import QPoint
-from PySide6.QtGui import Qt, QPainter
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QLabel
 
-from junip3r.labeller.data.types.abc import BoundingBoxType
-from junip3r.labeller.model.image_model import ImageModel
-from junip3r.labeller.model.delegate_model import InstanceDelegate, BoundingBoxDelegate, KeypointDelegate, \
-    InstanceMemberDelegate
-from junip3r.labeller.widgets.renderer import Renderer, Camera, ImageFrame
+from junip3r.labeller.model.camera_model import CameraState
+from junip3r.labeller.model.delegate_model import KeypointDelegate
+from junip3r.labeller.data.types.delegates import BoundingBoxDelegate, InstanceDelegate
+from junip3r.labeller.widgets.renderer import ImageFrame, Renderer
 
-POINT_RADIUS = 6
-DRAG_THRESHOLD = 1
+
+def _adjust_brightness_contrast(image: np.ndarray, brightness: float, contrast: float) -> np.ndarray:
+    """
+    Adjust brightness and contrast of a uint8 image.
+
+    brightness: -1 = black, 0 = original, +1 = white
+    contrast:   -1 = flat gray, 0 = original, +1 = high contrast
+    """
+
+    if image.dtype != np.uint8:
+        raise ValueError("Image must be uint8")
+
+    # Contrast scale (alpha)
+    alpha = 1.0 + contrast
+
+    # Brightness offset (beta)
+    beta = brightness * 255.0
+
+    img = image.astype(np.float32)
+
+    # Apply contrast around midpoint (128)
+    img = alpha * (img - 128.0) + 128.0
+
+    # Apply brightness
+    img = img + beta
+
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
+@dataclass(frozen=True)
+class PointerEvent:
+    pos: Tuple[float, float]
+    button: Qt.MouseButton
+    buttons: Qt.MouseButton
+    modifiers: Qt.KeyboardModifier
+
+
+@dataclass(frozen=True)
+class WheelEvent:
+    pos: Tuple[float, float]
+    delta_x: int
+    delta_y: int
+    modifiers: Qt.KeyboardModifier
+
+
+@dataclass(frozen=True)
+class DragPreview:
+    instance_id: str
+    keypoint_index: int
+    pos_image01: Tuple[float, float]
+
+
+@dataclass(frozen=True)
+class BoxPreview:
+    instance_id: Optional[str]
+    p1_image01: Tuple[float, float]
+    p2_image01: Tuple[float, float]
+    color: Tuple[int, int, int] = (0, 0, 255)
 
 
 class PoseImage(QLabel):
+    resized = Signal(int, int)
+
+    mouse_pressed = Signal(PointerEvent)
+    mouse_released = Signal(PointerEvent)
+    mouse_moved = Signal(PointerEvent)
+    wheel_moved = Signal(WheelEvent)
+
+    POINT_RADIUS = 6
+    DRAG_THRESHOLD = 1
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setScaledContents(True)
+
         self.setMouseTracking(True)
-        self.setFocusPolicy(QtGui.Qt.FocusPolicy.StrongFocus)
+        self.setScaledContents(True)
 
-        self.model: Optional[ImageModel] = None
+        self._camera_state = CameraState((self.width(), self.height()))
 
-        self.hovered_point = None
+        self._image: Optional[np.ndarray] = None
+        self._context_image: Optional[np.ndarray] = None
 
-        self.brightness = 0.
-        self.contrast = 0.
+        self._instances: List[InstanceDelegate] = []
 
-        self.mouse_pos_cp = (0.0, 0.0)
-        self.bounding_box_start_pos_i = None
+        self._brightness = 0.0
+        self._contrast = 0.0
 
-        self.dragging_point = None
-        self.dragging_point_start_pos_i = None
-        self.dragging_point_current_pos_i = None
+        self._inspect_mode: bool = False
+        self._drag_preview: Optional[DragPreview] = None
+        self._box_preview: Optional[BoxPreview] = None
+        self._hovered_keypoint: Optional[KeypointDelegate] = None
+        self._crosshair_pos_view: Optional[Tuple[float, float]] = None
 
-        self.camera = Camera()
-        self.camera.set_view_size(self.width(), self.height())
-
-        self.image_frame = ImageFrame()
-
-        self.renderer = Renderer(self.camera, self.image_frame)
-
-        self.auto_zoom_locations = {}
-
-    def set_model(self, model: ImageModel):
-        if self.model is not None:
-            self.model.reset.disconnect(self.reset)
-            self.model.instance_added.disconnect(self.update)
-            self.model.instance_deleted.disconnect(self.update)
-            self.model.instance_updated.disconnect(self.update)
-            self.model.selection_changed.disconnect(self.update)
-            self.model.settings_changed.disconnect(self._settings_changed)
-            self.model.context_mode_changed.disconnect(self._context_mode_changed)
-            self.model.inspect_mode_changed.disconnect(self._inspect_mode_changed)
-
-        self.model = model
-
-        if self.model is not None:
-            self.model.reset.connect(self.reset)
-            self.model.instance_added.connect(self.update)
-            self.model.instance_deleted.connect(self.update)
-            self.model.instance_updated.connect(self.update)
-            self.model.selection_changed.connect(self.update)
-            self.model.settings_changed.connect(self._settings_changed)
-            self.model.context_mode_changed.connect(self._context_mode_changed)
-            self.model.inspect_mode_changed.connect(self._inspect_mode_changed)
-
-        self.reset()
-
-    def reset(self):
-        if self.model is not None:
-            image = self.model.get_image()
-            self.image_frame.set_size(image.shape[1], image.shape[0])
-
-            if self.model.get_selection()[1] is None:
-                self.model.set_selection(None, 0)
-        else:
-            self.image_frame.set_size(100, 100)
+    def set_image(self, image: Optional[np.ndarray]):
+        self._image = image
         self.update()
 
-    def _get_instances(self) -> List[InstanceDelegate]:
-        if self.model is None:
-            return []
-
-        instances = self.model.get_instances()
-        delegates = [InstanceDelegate.from_instance(instance) for i, instance in enumerate(instances)]
-        return delegates
-
-    def _get_instance(self, instance_id: Optional[str]) -> InstanceDelegate:
-        assert self.model is not None, "Model not set"
-
-        if instance_id is None:
-            return InstanceDelegate.from_instance_type(self.model.get_new_instance_type())
-
-        instance = self.model.get_instance(instance_id)
-        assert instance is not None, f"Instance {instance_id} not found"
-
-        return InstanceDelegate.from_instance(instance)
-
-    def _get_selected_instance(self) -> InstanceDelegate:
-        assert self.model is not None, "Model not set"
-
-        instance_id, _ = self.model.get_selection()
-        return self._get_instance(instance_id)
-
-    def _get_selected_member(self) -> InstanceMemberDelegate:
-        assert self.model is not None, "Model not set"
-
-        instance_id, member_index = self.model.get_selection()
-
-        instance = self._get_instance(instance_id)
-
-        assert member_index is not None, "No member selected"
-        return instance.members[member_index]
-
-    def auto_zoom(self):
-        if self.model is None:
-            return
-
-        instance = self._get_selected_instance()
-        member = self._get_selected_member()
-        if not isinstance(member, KeypointDelegate):
-            return
-
-        key = (instance.type.name, member.keypoint_index)
-        if key not in self.auto_zoom_locations:
-            return
-        self.camera.center_x, self.camera.center_y, self.camera.zoom = self.auto_zoom_locations[key]
+    def set_context_image(self, image: Optional[np.ndarray]):
+        self._context_image = image
         self.update()
 
-    def find_keypoint_at_pos(self, p_cp: Tuple[float, float]) -> Optional[KeypointDelegate]:
-        if self.model is None:
-            return None
-
-        instances = self._get_instances()
-        for instance in reversed(instances):
-            for keypoint in reversed(instance.keypoints):
-                kp_p_i = keypoint.p
-
-                if kp_p_i is None:
-                    continue
-
-                kp_p_ip = self.image_frame.image01_to_imagepx(*kp_p_i)
-                kp_p = self.image_frame.imagepx_to_world(*kp_p_ip)
-                kp_p_cp = self.camera.world_to_view(*kp_p)
-                dist = (p_cp[0] - kp_p_cp[0])**2 + (p_cp[1] - kp_p_cp[1])**2
-                if dist < POINT_RADIUS**2:
-                    return keypoint
-        return None
-
-    def find_bounding_box_at_pos(self, p_cp: Tuple[float, float]) -> Optional[BoundingBoxDelegate]:
-        if self.model is None:
-            return None
-
-        instances = self._get_instances()
-        for instance in reversed(instances):
-            if instance.box.box is None:
-                continue
-
-            p1_i, p2_i = instance.box.box
-            p1_ip = self.image_frame.image01_to_imagepx(*p1_i)
-            p2_ip = self.image_frame.image01_to_imagepx(*p2_i)
-            p1 = self.image_frame.imagepx_to_world(*p1_ip)
-            p2 = self.image_frame.imagepx_to_world(*p2_ip)
-            p1_cp = self.camera.world_to_view(*p1)
-            p2_cp = self.camera.world_to_view(*p2)
-
-            if p1_cp[0] <= p_cp[0] <= p2_cp[0] and p1_cp[1] <= p_cp[1] <= p2_cp[1]:
-                return instance.box
-        return None
-
-    def place(self, p_cp: Tuple[float, float], visible=True):
-        if self.model is None:
-            return
-
-        p = self.camera.view_to_world(*p_cp)
-        p_ip = self.image_frame.world_to_imagepx(*p)
-        p_i = self.image_frame.imagepx_to_image01(*p_ip)
-
-        p_i = (max(0.0, p_i[0]), max(0.0, p_i[1]))
-        p_i = (min(1.0, p_i[0]), min(1.0, p_i[1]))
-
-        selected_member = self._get_selected_member()
-
-        if not selected_member:
-            self.model.set_selection(None, 0)
-            return
-
-        if isinstance(selected_member, BoundingBoxDelegate):
-            if self.bounding_box_start_pos_i is None:
-                self.bounding_box_start_pos_i = p_i
-            else:
-                self.model.set_bounding_box(selected_member.instance_id, (self.bounding_box_start_pos_i, p_i))
-                self.bounding_box_start_pos_i = None
-        elif isinstance(selected_member, KeypointDelegate):
-            self.model.place_keypoint(selected_member.instance_id, selected_member.keypoint_index, p_i, visibility=2 if visible else 1)
-            selected_instance = self._get_selected_instance()
-            self.auto_zoom_locations[(selected_instance.type.name, selected_member.keypoint_index)] = (self.camera.center_x, self.camera.center_y, self.camera.zoom)
-
-    def delete(self, p_cp: Tuple[int, int]):
-        if self.model is None:
-            return
-
-        if self.bounding_box_start_pos_i is not None:
-            self.bounding_box_start_pos_i = None
-            return
-
-        keypoint = self.find_keypoint_at_pos(p_cp)
-        if keypoint is not None:
-            self.model.delete_keypoint(keypoint.instance_id, keypoint.keypoint_index)
-            return
-
-        box = self.find_bounding_box_at_pos(p_cp)
-        if box is not None:
-            self.model.delete_bounding_box(box.instance_id)
-            return
-
-    def toggle_visibility(self, p_cp: Tuple[int, int]):
-        if self.model is None:
-            return
-
-        keypoint = self.find_keypoint_at_pos(p_cp)
-        if keypoint is not None:
-            self.model.toggle_keypoint_visibility(keypoint.instance_id, keypoint.keypoint_index)
-
-    def handle_mouse_press(self, pos: QPoint, button, modifiers) -> None:
-        if not self.rect().contains(pos):
-            return
-
-        p_cp = (pos.x(), pos.y())
-
-        if button == QtGui.Qt.MouseButton.MiddleButton:
-            self.camera.drag_start(p_cp[0], p_cp[1])
-            self.update()
-            return
-
-        if button == QtGui.Qt.MouseButton.RightButton:
-            if modifiers & QtGui.Qt.KeyboardModifier.ControlModifier:
-                self.toggle_visibility(p_cp)
-                self.update()
-                return
-
-            self.delete(p_cp)
-            self.update()
-            return
-
-        if button == QtGui.Qt.MouseButton.LeftButton:
-            point = self.find_keypoint_at_pos(p_cp)
-            if point is not None:
-                p = self.camera.view_to_world(*p_cp)
-                p_ip = self.image_frame.world_to_imagepx(*p)
-                p_i = self.image_frame.imagepx_to_image01(*p_ip)
-                self.dragging_point = point
-                self.dragging_point_start_pos_i = p_i
-                self.dragging_point_current_pos_i = p_i
-            else:
-                visible = not modifiers & QtGui.Qt.KeyboardModifier.ControlModifier
-                self.place(p_cp, visible)
-                self.update()
-
-    def mousePressEvent(self, event):
-        self.handle_mouse_press(event.pos(), event.button(), event.modifiers())
-
-    def handle_mouse_release(self, pos: QPoint, button, modifiers) -> None:
-        if button == QtGui.Qt.MouseButton.MiddleButton:
-            self.camera.drag_end()
-            return
-
-        p_cp = (pos.x(), pos.y())
-        if button == QtGui.Qt.MouseButton.LeftButton:
-            if self.dragging_point is not None and self.dragging_point_start_pos_i is not None:
-                if self.model is not None:
-                    dragging_point_start_pos_ip = self.image_frame.image01_to_imagepx(*self.dragging_point_start_pos_i)
-                    dragging_point_start_pos = self.image_frame.imagepx_to_world(*dragging_point_start_pos_ip)
-                    dragging_point_start_pos_cp = self.camera.world_to_view(*dragging_point_start_pos)
-
-                    dist = (p_cp[0] - dragging_point_start_pos_cp[0]) ** 2 + (p_cp[1] - dragging_point_start_pos_cp[1]) ** 2
-                    if dist > DRAG_THRESHOLD:
-                        self.model.move_keypoint(self.dragging_point.instance_id, self.dragging_point.keypoint_index, self.dragging_point_current_pos_i)
-                    else:
-                        self.place(dragging_point_start_pos_cp)
-
-            self.dragging_point = None
-            self.dragging_point_start_pos_i = None
-            self.dragging_point_current_pos_i = None
-            self.update()
-
-    def mouseReleaseEvent(self, event):
-        self.handle_mouse_release(event.pos(), event.button(), event.modifiers())
-
-    def handle_mouse_move(self, pos: QPoint) -> None:
-        if not self.rect().contains(pos):
-            return
-
-        p_cp = (pos.x(), pos.y())
-
-        self.mouse_pos_cp = p_cp
-
-        needs_update = False
-
-        if self.camera.dragging:
-            self.camera.drag_update(*p_cp)
-            needs_update = True
-
-        if self.dragging_point is not None:
-            p = self.camera.view_to_world(*p_cp)
-            p_ip = self.image_frame.world_to_imagepx(*p)
-            p_i = self.image_frame.imagepx_to_image01(*p_ip)
-            self.dragging_point_current_pos_i = p_i
-            needs_update = True
-
-        current_member = self._get_selected_member()
-        if isinstance(current_member, BoundingBoxDelegate):
-            needs_update = True
-
-        hovered_point = self.find_keypoint_at_pos(p_cp)
-        if hovered_point != self.hovered_point:
-            self.hovered_point = hovered_point
-            needs_update = True
-
-        if needs_update:
-            self.update()
-
-    def mouseMoveEvent(self, event):
-        self.handle_mouse_move(event.pos())
-
-    def keyPressEvent(self, event):
-        super().keyPressEvent(event)
-
-        if self.model is None:
-            return
-
-        if event.key() == Qt.Key.Key_Control:
-            if self.model is not None:
-                context = self.model.get_context()
-                if not context:
-                    return
-                self.model.set_context_mode(True)
-            return
-
-    def keyReleaseEvent(self, event):
-        super().keyReleaseEvent(event)
-
-        if self.model is None:
-            return
-
-        if event.key() == Qt.Key.Key_Control:
-            if self.model is not None:
-                self.model.set_context_mode(False)
-            return
-
-    def _zoom(self, zoom_factor: float, mouse_pos_cp: Tuple[float, float]):
-        zoom = self.camera.zoom * zoom_factor
-        mouse_x, mouse_y = mouse_pos_cp
-        self.camera.set_zoom_around(zoom, mouse_x, mouse_y)
+    def set_camera_state(self, camera_state: CameraState):
+        self._camera_state = camera_state
         self.update()
 
-    def _move_context(self, delta: int):
-        if self.model is None:
-            return
-
-        self.model.set_context_mode(True)
-
-        context = self.model.get_context()
-        if not context:
-            return
-
-        before, current, after = context
-
-        context_min = -len(before)
-        context_max = len(after)
-
-        context_pos = self.model.get_context_pos()
-
-        context_pos += delta
-        if context_pos < context_min:
-            context_pos = context_min
-        if context_pos > context_max:
-            context_pos = context_max
-
-        self.model.set_context_pos(context_pos)
-
-    def _context_mode_changed(self, _context_mode: bool, _context_pos: int):
+    def set_instances(self, instances: List[InstanceDelegate]):
+        self._instances = instances
         self.update()
 
-    def _inspect_mode_changed(self, _inspect_mode: bool):
+    def set_inspect_mode(self, inspect_mode: bool):
+        self._inspect_mode = inspect_mode
         self.update()
+
+    def set_settings(self, brightness: float, contrast: float):
+        self._brightness = brightness
+        self._contrast = contrast
+        self.update()
+
+    def set_drag_preview(self, drag_preview: Optional[DragPreview]):
+        self._drag_preview = drag_preview
+        self.update()
+
+    def set_box_preview(self, box_preview: Optional[BoxPreview]):
+        self._box_preview = box_preview
+        self.update()
+
+    def set_hovered_keypoint(self, keypoint: Optional[KeypointDelegate]):
+        self._hovered_keypoint = keypoint
+        self.update()
+
+    def set_crosshair_position(self, pos_view: Optional[Tuple[float, float]]):
+        self._crosshair_pos_view = pos_view
+        self.update()
+
+    # --- Event handlers ---
+
+    def mousePressEvent(self, event: QMouseEvent):
+        pos = (event.position().x(), event.position().y())
+        pointer_event = PointerEvent(pos, event.button(), event.buttons(), event.modifiers())
+        self.mouse_pressed.emit(pointer_event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        pos = (event.position().x(), event.position().y())
+        pointer_event = PointerEvent(pos, event.button(), event.buttons(), event.modifiers())
+        self.mouse_released.emit(pointer_event)
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        pos = (event.position().x(), event.position().y())
+        pointer_event = PointerEvent(pos, event.button(), event.buttons(), event.modifiers())
+        self.mouse_moved.emit(pointer_event)
 
     def wheelEvent(self, event):
-        if not self.hasFocus():
-            self.setFocus(Qt.FocusReason.MouseFocusReason)
-
-        if event.modifiers() & QtGui.Qt.KeyboardModifier.ControlModifier:
-            delta = -1 if event.angleDelta().y() > 0 else 1
-            self._move_context(delta)
-            return
-
-        zoom_factor = 1.1 if event.angleDelta().y() > 0 else 1 / 1.1
-        mouse_pos_cp = (event.position().x(), event.position().y())
-        self._zoom(zoom_factor, mouse_pos_cp)
-
-        event.accept()
-
-    def focusOutEvent(self, e):
-        # If focus leaves the label while viewing context, snap back
-        if self.model is None:
-            return
-
-        #self.model.set_context_mode(False)
+        pos = (event.position().x(), event.position().y())
+        wheel_event = WheelEvent(pos, event.angleDelta().x(), event.angleDelta().y(), event.modifiers())
+        self.wheel_moved.emit(wheel_event)
 
     def resizeEvent(self, event):
-        self.camera.set_view_size(self.width(), self.height())
-        self.update()
         super().resizeEvent(event)
+        self.resized.emit(self.width(), self.height())
 
-    def _settings_changed(self, brightness: float, contrast: float):
-        self.brightness = brightness
-        self.contrast = contrast
-        self.update()
+    # --- Rendering ---
 
-    def _p_or_dragging_p(self, point: KeypointDelegate):
-        if not self.dragging_point:
-            return point.p
-        if point.instance_id != self.dragging_point.instance_id or point.keypoint_index != self.dragging_point.keypoint_index:
-            return point.p
-        return self.dragging_point_current_pos_i
-
-    def _adjust_brightness_contrast(self, image: np.ndarray, brightness: float, contrast: float) -> np.ndarray:
-        """
-        Adjust brightness and contrast of a uint8 image.
-
-        brightness: -1 = black, 0 = original, +1 = white
-        contrast:   -1 = flat gray, 0 = original, +1 = high contrast
-        """
-
-        if image.dtype != np.uint8:
-            raise ValueError("Image must be uint8")
-
-        # Contrast scale (alpha)
-        alpha = 1.0 + contrast
-
-        # Brightness offset (beta)
-        beta = brightness * 255.0
-
-        img = image.astype(np.float32)
-
-        # Apply contrast around midpoint (128)
-        img = alpha * (img - 128.0) + 128.0
-
-        # Apply brightness
-        img = img + beta
-
-        return np.clip(img, 0, 255).astype(np.uint8)
-
-    def draw_instances(self, painter: QPainter, instances: List[InstanceDelegate]):
+    def _draw_instances(self, renderer: Renderer, instances: List[InstanceDelegate]):
         for instance in instances:
-            color = QtGui.QColor(*instance.type.skeleton_color)
+            color = QtGui.QColor(*instance.skeleton.color)
 
-            for point_index1, point_index2 in instance.skeleton:
-                kp1 = instance.keypoints[point_index1]
-                kp2 = instance.keypoints[point_index2]
-                p1_i = self._p_or_dragging_p(kp1)
-                p2_i = self._p_or_dragging_p(kp2)
+            for kp1, kp2 in instance.skeleton.lines:
+                p1_i = kp1.p
+                p2_i = kp2.p
 
-                if p1_i is None or p2_i is None or kp1.visibility < 0.5 or kp2.visibility < 0.5:
+                if p1_i is None or p2_i is None:
                     continue
 
-                self.renderer.draw_skeleton_line(painter, p1_i, p2_i, color, opacity=1)
+                renderer.draw_skeleton_line(p1_i, p2_i, color, opacity=1)
 
         for instance in instances:
-            if instance.type.box_type == BoundingBoxType.AUTOMATIC:
-                continue
-
-            box = instance.box.box
-            if box is not None:
-                color = QtGui.QColor(*instance.type.box_color)
-                p1, p2 = box
-                self.renderer.draw_bounding_box(painter, p1, p2, color, opacity=1)
+            box = instance.box
+            if box is not None and box.box is not None:
+                color = QtGui.QColor(*box.color)
+                p1, p2 = box.box
+                renderer.draw_bounding_box(p1, p2, color, opacity=1)
 
         for instance in instances:
             for point in instance.keypoints:
-                p = self._p_or_dragging_p(point)
+                p = point.p
                 if p is not None and point.visibility > 0.5:
                     visible = point.visibility > 1.5
                     color = QtGui.QColor(*point.color)
-                    self.renderer.draw_point(painter, p, color, visible, opacity=1)
+                    renderer.draw_point(p, color, visible, opacity=1)
 
-    def draw_all_labels(self, painter, instances: List[InstanceDelegate]):
-        for instance in instances:
+    def _draw_all_labels(self, renderer: Renderer):
+        for instance in self._instances:
             points = [point.p for point in instance.keypoints if point.p is not None]
-            box = instance.box.box
+            
+            box = instance.box
             if box is not None:
-                points.extend(box)
+                box_points = box.box
+                if box_points is not None:
+                    points.extend(box_points)
 
             min_x = min([p[0] for p in points])
             max_x = max([p[0] for p in points])
@@ -504,82 +220,143 @@ class PoseImage(QLabel):
             p1_i = (min_x, min_y)
             p2_i = (max_x, max_y)
 
-            self.renderer.draw_instance_label(painter, p1_i, p2_i, instance.name)
+            renderer.draw_instance_label(p1_i, p2_i, instance.name)
 
             for point in instance.keypoints:
                 if point.p is None:
                     continue
                 p_image = point.p
-                self.renderer.draw_point_label(painter, p_image, point.name)
+                renderer.draw_point_label(p_image, point.name)
 
-    def draw_hovered_label(self, painter):
-        if self.hovered_point is not None:
-            p_image = self.hovered_point.p
-            label_str = self.hovered_point.name
-            self.renderer.draw_point_label(painter, p_image, label_str)
-
-    def draw_bounding_box_in_progress(self, painter):
-        if self.bounding_box_start_pos_i is None:
+    def _draw_hovered_label(self, renderer: Renderer):
+        if self._hovered_keypoint is None:
             return
 
-        instance = self._get_selected_instance()
-        color = QtGui.QColor(*instance.type.box_color)
+        point = self._hovered_keypoint
+        p_image = point.p
+        label_str = point.name
 
-        p1_i = self.bounding_box_start_pos_i
+        if p_image is not None:
+            renderer.draw_point_label(p_image, label_str)
 
-        p2_cp = self.mouse_pos_cp
-        p2 = self.camera.view_to_world(*p2_cp)
-        p2_ip = self.image_frame.world_to_imagepx(*p2)
-        p2_i = self.image_frame.imagepx_to_image01(*p2_ip)
-
-        p2_i = (max(0.0, p2_i[0]), max(0.0, p2_i[1]))
-        p2_i = (min(1.0, p2_i[0]), min(1.0, p2_i[1]))
-
-        self.renderer.draw_bounding_box(painter, p1_i, p2_i, color, opacity=1)
-
-    def draw_crosshair(self, painter):
-        current_member = self._get_selected_member()
-
-        if not isinstance(current_member, BoundingBoxDelegate):
-            self.setCursor(Qt.CursorShape.ArrowCursor)
+    def _draw_bounding_box_in_progress(self, renderer: Renderer):
+        if self._box_preview is None:
             return
 
-        mouse_pos = self.camera.view_to_world(*self.mouse_pos_cp)
-        mouse_pos_ip = self.image_frame.world_to_imagepx(*mouse_pos)
-        mouse_pos_i = self.image_frame.imagepx_to_image01(*mouse_pos_ip)
+        color = QtGui.QColor(*self._box_preview.color)
 
-        #self.setCursor(Qt.CursorShape.BlankCursor)
-        self.renderer.draw_crosshair(painter, mouse_pos_i)
+        p1_image01 = self._box_preview.p1_image01
+        p2_image01 = self._box_preview.p2_image01
+
+        renderer.draw_bounding_box(p1_image01, p2_image01, color, opacity=1)
+
+    def _draw_crosshair(self, renderer: Renderer):
+        if self._crosshair_pos_view is None:
+            return
+
+        renderer.draw_crosshair(self._crosshair_pos_view)
 
     def paintEvent(self, event):
         super().paintEvent(event)
 
+        if self._context_image is not None:
+            image = self._context_image
+        else:
+            image = self._image
+
+        if image is None:
+            return
+
+        image_frame = ImageFrame(image.shape[1], image.shape[0])
+
+        instances = self._instances
+
+        if self._drag_preview is not None:
+            non_drag_instances = [i for i in instances if i.instance_id != self._drag_preview.instance_id]
+            drag_instance = next((i for i in instances if i.instance_id == self._drag_preview.instance_id), None)
+            if drag_instance:
+                drag_keypoints = [
+                    kp if i != self._drag_preview.keypoint_index else kp.with_p(self._drag_preview.pos_image01)
+                    for i, kp in enumerate(drag_instance.keypoints)
+                ]
+                skeleton_lines = [(drag_keypoints[p1.keypoint_index], drag_keypoints[p2.keypoint_index]) for p1, p2 in drag_instance.skeleton.lines]
+
+                drag_instance = drag_instance.with_keypoints(drag_keypoints)
+                drag_instance = drag_instance.with_skeleton(drag_instance.skeleton.with_lines(skeleton_lines))
+                instances = non_drag_instances + [drag_instance]
+
         painter = QtGui.QPainter(self)
+        renderer = Renderer(self._camera_state, image_frame, painter)
 
-        if self.model:
-            image = None
-            if self.model.get_context_mode():
-                context = self.model.get_context()
-                if context:
-                    before, current, after = context
-                    context_frames = before + [current] + after
-                    image = context_frames[self.model.get_context_pos() + len(before)]
-            if image is None:
-                image = self.model.get_image()
+        image = _adjust_brightness_contrast(image, self._brightness, self._contrast)
 
-            image = self._adjust_brightness_contrast(image, self.brightness, self.contrast)
+        renderer.draw_image(image)
 
-            self.renderer.draw_image(painter, image)
+        self._draw_instances(renderer, instances)
 
-            instances = self._get_instances()
-            self.draw_instances(painter, instances)
+        if self._inspect_mode:
+            self._draw_all_labels(renderer)
+        elif not self._drag_preview:
+            self._draw_hovered_label(renderer)
 
-            if self.model.get_inspect_mode():
-                self.draw_all_labels(painter, instances)
-            else:
-                self.draw_hovered_label(painter)
-
-            self.draw_bounding_box_in_progress(painter)
-            self.draw_crosshair(painter)
+        self._draw_bounding_box_in_progress(renderer)
+        self._draw_crosshair(renderer)
 
         painter.end()
+
+    # --- Helpers ---
+
+    def hit_test_keypoint(self, keypoint: KeypointDelegate, pos_view: Tuple[float, float]) -> bool:
+        p_keypoint_image01 = keypoint.p
+
+        if p_keypoint_image01 is None:
+            return False
+
+        if self._image is None:
+            return False
+
+        image_frame = ImageFrame(self._image.shape[1], self._image.shape[0])
+        p_keypoint_imagepx = image_frame.image01_to_imagepx(*p_keypoint_image01)
+        p_keypoint_world = image_frame.imagepx_to_world(*p_keypoint_imagepx)
+        p_keypoint_view = self._camera_state.world_to_view(*p_keypoint_world)
+
+        dist = (pos_view[0] - p_keypoint_view[0]) ** 2 + (pos_view[1] - p_keypoint_view[1]) ** 2
+        return dist < self.POINT_RADIUS ** 2
+
+    def hit_test_box(self, box: BoundingBoxDelegate, pos_view: Tuple[float, float]) -> bool:
+        if box.box is None:
+            return False
+
+        p1_image01, p2_image01 = box.box
+
+        if self._image is None:
+            return False
+
+        image_frame = ImageFrame(self._image.shape[1], self._image.shape[0])
+
+        p1_imagepx = image_frame.image01_to_imagepx(*p1_image01)
+        p2_imagepx = image_frame.image01_to_imagepx(*p2_image01)
+
+        p1_world = image_frame.imagepx_to_world(*p1_imagepx)
+        p2_world = image_frame.imagepx_to_world(*p2_imagepx)
+
+        p1_view = self._camera_state.world_to_view(*p1_world)
+        p2_view = self._camera_state.world_to_view(*p2_world)
+
+        return (p1_view[0] <= pos_view[0] <= p2_view[0]) and (p1_view[1] <= pos_view[1] <= p2_view[1])
+
+    def find_keypoint(self, pos_view: Tuple[float, float]) -> Optional[KeypointDelegate]:
+        for instance in reversed(self._instances):
+            for keypoint in reversed(instance.keypoints):
+                if self.hit_test_keypoint(keypoint, pos_view):
+                    return keypoint
+        return None
+
+    def find_box(self, pos_view: Tuple[float, float]) -> Optional[BoundingBoxDelegate]:
+        for instance in reversed(self._instances):
+            box = instance.box
+            if box is None:
+                continue
+            if self.hit_test_box(box, pos_view):
+                return instance.box
+        return None

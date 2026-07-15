@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Tuple, DefaultDict
+from typing import Optional, List, Dict, Tuple
 
 import numpy as np
 from PySide6.QtCore import QObject, Signal
@@ -49,7 +49,7 @@ class AppModel(QObject):
     def get_context(self, image_index: int) -> Optional[TemporalContext]:
         return self._context_repository.get_context(image_index)
 
-    def get_instance_types(self, image_index: int) -> List[IInstanceType]:
+    def get_instance_types(self, _image_index: int) -> List[IInstanceType]:
         return self._config_repository.get_instance_types()
 
     def get_instance_type(self, image_index: int, instance_type_name: str) -> IInstanceType:
@@ -84,10 +84,10 @@ class AppModel(QObject):
     def get_instance(self, image_index: int, instance_id: str) -> Optional[IInstance]:
         return next((i for i in self.get_instances(image_index) if i.id == instance_id), None)
 
-    def get_selection(self, image_index: int) -> Tuple[Optional[str], Optional[int]]:
+    def get_selection(self, image_index: int) -> Tuple[Optional[str], int]:
         return self._selection_repository.get_selection(image_index)
 
-    def set_selection(self, image_index: int, instance_id: str = None, point_index: int = None):
+    def set_selection(self, image_index: int, instance_id: Optional[str], point_index: int):
         self._selection_repository.set_selection(image_index, instance_id, point_index)
         self.selection_changed.emit(image_index, instance_id, point_index)
 

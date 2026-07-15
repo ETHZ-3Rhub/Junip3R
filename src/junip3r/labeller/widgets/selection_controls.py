@@ -1,13 +1,13 @@
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
-from PySide6.QtWidgets import QStyledItemDelegate, QStyleOptionViewItem, QWidget
+from PySide6.QtWidgets import QStyledItemDelegate, QStyleOptionViewItem, QWidget, QVBoxLayout, QSplitter, QLabel, \
+    QListView, QComboBox
 
-from junip3r.labeller.data.types.abc import IInstanceType, IInstance
-from junip3r.labeller.layout.selection_controls import Ui_SelectionControls
-from junip3r.labeller.model.delegate_model import BoundingBoxDelegate, InstanceDelegate, DelegateModel
-from junip3r.labeller.model.image_model import ImageModel
+from junip3r.labeller.model.delegate_model import DelegateModel
+from junip3r.labeller.data.types.delegates import InstanceDelegate, InstanceMemberDelegate, InstanceMemberType, \
+    InstanceTypeDelegate
 
 
 class InstanceListModel(QAbstractListModel):
@@ -15,12 +15,12 @@ class InstanceListModel(QAbstractListModel):
 
     def __init__(self):
         super().__init__()
-        self._model: Optional[ImageModel] = None
+        self._model: Optional[DelegateModel] = None
 
         self._instances: List[InstanceDelegate] = []
-        self._new_instance = None
+        self._new_instance: Optional[InstanceDelegate] = None
 
-    def set_model(self, model: Optional[ImageModel]):
+    def set_model(self, model: Optional[DelegateModel]):
         if self._model is not None:
             self._model.reset.disconnect(self.refresh)
             self._model.instance_added.disconnect(self._instance_added)
@@ -40,9 +40,8 @@ class InstanceListModel(QAbstractListModel):
     def refresh(self):
         self.beginResetModel()
         if self._model is not None:
-            dm = DelegateModel(self._model)
-            self._instances = dm.get_instances()
-            self._new_instance = dm.get_instance(None)
+            self._instances = self._model.get_instances()
+            self._new_instance = self._model.get_new_instance()
         else:
             self._instances = []
             self._new_instance = None
@@ -56,10 +55,10 @@ class InstanceListModel(QAbstractListModel):
                 return i
         raise ValueError(f"Instance {instance_id} not found")
 
-    def _instance_added(self, instance: IInstance):
+    def _instance_added(self, instance: InstanceDelegate):
         index = len(self._instances)
         self.beginInsertRows(QModelIndex(), index, index)
-        self._instances.append(InstanceDelegate.from_instance(instance))
+        self._instances.append(instance)
         self.endInsertRows()
 
     def _instance_deleted(self, instance_id: str):
@@ -68,10 +67,13 @@ class InstanceListModel(QAbstractListModel):
         self._instances.pop(row)
         self.endRemoveRows()
 
-    def _instance_updated(self, instance: IInstance):
-        row = self.find_row_by_id(instance.id)
+    def _instance_updated(self, instance: InstanceDelegate):
+        row = self.find_row_by_id(instance.instance_id)
         index = self.index(row)
-        self._instances[row] = InstanceDelegate.from_instance(instance)
+        if instance.instance_id is None:
+            self._new_instance = instance
+        else:
+            self._instances[row] = instance
         self.dataChanged.emit(index, index, [Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.FontRole])
 
     def flags(self, index):
@@ -84,6 +86,9 @@ class InstanceListModel(QAbstractListModel):
 
     def data(self, index, role=None):
         instance = self._new_instance if index.row() == len(self._instances) else self._instances[index.row()]
+        if instance is None:
+            return None
+
         if role == Qt.ItemDataRole.DisplayRole:
             return instance.name
         elif role == InstanceListModel.InstanceIDRole:
@@ -155,47 +160,46 @@ class ColorIconDelegate(QStyledItemDelegate):
 class PointListModel(QAbstractListModel):
     def __init__(self):
         super().__init__()
-        self._model: Optional[ImageModel] = None
+        self._model: Optional[DelegateModel] = None
         self._instance: Optional[InstanceDelegate] = None
         self._icon_cache: dict[tuple, QIcon] = {}
 
-    def set_model(self, model: Optional[ImageModel]):
+    def set_model(self, model: Optional[DelegateModel]):
         if self._model is not None:
             self._model.reset.disconnect(self.refresh)
             self._model.selection_changed.disconnect(self._selection_changed)
             self._model.instance_updated.disconnect(self._instance_updated)
-            self._model.new_instance_type_changed.disconnect(self._new_instance_type_changed)
         self._model = model
         if self._model is not None:
             self._model.reset.connect(self.refresh)
             self._model.selection_changed.connect(self._selection_changed)
             self._model.instance_updated.connect(self._instance_updated)
-            self._model.new_instance_type_changed.connect(self._new_instance_type_changed)
         self.refresh()
 
     def refresh(self):
         self.beginResetModel()
         if self._model is not None:
-            dm = DelegateModel(self._model)
-            self._instance = dm.get_selected_instance()
+            self._instance = self._model.get_selected_instance()
         else:
             self._instance = None
         self.endResetModel()
 
-    def _selection_changed(self, instance_id: Optional[str], _: Optional[int]):
-        if self._instance is None or self._instance.instance_id != instance_id:
-            self.refresh()
+    def _selection_changed(self, selection: Optional[Tuple[InstanceDelegate, InstanceMemberDelegate]]):
+        assert selection is not None, "Selection not set"
+        instance, _ = selection
 
-    def _instance_updated(self, instance: IInstance):
-        if self._instance is not None and self._instance.instance_id == instance.id:
-            instance_type_changed = self._instance.type != instance.type
-            self._instance = InstanceDelegate.from_instance(instance)
-            if instance_type_changed:
-                self.refresh()
+        if self._instance is None or self._instance.instance_id != instance.instance_id:
+            self.beginResetModel()
+            self._instance = instance
+            self.endResetModel()
 
-    def _new_instance_type_changed(self, instance_type: IInstanceType):
-        if self._instance is not None and self._instance.instance_id is None and self._instance.type != instance_type:
-            self.refresh()
+    def _instance_updated(self, instance: InstanceDelegate):
+        if self._instance is not None and self._instance.instance_id == instance.instance_id:
+            if self._instance.type != instance.type:
+                self.beginResetModel()
+                self._instance = instance
+                self.endResetModel()
+            self._instance = instance
 
     def rowCount(self, parent=None):
         if self._instance is None:
@@ -216,10 +220,12 @@ class PointListModel(QAbstractListModel):
             color = member.color
             cache_key = (type(member), color)
             if cache_key not in self._icon_cache:
-                if isinstance(member, BoundingBoxDelegate):
+                if member.type == InstanceMemberType.BOX:
                     self._icon_cache[cache_key] = _make_rect_icon(color)
-                else:
+                elif member.type == InstanceMemberType.KEYPOINT:
                     self._icon_cache[cache_key] = _make_keypoint_icon(color)
+                else:
+                    self._icon_cache[cache_key] = QIcon()
             return self._icon_cache[cache_key]
         return None
 
@@ -229,10 +235,10 @@ class TypeListModel(QAbstractListModel):
 
     def __init__(self):
         super().__init__()
-        self._model: Optional[ImageModel] = None
-        self._instance_types: List[IInstanceType] = []
+        self._model: Optional[DelegateModel] = None
+        self._instance_types: List[InstanceTypeDelegate] = []
 
-    def set_model(self, model: Optional[ImageModel]):
+    def set_model(self, model: Optional[DelegateModel]):
         self._model = model
         self.refresh()
 
@@ -255,18 +261,64 @@ class TypeListModel(QAbstractListModel):
         return None
 
 
-class SelectionControls(Ui_SelectionControls, QWidget):
+class SelectionControls(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setupUi(self)
 
-        self.model: Optional[ImageModel] = None
+        self.model: Optional[DelegateModel] = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        splitter = QSplitter(self)
+        splitter.setOrientation(Qt.Orientation.Vertical)
+        splitter.setChildrenCollapsible(False)
+
+        frm_instances = QWidget(splitter)
+        frm_instances_layout = QVBoxLayout(frm_instances)
+        frm_instances_layout.setContentsMargins(0, 0, 0, 0)
+
+        lbl_instances = QLabel("Instances", frm_instances)
+        lbl_instances.setFont(QFont("Segoe UI", 14, italic=False))
+        frm_instances_layout.addWidget(lbl_instances)
+
+        self.lst_instances = QListView(frm_instances)
+        frm_instances_layout.addWidget(self.lst_instances)
+
+        splitter.addWidget(frm_instances)
+
+        frm_instance_type = QWidget(splitter)
+        frm_instance_type_layout = QVBoxLayout(frm_instance_type)
+        frm_instance_type_layout.setContentsMargins(0, 0, 0, 0)
+
+        lbl_instance_type = QLabel("Instance Type", frm_instance_type)
+        lbl_instance_type.setFont(QFont("Segoe UI", 14, italic=False))
+        frm_instance_type_layout.addWidget(lbl_instance_type)
+
+        self.dpd_instance_type = QComboBox(frm_instance_type)
+        self.dpd_instance_type.setFont(QFont("Segoe UI", 12, italic=False))
+        frm_instance_type_layout.addWidget(self.dpd_instance_type)
+
+        frm_points = QWidget(splitter)
+        frm_points_layout = QVBoxLayout(frm_points)
+        frm_points_layout.setContentsMargins(0, 0, 0, 0)
+
+        lbl_points = QLabel("Points", frm_points)
+        lbl_points.setFont(QFont("Segoe UI", 14, italic=False))
+        frm_points_layout.addWidget(lbl_points)
+
+        self.lst_points = QListView(frm_points)
+        frm_points_layout.addWidget(self.lst_points)
+
+        splitter.addWidget(frm_points)
+
+        layout.addWidget(splitter)
 
         self.instance_list_model: InstanceListModel = InstanceListModel()
         self.point_list_model: PointListModel = PointListModel()
         self.type_list_model: TypeListModel = TypeListModel()
 
-        self.frm_tag_list.setVisible(False)
+        #self.frm_tag_list.setVisible(False)
 
         self.lst_instances.setModel(self.instance_list_model)
         self.lst_points.setModel(self.point_list_model)
@@ -285,11 +337,10 @@ class SelectionControls(Ui_SelectionControls, QWidget):
         self.instance_list_model.modelReset.connect(self._instance_list_model_reset)
         self.point_list_model.modelReset.connect(self._point_list_model_reset)
 
-    def set_model(self, model: Optional[ImageModel]):
+    def set_model(self, model: Optional[DelegateModel]):
         if self.model is not None:
             self.model.selection_changed.disconnect(self._selection_changed)
             self.model.instance_updated.disconnect(self._instance_updated)
-            self.model.new_instance_type_changed.disconnect(self._new_instance_type_changed)
             self.instance_list_model.set_model(None)
             self.point_list_model.set_model(None)
             self.type_list_model.set_model(None)
@@ -303,58 +354,30 @@ class SelectionControls(Ui_SelectionControls, QWidget):
         if self.model is not None:
             self.model.selection_changed.connect(self._selection_changed)
             self.model.instance_updated.connect(self._instance_updated)
-            self.model.new_instance_type_changed.connect(self._new_instance_type_changed)
 
-            instance_id, point_index = self.model.get_selection()
-            self._selection_changed(instance_id, point_index)
+            self._selection_changed(self.model.get_selection())
 
-    def _selection_changed(self, instance_id: Optional[str] = None, point_index: Optional[int] = None):
-        assert self.model is not None, "Model not set"
+    def _selection_changed(self, selection: Optional[Tuple[InstanceDelegate, InstanceMemberDelegate]]):
+        assert selection is not None, "Selection not set"
+        instance, member = selection
 
-        instance_row = self.instance_list_model.find_row_by_id(instance_id)
+        instance_row = self.instance_list_model.find_row_by_id(instance.instance_id)
 
         self.lst_instances.setCurrentIndex(self.instance_list_model.index(instance_row))
-        if point_index is not None:
-            self.lst_points.setCurrentIndex(self.point_list_model.index(point_index))
-        else:
-            self.lst_points.setCurrentIndex(QModelIndex())
+        self.lst_points.setCurrentIndex(self.point_list_model.index(member.member_index))
+        self.dpd_instance_type.setCurrentText(instance.type.name)
 
-        if instance_id is None:
-            instance_type = self.model.get_new_instance_type()
-        else:
-            instance = self.model.get_instance(instance_id)
-            assert instance is not None, f"Instance {instance_id} not found"
-            instance_type = instance.type
-
-        self.dpd_instance_type.setCurrentText(instance_type.name)
-
-    def _instance_updated(self, instance: IInstance):
+    def _instance_updated(self, instance: InstanceDelegate):
         assert self.model is not None, "Model not set"
 
-        selected_instance_id, _ = self.model.get_selection()
-        if selected_instance_id is not None and instance.id == selected_instance_id:
+        selected_instance = self.model.get_selected_instance()
+        if instance.instance_id == selected_instance.instance_id:
             self.dpd_instance_type.setCurrentText(instance.type.name)
-
-    def _new_instance_type_changed(self, instance_type: IInstanceType):
-        assert self.model is not None, "Model not set"
-
-        selected_instance_id, _ = self.model.get_selection()
-        if selected_instance_id is None:
-            self.dpd_instance_type.setCurrentText(instance_type.name)
 
     def _select_instance(self, *_):
         if self.model is None:
             return
 
-        row = self.lst_instances.currentIndex().row()
-        if row == -1:
-            # TODO: This is fragile. Don't want to rely on the position (and presence) of the "Add new instance" item.
-            if self.instance_list_model.rowCount() >= 1:
-                # Select "Add new instance"
-                row = self.instance_list_model.find_row_by_id(None) - 1
-                self.lst_instances.setCurrentIndex(self.instance_list_model.index(row))
-                self.model.set_instance_selection(None)
-            return
         instance_id = self.lst_instances.currentIndex().data(InstanceListModel.InstanceIDRole)
         self.model.set_instance_selection(instance_id)
 
@@ -362,14 +385,9 @@ class SelectionControls(Ui_SelectionControls, QWidget):
         if self.model is None:
             return
 
-        row = self.lst_points.currentIndex().row()
-        if row == -1:
-            if self.point_list_model.rowCount() >= 1:
-                # Select first point
-                self.lst_points.setCurrentIndex(self.point_list_model.index(0))
-                self.model.set_point_selection(0)
-            return
-        self.model.set_point_selection(row)
+        instance_id = self.lst_instances.currentIndex().data(InstanceListModel.InstanceIDRole)
+        member_index = self.lst_points.currentIndex().row()
+        self.model.set_selection(instance_id, member_index)
 
     def _select_instance_type(self, *_):
         if self.model is None:
@@ -384,17 +402,16 @@ class SelectionControls(Ui_SelectionControls, QWidget):
         if self.model is None:
             return
 
-        instance_id, _ = self.model.get_selection()
-        row = self.instance_list_model.find_row_by_id(instance_id)
+        instance = self.model.get_selected_instance()
+        row = self.instance_list_model.find_row_by_id(instance.instance_id)
         self.lst_instances.setCurrentIndex(self.instance_list_model.index(row))
 
     def _point_list_model_reset(self):
         if self.model is None:
             return
 
-        instance_id, point_index = self.model.get_selection()
-        if point_index is not None:
-            self.lst_points.setCurrentIndex(self.point_list_model.index(point_index))
+        member = self.model.get_selected_member()
+        self.lst_points.setCurrentIndex(self.point_list_model.index(member.member_index))
 
     def eventFilter(self, obj, event):
         # Prevent the instance type dropdown from changing the selected type when the user scrolls
@@ -403,4 +420,3 @@ class SelectionControls(Ui_SelectionControls, QWidget):
                 event.ignore()
                 return True
         return False
-

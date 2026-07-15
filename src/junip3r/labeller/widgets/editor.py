@@ -1,13 +1,16 @@
 from copy import deepcopy
-from typing import Optional
+from typing import Optional, cast
 
 from PySide6.QtCore import Qt, QObject, QEvent
-from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import QWidget
+from PySide6.QtGui import QAction, QKeySequence, QKeyEvent
+from PySide6.QtWidgets import QWidget, QSplitter, QHBoxLayout, QSizePolicy, QVBoxLayout
 
-from junip3r.labeller.layout.editor import Ui_Editor
+from junip3r.labeller.model.delegate_model import DelegateModel
 from junip3r.labeller.model.image_model import ImageModel
 from junip3r.labeller.model.editor_model import EditorModel
+from junip3r.labeller.widgets.image_navigation import ImageNavigation
+from junip3r.labeller.widgets.pose_editor import PoseEditor
+from junip3r.labeller.widgets.selection_controls import SelectionControls
 from junip3r.labeller.widgets.yolo_export import YoloExport
 
 
@@ -24,12 +27,13 @@ class ModifierTracker(QObject):
             return False
 
         if event.type() == QEvent.Type.KeyPress:
+            event = cast(QKeyEvent, event)
             if event.key() == Qt.Key.Key_Control and not event.isAutoRepeat():
                 self._model.set_context_mode(True)
             elif event.key() == Qt.Key.Key_Shift and not event.isAutoRepeat():
                 self._model.set_inspect_mode(True)
-
         elif event.type() == QEvent.Type.KeyRelease:
+            event = cast(QKeyEvent, event)
             if event.key() == Qt.Key.Key_Control:
                 self._model.set_context_mode(False)
             elif event.key() == Qt.Key.Key_Shift:
@@ -45,25 +49,64 @@ class ModifierTracker(QObject):
         return False
 
 
-class Editor(Ui_Editor, QWidget):
+class Editor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setupUi(self)
 
         self.model: Optional[EditorModel] = None
         self.image_model: Optional[ImageModel] = None
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        splitter = QSplitter(self)
+        splitter.setOrientation(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
+
+        left = QWidget(splitter)
+
+        left_size_policy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        left_size_policy.setHorizontalStretch(1)
+        left_size_policy.setVerticalStretch(0)
+        left.setSizePolicy(left_size_policy)
+
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.pose_editor = PoseEditor(left)
+        left_layout.addWidget(self.pose_editor)
+
+        self.image_navigation = ImageNavigation(left)
+        left_layout.addWidget(self.image_navigation)
+
+        splitter.addWidget(left)
+
+        self.selection_controls = SelectionControls(splitter)
+        splitter.addWidget(self.selection_controls)
+
+        layout.addWidget(splitter)
 
         self.modifier_tracker = ModifierTracker(self)
         self.installEventFilter(self.modifier_tracker)
 
         self.act_left = QAction(self)
-        self.act_left.setShortcut(QKeySequence(Qt.Key.Key_Left))
+        self.act_left.setShortcuts([
+            QKeySequence("Left"),
+            QKeySequence("Shift+Left"),
+            QKeySequence("Ctrl+Left"),
+            QKeySequence("Ctrl+Shift+Left"),
+        ])
         self.act_left.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.act_left.triggered.connect(self._previous_image)
         self.addAction(self.act_left)
 
         self.act_right = QAction(self)
-        self.act_right.setShortcut(QKeySequence(Qt.Key.Key_Right))
+        self.act_right.setShortcuts([
+            QKeySequence("Right"),
+            QKeySequence("Shift+Right"),
+            QKeySequence("Ctrl+Right"),
+            QKeySequence("Ctrl+Shift+Right"),
+        ])
         self.act_right.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.act_right.triggered.connect(self._next_image)
         self.addAction(self.act_right)
@@ -110,13 +153,7 @@ class Editor(Ui_Editor, QWidget):
         self.redo_action.triggered.connect(self._redo)
         self.addAction(self.redo_action)
 
-        self.auto_zoom_action = QAction(self)
-        self.auto_zoom_action.setShortcut(QKeySequence(Qt.Key.Key_Q))
-        self.auto_zoom_action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        self.auto_zoom_action.triggered.connect(self.pose_editor.pose_image.auto_zoom)
-        self.addAction(self.auto_zoom_action)
-
-    def set_model(self, model: EditorModel):
+    def set_model(self, model: Optional[EditorModel]):
         self.model = model
 
         if model is not None:
@@ -126,12 +163,14 @@ class Editor(Ui_Editor, QWidget):
 
         self.modifier_tracker.set_model(self.image_model)
 
-        self.pose_editor.set_model(self.image_model)
-        self.selection_controls.set_model(self.image_model)
+        delegate_model = DelegateModel(self.image_model) if self.image_model is not None else None
+
+        self.pose_editor.set_model(delegate_model)
+        self.selection_controls.set_model(delegate_model)
         self.image_navigation.set_model(self.model)
 
     def export_yolo(self):
-        dialog = YoloExport(self.model, self)
+        dialog = YoloExport(self.model._model, self)
         dialog.exec()
 
     def _next_image(self):

@@ -18,7 +18,7 @@ class ImageNavigation(Ui_ImageNavigation, QWidget):
         self.btn_next_image.clicked.connect(self._next_image)
         self.btn_previous_image.clicked.connect(self._previous_image)
 
-    def set_model(self, model: EditorModel):
+    def set_model(self, model: Optional[EditorModel]):
         if self.model is not None:
             self.model.image_index_changed.disconnect(self._image_changed)
             self.sld_image_number.setMinimum(0)

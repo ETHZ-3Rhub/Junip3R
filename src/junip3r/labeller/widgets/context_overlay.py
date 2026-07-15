@@ -3,14 +3,14 @@ from typing import Optional
 from PySide6.QtCore import Qt, QSize, Slot
 from PySide6.QtWidgets import QFrame, QSizePolicy, QVBoxLayout, QStackedWidget, QWidget, QHBoxLayout, QLabel, QSlider
 
-from junip3r.labeller.model.image_model import ImageModel
+from junip3r.labeller.model.delegate_model import DelegateModel
 
 
 class ContextOverlay(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.model: Optional[ImageModel] = None
+        self.model: Optional[DelegateModel] = None
 
         self.setSizePolicy(
             QSizePolicy.Policy.Maximum,
@@ -66,7 +66,7 @@ class ContextOverlay(QFrame):
 
         self._reset()
 
-    def set_model(self, model: ImageModel):
+    def set_model(self, model: Optional[DelegateModel]):
         if self.model is not None:
             self.model.context_mode_changed.disconnect(self._context_mode_changed)
             self.model.reset.disconnect(self._reset)

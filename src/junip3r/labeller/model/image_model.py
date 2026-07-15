@@ -68,12 +68,6 @@ class ImageModel(QObject):
         self._context_load_worker_thread.start()
         self._context_load_requested.emit(self._image_index)
 
-    def get_num_images(self) -> int:
-        return self._model.get_num_images()
-
-    def get_image_index(self) -> int:
-        return self._model.get_image_index()
-
     def get_image_name(self) -> str:
         return self._model.get_image_name(self._image_index)
 
@@ -107,7 +101,7 @@ class ImageModel(QObject):
     def get_instance(self, instance_id: str) -> Optional[IInstance]:
         return self._model.get_instance(self._image_index, instance_id)
 
-    def get_selection(self) -> Tuple[Optional[str], Optional[int]]:
+    def get_selection(self) -> Tuple[Optional[str], int]:
         return self._model.get_selection(self._image_index)
 
     def get_settings(self) -> Tuple[float, float]:
@@ -182,8 +176,23 @@ class ImageModel(QObject):
         self.context_mode_changed.emit(self._is_context_loaded, self._context_mode, self._context_pos)
 
     def set_context_pos(self, pos: int):
-        self._context_pos = pos
+        if not self._is_context_loaded or self._context is None:
+            self._context_pos = 0
+        else:
+            context_min = -len(self._context[0])
+            context_max = len(self._context[2])
+
+            if pos < context_min:
+                pos = context_min
+            if pos > context_max:
+                pos = context_max
+
+            self._context_pos = pos
+
         self.context_mode_changed.emit(self._is_context_loaded, self._context_mode, self._context_pos)
+
+    def move_context(self, delta: int):
+        self.set_context_pos(self._context_pos + delta)
 
     def get_inspect_mode(self) -> bool:
         return self._inspect_mode

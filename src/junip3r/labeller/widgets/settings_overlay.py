@@ -4,14 +4,14 @@ from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QCursor, QIcon
 from PySide6.QtWidgets import QFrame, QSizePolicy, QVBoxLayout, QHBoxLayout, QSlider, QFormLayout, QToolButton
 
-from junip3r.labeller.model.image_model import ImageModel
+from junip3r.labeller.model.delegate_model import DelegateModel
 
 
 class SettingsOverlay(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.model: Optional[ImageModel] = None
+        self.model: Optional[DelegateModel] = None
 
         self.setSizePolicy(
             QSizePolicy.Policy.Maximum,
@@ -54,7 +54,7 @@ class SettingsOverlay(QFrame):
 
         self._reset()
 
-    def set_model(self, model: ImageModel):
+    def set_model(self, model: Optional[DelegateModel]):
         if self.model is not None:
             self.model.settings_changed.disconnect(self._settings_changed)
             self.model.reset.disconnect(self._reset)

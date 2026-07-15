@@ -1,6 +1,5 @@
 import colorsys
 import logging
-import os
 import sys
 from importlib.resources import files
 from pathlib import Path
@@ -22,7 +21,7 @@ from junip3r.labeller.data.repository.label import JuniperLabelRepository
 from junip3r.labeller.data.types.data import BoundingBoxType
 from junip3r.labeller.data.types.data import InstanceType, KeypointType
 from junip3r.labeller.model.editor_model import EditorModel
-from junip3r.labeller.widgets.labeller import Labeller
+from junip3r.labeller.widgets.main_window import EditorMainWindow
 
 
 logger = logging.getLogger(__name__)
@@ -30,13 +29,13 @@ logger = logging.getLogger(__name__)
 
 class MockSelectionRepository(IPointSelectionRepository):
     def __init__(self):
-        self._selections: Dict[int, Tuple[Optional[str], Optional[int]]] = {}
+        self._selections: Dict[int, Tuple[Optional[str], int]] = {}
         self._new_instance_type_index: Dict[int, Optional[int]] = {}
 
-    def get_selection(self, image_index: int) -> Tuple[Optional[str], Optional[int]]:
-        return self._selections.get(image_index, (None, None))
+    def get_selection(self, image_index: int) -> Tuple[Optional[str], int]:
+        return self._selections.get(image_index, (None, 0))
 
-    def set_selection(self, image_index: int, instance_id: str, point_index: int):
+    def set_selection(self, image_index: int, instance_id: Optional[str], point_index: int):
         self._selections[image_index] = (instance_id, point_index)
 
     def get_new_instance_type_index(self, image_index: int) -> int:
@@ -128,7 +127,7 @@ def load_instance_types(config_file: Path):
     return instance_types, expected_instance_types, tags
 
 
-def from_config_file(config_file: Path, show_frame_extractor: bool = False, parent=None) -> Labeller:
+def app_model_from_config_file(config_file: Path):
     project_folder = config_file.parent
 
     instance_types, expected_instance_types, tags = load_instance_types(config_file)
@@ -155,17 +154,22 @@ def from_config_file(config_file: Path, show_frame_extractor: bool = False, pare
     label_files = [label_folder / (image_file.stem + ".json") for image_file in image_files]
     label_repository = JuniperLabelRepository(instance_types, label_files)
 
-    labeller_model = AppModel()
-    labeller_model._image_repository = image_repository
-    labeller_model._context_repository = context_repository
-    labeller_model._config_repository = labeller_config_repository
-    labeller_model._label_repository = label_repository
-    labeller_model._selection_repository = MockSelectionRepository()
-    labeller_model._settings_repository = MockSettingsRepository()
+    app_model = AppModel()
+    app_model._image_repository = image_repository
+    app_model._context_repository = context_repository
+    app_model._config_repository = labeller_config_repository
+    app_model._label_repository = label_repository
+    app_model._selection_repository = MockSelectionRepository()
+    app_model._settings_repository = MockSettingsRepository()
 
-    editor_model = EditorModel(labeller_model)
+    return app_model
 
-    labeller = Labeller(show_frame_extractor=show_frame_extractor, parent=parent)
+
+def from_config_file(config_file: Path, show_frame_extractor: bool = False, parent=None) -> EditorMainWindow:
+    app_model = app_model_from_config_file(config_file)
+    editor_model = EditorModel(app_model)
+
+    labeller = EditorMainWindow(show_frame_extractor=show_frame_extractor, parent=parent)
     labeller.set_model(editor_model)
 
     return labeller
@@ -203,6 +207,7 @@ def main():
         sys.exit(app.exec())
     finally:
         log_manager.close()
+
 
 
 if __name__ == "__main__":

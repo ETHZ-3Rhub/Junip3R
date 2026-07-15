@@ -550,7 +550,7 @@ class EditorModel(QObject):
     def get_instance(self, image_index: int, instance_id: str) -> Optional[IInstance]:
         return next((i for i in self.get_instances(image_index) if i.id == instance_id), None)
 
-    def get_selection(self, image_index: int) -> Tuple[Optional[str], Optional[int]]:
+    def get_selection(self, image_index: int) -> Tuple[Optional[str], int]:
         return self._model.get_selection(image_index)
 
     def get_settings(self, image_index: int) -> Tuple[float, float]:
