@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt, QObject, QEvent
 from PySide6.QtGui import QAction, QKeySequence, QKeyEvent
 from PySide6.QtWidgets import QWidget, QSplitter, QHBoxLayout, QSizePolicy, QVBoxLayout
 
+from junip3r.labeller.model.context_model import ContextModel
 from junip3r.labeller.model.delegate_model import DelegateModel
 from junip3r.labeller.model.image_model import ImageModel
 from junip3r.labeller.model.editor_model import EditorModel
@@ -18,9 +19,13 @@ class ModifierTracker(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._model: Optional[ImageModel] = None
+        self._context_model: Optional[ContextModel] = None
 
     def set_model(self, model: Optional[ImageModel]):
         self._model = model
+
+    def set_context_model(self, model: Optional[ContextModel]):
+        self._context_model = model
 
     def eventFilter(self, watched, event):
         if self._model is None:
@@ -29,13 +34,16 @@ class ModifierTracker(QObject):
         if event.type() == QEvent.Type.KeyPress:
             event = cast(QKeyEvent, event)
             if event.key() == Qt.Key.Key_Control and not event.isAutoRepeat():
-                self._model.set_context_mode(True)
+                if self._context_model is not None:
+                    self._context_model.set_context_enabled(True)
             elif event.key() == Qt.Key.Key_Shift and not event.isAutoRepeat():
-                self._model.set_inspect_mode(True)
+                if self._context_model is not None:
+                    self._model.set_inspect_mode(True)
         elif event.type() == QEvent.Type.KeyRelease:
             event = cast(QKeyEvent, event)
             if event.key() == Qt.Key.Key_Control:
-                self._model.set_context_mode(False)
+                if self._context_model is not None:
+                    self._context_model.set_context_enabled(False)
             elif event.key() == Qt.Key.Key_Shift:
                 self._model.set_inspect_mode(False)
 
@@ -43,7 +51,8 @@ class ModifierTracker(QObject):
             QEvent.Type.ApplicationDeactivate,
             QEvent.Type.WindowDeactivate,
         ):
-            self._model.set_context_mode(False)
+            if self._context_model is not None:
+                self._context_model.set_context_enabled(False)
             self._model.set_inspect_mode(False)
 
         return False
@@ -156,18 +165,18 @@ class Editor(QWidget):
     def set_model(self, model: Optional[EditorModel]):
         self.model = model
 
-        if model is not None:
-            self.image_model = ImageModel(model)
-        else:
-            self.image_model = None
+        self.image_navigation.set_model(self.model)
 
+        self.image_model = ImageModel(model) if model is not None else None
         self.modifier_tracker.set_model(self.image_model)
 
         delegate_model = DelegateModel(self.image_model) if self.image_model is not None else None
-
         self.pose_editor.set_model(delegate_model)
         self.selection_controls.set_model(delegate_model)
-        self.image_navigation.set_model(self.model)
+
+        context_model = ContextModel(model) if model is not None else None
+        self.pose_editor.set_context_model(context_model)
+        self.modifier_tracker.set_context_model(context_model)
 
     def export_yolo(self):
         dialog = YoloExport(self.model._model, self)

@@ -1,24 +1,11 @@
-import time
 from typing import Optional, Tuple, List
 
 import numpy as np
-from PySide6.QtCore import QObject, Signal, QThread
+from PySide6.QtCore import QObject, Signal
 
-from junip3r.labeller.data.repository.abc import TemporalContext
 from junip3r.labeller.data.types.abc import IInstance, IInstanceType
 from junip3r.labeller.model.editor_model import EditorModel
 
-
-class ContextLoadWorker(QObject):
-    context_loaded = Signal(int, object)
-
-    def __init__(self, model: EditorModel, parent=None):
-        super().__init__(parent)
-        self._model = model
-
-    def load_context(self, image_index: int):
-        context = self._model.get_context(image_index)
-        self.context_loaded.emit(image_index, context)
 
 class ImageModel(QObject):
     reset = Signal()
@@ -32,30 +19,14 @@ class ImageModel(QObject):
     selection_changed = Signal(object, int)  # instance_id, point_index
     settings_changed = Signal(float, float)  # brightness, contrast
 
-    context_mode_changed = Signal(bool, bool, int)  # context_loaded, context_mode, context_pos
     inspect_mode_changed = Signal(bool)  # inspect_mode
-
-    _context_load_requested = Signal(int)
 
     def __init__(self, model: EditorModel):
         super().__init__()
         self._model = model
         self._image_index = model.get_image_index()
 
-        self._is_context_loaded: bool = False
-        self._context: Optional[TemporalContext] = None
-
-        self._context_mode = False
-        self._context_pos = 0
-
         self._inspect_mode = False
-
-        self._context_load_worker = ContextLoadWorker(model)
-        self._context_load_worker_thread = QThread()
-        self._context_load_worker.moveToThread(self._context_load_worker_thread)
-
-        self._context_load_worker.context_loaded.connect(self._context_loaded)
-        self._context_load_requested.connect(self._context_load_worker.load_context)
 
         self._model.image_index_changed.connect(self._image_index_changed)
         self._model.instance_added.connect(self._instance_added)
@@ -65,23 +36,11 @@ class ImageModel(QObject):
         self._model.selection_changed.connect(self._selection_changed)
         self._model.settings_changed.connect(self._settings_changed)
 
-        self._context_load_worker_thread.start()
-        self._context_load_requested.emit(self._image_index)
-
     def get_image_name(self) -> str:
         return self._model.get_image_name(self._image_index)
 
     def get_image(self) -> np.ndarray:
         return self._model.get_image(self._image_index)
-
-    def get_context(self) -> Optional[TemporalContext]:
-        timeout = 5.0  # seconds
-        while not self._context_loaded and timeout > 0:
-            time.sleep(0.1)
-            timeout -= 0.1
-        if not self._context_loaded:
-            return None
-        return self._context
 
     def get_instance_types(self) -> List[IInstanceType]:
         return self._model.get_instance_types(self._image_index)
@@ -161,39 +120,6 @@ class ImageModel(QObject):
     def redo(self):
         self._model.redo(self._image_index)
 
-    def get_context_mode(self) -> bool:
-        return self._context_mode
-
-    def get_context_pos(self) -> int:
-        return self._context_pos
-
-    def set_context_mode(self, context_mode: bool):
-        if context_mode == self._context_mode:
-            return
-
-        self._context_mode = context_mode
-        self._context_pos = 0
-        self.context_mode_changed.emit(self._is_context_loaded, self._context_mode, self._context_pos)
-
-    def set_context_pos(self, pos: int):
-        if not self._is_context_loaded or self._context is None:
-            self._context_pos = 0
-        else:
-            context_min = -len(self._context[0])
-            context_max = len(self._context[2])
-
-            if pos < context_min:
-                pos = context_min
-            if pos > context_max:
-                pos = context_max
-
-            self._context_pos = pos
-
-        self.context_mode_changed.emit(self._is_context_loaded, self._context_mode, self._context_pos)
-
-    def move_context(self, delta: int):
-        self.set_context_pos(self._context_pos + delta)
-
     def get_inspect_mode(self) -> bool:
         return self._inspect_mode
 
@@ -204,24 +130,8 @@ class ImageModel(QObject):
         self.inspect_mode_changed.emit(self._inspect_mode)
 
     def _image_index_changed(self, image_index: int):
-        self.set_context_pos(0)
-
         self._image_index = image_index
-        self._is_context_loaded = False
-        self._context = None
-        self._context_load_requested.emit(image_index)
-
         self.reset.emit()
-        self.context_mode_changed.emit(self._is_context_loaded, self._context_mode, self._context_pos)
-
-    def _context_loaded(self, image_index: int, context: Optional[TemporalContext]):
-        if image_index != self._image_index:
-            return
-
-        self._context = context
-        self._is_context_loaded = True
-
-        self.context_mode_changed.emit(self._is_context_loaded, self._context_mode, self._context_pos)
 
     def _instance_added(self, image_index: int, instance: IInstance):
         if image_index == self._image_index:

@@ -3,14 +3,14 @@ from typing import Optional
 from PySide6.QtCore import Qt, QSize, Slot
 from PySide6.QtWidgets import QFrame, QSizePolicy, QVBoxLayout, QStackedWidget, QWidget, QHBoxLayout, QLabel, QSlider
 
-from junip3r.labeller.model.delegate_model import DelegateModel
+from junip3r.labeller.model.context_model import ContextState, ContextModel
 
 
 class ContextOverlay(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.model: Optional[DelegateModel] = None
+        self.model: Optional[ContextModel] = None
 
         self.setSizePolicy(
             QSizePolicy.Policy.Maximum,
@@ -64,29 +64,27 @@ class ContextOverlay(QFrame):
 
         self.sld_context.valueChanged.connect(self._set_context_pos)
 
-        self._reset()
+        self._context_changed(ContextState())
 
-    def set_model(self, model: Optional[DelegateModel]):
+    def set_model(self, model: Optional[ContextModel]):
         if self.model is not None:
-            self.model.context_mode_changed.disconnect(self._context_mode_changed)
-            self.model.reset.disconnect(self._reset)
+            self.model.changed.disconnect(self._context_changed)
 
         self.model = model
 
         if self.model is not None:
-            self.model.context_mode_changed.connect(self._context_mode_changed)
-            self.model.reset.connect(self._reset)
-
-        self._reset()
+            self.model.changed.connect(self._context_changed)
+        else:
+            self._context_changed(ContextState())
 
     @staticmethod
     def _build_lbl_context_min(parent: QWidget) -> QLabel:
-        lbl_context_min = QLabel("-30", parent)
+        lbl_context_min = QLabel("0", parent)
         return lbl_context_min
 
     @staticmethod
     def _build_lbl_context_max(parent: QWidget) -> QLabel:
-        lbl_context_max = QLabel("30", parent)
+        lbl_context_max = QLabel("0", parent)
         return lbl_context_max
 
     @staticmethod
@@ -120,49 +118,19 @@ class ContextOverlay(QFrame):
         value = self.sld_context.value()
         self.model.set_context_pos(value)
 
-    @Slot(bool, bool, int)
-    def _context_mode_changed(self, context_loaded: bool, context_mode: bool, context_pos: int):
-        assert self.model is not None
+    @Slot(ContextState)
+    def _context_changed(self, state: ContextState):
+        self.stk_content.setCurrentIndex(0 if state.loaded else 1)
 
-        self.stk_content.setCurrentIndex(0 if context_loaded else 1)
+        str_context_pos = f"{state.pos:+d}" if state.pos != 0 else "0"
+        self.lbl_context_pos.setText(str_context_pos)
 
-        if context_loaded and context_mode:
-            str_context_pos = f"{context_pos:+d}" if context_pos != 0 else "0"
-            self.lbl_context_pos.setText(str_context_pos)
-            context = self.model.get_context()
+        self.sld_context.setMinimum(state.min)
+        self.sld_context.setMaximum(state.max)
 
-            if context:
-                before, current, after = context
-                len_before = len(before)
-                len_after = len(after)
+        str_context_min = f"{state.min:+d}" if state.min != 0 else "0"
+        self.lbl_context_min.setText(str_context_min)
+        str_context_max = f"{state.max:+d}" if state.max != 0 else "0"
+        self.lbl_context_max.setText(str_context_max)
 
-                self.sld_context.setMinimum(-len_before)
-                self.sld_context.setMaximum(len_after)
-
-                if len_before > 0:
-                    self.lbl_context_min.setVisible(True)
-                    self.lbl_context_min.setText(f"-{len_before}")
-                else:
-                    self.lbl_context_min.setVisible(False)
-
-                if len_after > 0:
-                    self.lbl_context_max.setVisible(True)
-                    self.lbl_context_max.setText(f"+{len_after}")
-                else:
-                    self.lbl_context_max.setVisible(False)
-
-        self.sld_context.setValue(context_pos)
-
-    def _reset(self):
-        model_set = self.model is not None
-        self.sld_context.setEnabled(model_set)
-
-        if self.model is not None:
-            context_pos = self.model.get_context_pos()
-        else:
-            context_pos = 0
-
-        self.sld_context.setValue(context_pos)
-
-        self.lbl_context_pos.setText("0")
-        self.lbl_context_min.setVisible(False)
+        self.sld_context.setValue(state.pos)

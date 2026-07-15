@@ -7,8 +7,8 @@ from junip3r.labeller.widgets.settings_overlay import SettingsOverlay
 
 
 class PoseEditorLayout(QWidget):
-    pose_image: PoseImage
-    context_overlay: ContextOverlay
+    _pose_image: PoseImage
+    _context_overlay: ContextOverlay
     settings_overlay: SettingsOverlay
 
     def __init__(self, parent: QWidget = None) -> None:
@@ -20,8 +20,8 @@ class PoseEditorLayout(QWidget):
         grid_layout.setContentsMargins(0, 0, 0, 0)
         grid_layout.setSpacing(0)
 
-        self.pose_image = self._build_pose_image(self)
-        grid_layout.addWidget(self.pose_image, 0, 0)
+        self._pose_image = self._build_pose_image(self)
+        grid_layout.addWidget(self._pose_image, 0, 0)
 
         overlay_layout = self._build_overlays()
         grid_layout.addLayout(overlay_layout, 0, 0)
@@ -39,9 +39,9 @@ class PoseEditorLayout(QWidget):
         overlay_layout.setRowStretch(0, 0)
         overlay_layout.setRowStretch(1, 1)
 
-        self.context_overlay = ContextOverlay(self)
+        self._context_overlay = ContextOverlay(self)
         overlay_layout.addWidget(
-            self.context_overlay, 0, 0,
+            self._context_overlay, 0, 0,
             alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
         )
 

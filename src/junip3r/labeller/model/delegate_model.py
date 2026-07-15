@@ -72,7 +72,6 @@ class DelegateModel(QObject):
     selection_changed = Signal(object)  # Optional[Tuple[InstanceDelegate, InstanceMemberDelegate]]
 
     settings_changed = Signal(float, float)
-    context_mode_changed = Signal(bool, bool, int)
     inspect_mode_changed = Signal(bool)
 
     def __init__(self, model: ImageModel):
@@ -82,8 +81,6 @@ class DelegateModel(QObject):
 
         self.get_image = self._model.get_image
         self.get_settings = self._model.get_settings
-        self.get_context = self._model.get_context
-        self.get_context_pos = self._model.get_context_pos
 
         self.rename_instance = self._model.rename_instance
         self.set_bounding_box = self._model.set_bounding_box
@@ -98,9 +95,6 @@ class DelegateModel(QObject):
 
         self.set_settings = self._model.set_settings
 
-        self.set_context_pos = self._model.set_context_pos
-        self.move_context = self._model.move_context
-
         self._model.reset.connect(self._reset)
         self._model.selection_changed.connect(self._selection_changed)
 
@@ -110,7 +104,6 @@ class DelegateModel(QObject):
         self._model.new_instance_type_changed.connect(self._new_instance_type_changed)
 
         self._model.settings_changed.connect(self.settings_changed)
-        self._model.context_mode_changed.connect(self.context_mode_changed)
         self._model.inspect_mode_changed.connect(self.inspect_mode_changed)
 
     def get_instance_types(self) -> List[InstanceTypeDelegate]:

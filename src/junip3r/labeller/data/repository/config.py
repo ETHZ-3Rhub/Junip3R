@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 
 from junip3r.labeller.data.repository.abc import ILabellerConfigRepository
 from junip3r.labeller.data.types.abc import IInstanceType
@@ -13,7 +13,7 @@ class LabellerConfigRepository(ILabellerConfigRepository):
     def get_instance_types(self) -> List[IInstanceType]:
         return self._instance_types
 
-    def get_expected_instances(self, _image_index: int) -> List[IInstanceType]:
+    def get_expected_instances(self, image_index: int) -> List[IInstanceType]:
         return self._expected_instances
 
     def get_tag_names(self) -> List[str]:

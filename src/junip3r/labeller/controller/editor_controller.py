@@ -3,6 +3,7 @@ from typing import Tuple, Optional, Protocol
 from PySide6.QtCore import Qt, Slot, QObject, Signal
 
 from junip3r.labeller.controller.camera_navigation import CameraNavigation
+from junip3r.labeller.model.context_model import ContextModel
 from junip3r.labeller.model.delegate_model import DelegateModel
 from junip3r.labeller.model.camera_model import CameraModel, CameraState
 from junip3r.labeller.data.types.delegates import KeypointDelegate, InstanceDelegate, InstanceMemberDelegate, \
@@ -30,8 +31,9 @@ class EditorController(QObject):
         self._camera_navigation = CameraNavigation()
 
         self._model: Optional[DelegateModel] = None
-
         self._camera_model: Optional[CameraModel] = None
+        self._context_model: Optional[ContextModel] = None
+
         self._member_finder: Optional[MemberFinder] = None
 
         self._camera_state: Optional[CameraState] = None
@@ -69,6 +71,9 @@ class EditorController(QObject):
         if self._camera_model is not None:
             self._camera_model.changed.connect(self._set_camera_state)
             self._set_camera_state(self._camera_model.state)
+
+    def set_context_model(self, model: Optional[ContextModel]):
+        self._context_model = model
 
     def set_member_finder(self, member_finder: MemberFinder):
         self._member_finder = member_finder
@@ -134,9 +139,10 @@ class EditorController(QObject):
     @Slot(WheelEvent)
     def wheel_moved(self, event: WheelEvent):
         if event.modifiers & Qt.KeyboardModifier.ControlModifier:
-            delta = -1 if event.delta_y > 0 else 1
-            self._move_context(delta)
-            return
+            if self._context_model is not None:
+                delta = -1 if event.delta_y > 0 else 1
+                self._context_model.move_context(delta)
+                return
 
         self._camera_navigation.handle_wheel_moved(event)
 
@@ -159,10 +165,6 @@ class EditorController(QObject):
             self.crosshair_position_changed.emit(self._last_mouse_pos)
         else:
             self.crosshair_position_changed.emit(None)
-
-    def _move_context(self, delta: int):
-        if self._model is not None:
-            self._model.move_context(delta)
 
     # --- Label actions ---
 
