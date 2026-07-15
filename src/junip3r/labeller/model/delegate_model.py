@@ -4,7 +4,7 @@ from PySide6.QtCore import QObject, Signal
 
 from junip3r.labeller.data.types.abc import IInstance, IInstanceType, BoundingBoxType
 from junip3r.labeller.data.types.delegates import BoundingBoxDelegate, KeypointDelegate, SkeletonDelegate, \
-    InstanceTypeDelegate, InstanceDelegate, InstanceMemberDelegate
+    InstanceTypeDelegate, InstanceDelegate, IMemberDelegate
 from junip3r.labeller.model.image_model import ImageModel
 
 
@@ -30,7 +30,7 @@ def delegate_from_instance(instance: IInstance):
         for kp_index, (kp_type, kp) in enumerate(zip(instance.type.keypoints, instance.keypoints))
     ]
 
-    skeleton_lines = [(keypoints[p1_index], keypoints[p2_index]) for p1_index, p2_index in instance.type.skeleton]
+    skeleton_lines = [(keypoints[p1_index].member_index, keypoints[p2_index].member_index) for p1_index, p2_index in instance.type.skeleton]
     skeleton = SkeletonDelegate(lines=skeleton_lines, color=type_.skeleton_color)
 
     return InstanceDelegate(instance.id, name, InstanceTypeDelegate(type_.name), box, keypoints, skeleton)
@@ -56,7 +56,7 @@ def delegate_from_instance_type(instance_type: IInstanceType):
         for kp_index, kp_type in enumerate(instance_type.keypoints)
     ]
 
-    skeleton_lines = [(keypoints[p1_index], keypoints[p2_index]) for p1_index, p2_index in instance_type.skeleton]
+    skeleton_lines = [(keypoints[p1_index].member_index, keypoints[p2_index].member_index) for p1_index, p2_index in instance_type.skeleton]
     skeleton = SkeletonDelegate(lines=skeleton_lines, color=type_.skeleton_color)
 
     return InstanceDelegate(None, name, InstanceTypeDelegate(type_.name), box, keypoints, skeleton)
@@ -129,7 +129,7 @@ class DelegateModel(QObject):
 
         return delegate_from_instance(instance)
 
-    def get_selection(self) -> Tuple[InstanceDelegate, InstanceMemberDelegate]:
+    def get_selection(self) -> Tuple[InstanceDelegate, IMemberDelegate]:
         instance_id, member_index = self._model.get_selection()
         instance = self.get_instance(instance_id)
         member = instance.members[member_index]
@@ -139,7 +139,7 @@ class DelegateModel(QObject):
         instance_id, _ = self._model.get_selection()
         return self.get_instance(instance_id)
 
-    def get_selected_member(self) -> InstanceMemberDelegate:
+    def get_selected_member(self) -> IMemberDelegate:
         instance_id, member_index = self._model.get_selection()
         instance = self.get_instance(instance_id)
 

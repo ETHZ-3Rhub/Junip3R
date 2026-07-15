@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, cast
 
 import numpy as np
 from PySide6 import QtGui
@@ -9,7 +9,8 @@ from PySide6.QtWidgets import QLabel
 
 from junip3r.labeller.model.camera_model import CameraState
 from junip3r.labeller.model.delegate_model import KeypointDelegate
-from junip3r.labeller.data.types.delegates import BoundingBoxDelegate, InstanceDelegate
+from junip3r.labeller.data.types.delegates import BoundingBoxDelegate, InstanceDelegate, IInstanceDelegate, \
+    IKeypointDelegate, IBoundingBoxDelegate, IPolygonDelegate, IPolylineDelegate, InstanceMemberType
 from junip3r.labeller.widgets.renderer import ImageFrame, Renderer
 
 
@@ -72,6 +73,12 @@ class BoxPreview:
     color: Tuple[int, int, int] = (0, 0, 255)
 
 
+@dataclass(frozen=True)
+class PolygonPreview:
+    points_image01: List[Tuple[float, float]]
+    color: Tuple[int, int, int] = (0, 0, 255)
+
+
 class PoseImage(QLabel):
     resized = Signal(int, int)
 
@@ -102,6 +109,7 @@ class PoseImage(QLabel):
         self._inspect_mode: bool = False
         self._drag_preview: Optional[DragPreview] = None
         self._box_preview: Optional[BoxPreview] = None
+        self._polygon_preview: Optional[PolygonPreview] = None
         self._hovered_keypoint: Optional[KeypointDelegate] = None
         self._crosshair_pos_view: Optional[Tuple[float, float]] = None
 
@@ -136,6 +144,10 @@ class PoseImage(QLabel):
 
     def set_box_preview(self, box_preview: Optional[BoxPreview]):
         self._box_preview = box_preview
+        self.update()
+
+    def set_polygon_preview(self, polygon_preview: Optional[PolygonPreview]):
+        self._polygon_preview = polygon_preview
         self.update()
 
     def set_hovered_keypoint(self, keypoint: Optional[KeypointDelegate]):
@@ -174,59 +186,73 @@ class PoseImage(QLabel):
 
     # --- Rendering ---
 
-    def _draw_instances(self, renderer: Renderer, instances: List[InstanceDelegate]):
+    def _draw_instances(self, renderer: Renderer, instances: List[IInstanceDelegate]):
         for instance in instances:
             color = QtGui.QColor(*instance.skeleton.color)
 
-            for kp1, kp2 in instance.skeleton.lines:
-                p1_i = kp1.p
-                p2_i = kp2.p
+            for i1, i2 in instance.skeleton.lines:
+                member_1 = instance.members[i1]
+                member_2 = instance.members[i2]
 
-                if p1_i is None or p2_i is None:
+                if not isinstance(member_1, KeypointDelegate) or not isinstance(member_2, KeypointDelegate):
                     continue
 
-                renderer.draw_skeleton_line(p1_i, p2_i, color, opacity=1)
+                p1_image01 = member_1.p
+                p2_image01 = member_2.p
+
+                if p1_image01 is None or p2_image01 is None:
+                    continue
+
+                renderer.draw_skeleton_line(p1_image01, p2_image01, color, opacity=1)
 
         for instance in instances:
-            box = instance.box
-            if box is not None and box.box is not None:
-                color = QtGui.QColor(*box.color)
-                p1, p2 = box.box
-                renderer.draw_bounding_box(p1, p2, color, opacity=1)
-
-        for instance in instances:
-            for point in instance.keypoints:
-                p = point.p
-                if p is not None and point.visibility > 0.5:
-                    visible = point.visibility > 1.5
-                    color = QtGui.QColor(*point.color)
-                    renderer.draw_point(p, color, visible, opacity=1)
+            for member in instance.members:
+                if member.type == InstanceMemberType.KEYPOINT:
+                    member = cast(IKeypointDelegate, member)
+                    p = member.p
+                    if p is not None and member.visibility > 0.5:
+                        visible = member.visibility > 1.5
+                        color = QtGui.QColor(*member.color)
+                        renderer.draw_point(p, color, visible, opacity=1)
+                elif member.type == InstanceMemberType.BOX:
+                    member = cast(IBoundingBoxDelegate, member)
+                    box = member.box
+                    if box is not None:
+                        color = QtGui.QColor(*member.color)
+                        p1, p2 = box
+                        renderer.draw_bounding_box(p1, p2, color, opacity=1)
+                elif member.type == InstanceMemberType.POLYGON:
+                    member = cast(IPolygonDelegate, member)
+                    points = member.points
+                    if len(points) > 0:
+                        color = QtGui.QColor(*member.color)
+                        renderer.draw_polygon(points, color, opacity=1, fill_opacity=0.2)
+                elif member.type == InstanceMemberType.POLYLINE:
+                    member = cast(IPolylineDelegate, member)
+                    points = member.points
+                    if len(points) > 0:
+                        color = QtGui.QColor(*member.color)
+                        renderer.draw_polyline(points, color, opacity=1)
 
     def _draw_all_labels(self, renderer: Renderer):
         for instance in self._instances:
-            points = [point.p for point in instance.keypoints if point.p is not None]
-            
-            box = instance.box
-            if box is not None:
-                box_points = box.box
-                if box_points is not None:
-                    points.extend(box_points)
+            bounds = instance.bounds
 
-            min_x = min([p[0] for p in points])
-            max_x = max([p[0] for p in points])
-            min_y = min([p[1] for p in points])
-            max_y = max([p[1] for p in points])
+            if bounds is not None:
+                p1_i_image01, p2_i_image01 = bounds
+                renderer.draw_instance_label(p1_i_image01, p2_i_image01, instance.name)
 
-            p1_i = (min_x, min_y)
-            p2_i = (max_x, max_y)
-
-            renderer.draw_instance_label(p1_i, p2_i, instance.name)
-
-            for point in instance.keypoints:
-                if point.p is None:
-                    continue
-                p_image = point.p
-                renderer.draw_point_label(p_image, point.name)
+            for member in instance.members:
+                if member.type == InstanceMemberType.KEYPOINT:
+                    bounds = member.bounds
+                    if bounds is not None:
+                        p_image01 = bounds[0]
+                        renderer.draw_point_label(p_image01, member.name)
+                else:
+                    bounds = member.bounds
+                    if bounds is not None:
+                        p1_i_image01, p2_i_image01 = bounds
+                        renderer.draw_box_label(p1_i_image01, p2_i_image01, member.name)
 
     def _draw_hovered_label(self, renderer: Renderer):
         if self._hovered_keypoint is None:
@@ -249,6 +275,15 @@ class PoseImage(QLabel):
         p2_image01 = self._box_preview.p2_image01
 
         renderer.draw_bounding_box(p1_image01, p2_image01, color, opacity=1)
+
+    def _draw_polygon_in_progress(self, renderer: Renderer):
+        if self._polygon_preview is None:
+            return
+
+        color = QtGui.QColor(*self._polygon_preview.color)
+        points_image01 = self._polygon_preview.points_image01
+
+        renderer.draw_polyline(points_image01, color, opacity=1)
 
     def _draw_crosshair(self, renderer: Renderer):
         if self._crosshair_pos_view is None:
@@ -279,10 +314,7 @@ class PoseImage(QLabel):
                     kp if i != self._drag_preview.keypoint_index else kp.with_p(self._drag_preview.pos_image01)
                     for i, kp in enumerate(drag_instance.keypoints)
                 ]
-                skeleton_lines = [(drag_keypoints[p1.keypoint_index], drag_keypoints[p2.keypoint_index]) for p1, p2 in drag_instance.skeleton.lines]
-
                 drag_instance = drag_instance.with_keypoints(drag_keypoints)
-                drag_instance = drag_instance.with_skeleton(drag_instance.skeleton.with_lines(skeleton_lines))
                 instances = non_drag_instances + [drag_instance]
 
         painter = QtGui.QPainter(self)
@@ -300,6 +332,7 @@ class PoseImage(QLabel):
             self._draw_hovered_label(renderer)
 
         self._draw_bounding_box_in_progress(renderer)
+        self._draw_polygon_in_progress(renderer)
         self._draw_crosshair(renderer)
 
         painter.end()

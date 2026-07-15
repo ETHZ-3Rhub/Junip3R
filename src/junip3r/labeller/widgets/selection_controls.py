@@ -1,12 +1,12 @@
 from typing import Optional, List, Tuple
 
-from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QPointF
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QPolygonF
 from PySide6.QtWidgets import QStyledItemDelegate, QStyleOptionViewItem, QWidget, QVBoxLayout, QSplitter, QLabel, \
     QListView, QComboBox
 
 from junip3r.labeller.model.delegate_model import DelegateModel
-from junip3r.labeller.data.types.delegates import InstanceDelegate, InstanceMemberDelegate, InstanceMemberType, \
+from junip3r.labeller.data.types.delegates import InstanceDelegate, IMemberDelegate, InstanceMemberType, \
     InstanceTypeDelegate
 
 
@@ -127,7 +127,7 @@ def _make_keypoint_icon(color: tuple, size: int = 16) -> QIcon:
     return QIcon(pixmap)
 
 
-def _make_rect_icon(color: tuple, size: int = 16) -> QIcon:
+def _make_box_icon(color: tuple, size: int = 16) -> QIcon:
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
@@ -138,6 +138,55 @@ def _make_rect_icon(color: tuple, size: int = 16) -> QIcon:
     pen.setWidth(2)
     painter.setPen(pen)
     painter.drawRect(2, 2, size - 4, size - 4)
+    painter.end()
+    return QIcon(pixmap)
+
+
+def _make_polygon_icon(color: tuple, size: int = 16) -> QIcon:
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    pen = painter.pen()
+    pen.setColor(QColor(*color))
+    pen.setWidth(2)
+    painter.setPen(pen)
+
+    # Regular pentagon centered in the icon.
+    cx = size / 2.0
+    cy = size / 2.0
+    radius = (size - 4) / 2.0
+    points = [
+        QPointF(cx + radius * 0.0, cy - radius * 1.0),
+        QPointF(cx + radius * 0.9511, cy - radius * 0.3090),
+        QPointF(cx + radius * 0.5878, cy + radius * 0.8090),
+        QPointF(cx - radius * 0.5878, cy + radius * 0.8090),
+        QPointF(cx - radius * 0.9511, cy - radius * 0.3090),
+    ]
+    painter.drawPolygon(QPolygonF(points))
+    painter.end()
+    return QIcon(pixmap)
+
+
+def _make_polyline_icon(color: tuple, size: int = 16) -> QIcon:
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = painter.pen()
+    pen.setColor(QColor(*color))
+    pen.setWidth(2)
+    painter.setPen(pen)
+
+    # 4-point zigzag polyline.
+    points = QPolygonF([
+        QPointF(2, size - 3),
+        QPointF(size * 0.33, 3),
+        QPointF(size * 0.66, size - 5),
+        QPointF(size - 2, 5),
+    ])
+    painter.drawPolyline(points)
     painter.end()
     return QIcon(pixmap)
 
@@ -184,7 +233,7 @@ class PointListModel(QAbstractListModel):
             self._instance = None
         self.endResetModel()
 
-    def _selection_changed(self, selection: Optional[Tuple[InstanceDelegate, InstanceMemberDelegate]]):
+    def _selection_changed(self, selection: Optional[Tuple[InstanceDelegate, IMemberDelegate]]):
         assert selection is not None, "Selection not set"
         instance, _ = selection
 
@@ -221,9 +270,13 @@ class PointListModel(QAbstractListModel):
             cache_key = (type(member), color)
             if cache_key not in self._icon_cache:
                 if member.type == InstanceMemberType.BOX:
-                    self._icon_cache[cache_key] = _make_rect_icon(color)
+                    self._icon_cache[cache_key] = _make_box_icon(color)
                 elif member.type == InstanceMemberType.KEYPOINT:
                     self._icon_cache[cache_key] = _make_keypoint_icon(color)
+                elif member.type == InstanceMemberType.POLYGON:
+                    self._icon_cache[cache_key] = _make_polygon_icon(color)
+                elif member.type == InstanceMemberType.POLYLINE:
+                    self._icon_cache[cache_key] = _make_polyline_icon(color)
                 else:
                     self._icon_cache[cache_key] = QIcon()
             return self._icon_cache[cache_key]
@@ -357,7 +410,7 @@ class SelectionControls(QWidget):
 
             self._selection_changed(self.model.get_selection())
 
-    def _selection_changed(self, selection: Optional[Tuple[InstanceDelegate, InstanceMemberDelegate]]):
+    def _selection_changed(self, selection: Optional[Tuple[InstanceDelegate, IMemberDelegate]]):
         assert selection is not None, "Selection not set"
         instance, member = selection
 

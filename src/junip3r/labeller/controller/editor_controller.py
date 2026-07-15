@@ -6,7 +6,7 @@ from junip3r.labeller.controller.camera_navigation import CameraNavigation
 from junip3r.labeller.model.context_model import ContextModel
 from junip3r.labeller.model.delegate_model import DelegateModel
 from junip3r.labeller.model.camera_model import CameraModel, CameraState
-from junip3r.labeller.data.types.delegates import KeypointDelegate, InstanceDelegate, InstanceMemberDelegate, \
+from junip3r.labeller.data.types.delegates import KeypointDelegate, InstanceDelegate, IMemberDelegate, \
     InstanceMemberType, BoundingBoxDelegate
 from junip3r.labeller.widgets.pose_image import PointerEvent, WheelEvent, DragPreview, BoxPreview
 from junip3r.labeller.widgets.renderer import ImageFrame
@@ -20,6 +20,7 @@ class MemberFinder(Protocol):
 class EditorController(QObject):
     drag_preview_changed = Signal(object)  # Optional[DragPreview]
     box_preview_changed = Signal(object)  # Optional[BoxPreview]
+    polygon_preview_changed = Signal(object)  # Optional[PolygonPreview]
     hovered_keypoint_changed = Signal(object)  # Optional[KeypointDelegate]
     crosshair_position_changed = Signal(object)  # Optional[Tuple[float, float]]
 
@@ -157,7 +158,7 @@ class EditorController(QObject):
         self._dragging_point_start_pos_image01 = None
         self._bounding_box_start_pos_image01 = None
 
-    def _selection_changed(self, selection: Optional[Tuple[InstanceDelegate, InstanceMemberDelegate]]):
+    def _selection_changed(self, selection: Optional[Tuple[InstanceDelegate, IMemberDelegate]]):
         assert selection is not None
         instance, member = selection
 

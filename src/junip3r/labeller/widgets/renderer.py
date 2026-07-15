@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import numpy as np
 from PySide6 import QtGui
@@ -129,7 +129,7 @@ class Renderer:
             self.painter.setPen(QPen(color, 2))
             self.painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
 
-        self.painter.drawEllipse(QPoint(x, y), POINT_RADIUS, POINT_RADIUS)
+        self.painter.drawEllipse(QPointF(x, y), POINT_RADIUS, POINT_RADIUS)
 
     def draw_skeleton_line(self, p1_image01, p2_image01, color: QColor, opacity=1.0):
         x1, y1 = self._image01_to_view_px(p1_image01)
@@ -139,7 +139,7 @@ class Renderer:
         self.painter.setPen(QPen(color, 2))
         self.painter.drawLine(x1, y1, x2, y2)
 
-    def draw_point_label(self, p_image01, label_str: str):
+    def draw_point_label(self, p_image01, name: str):
         x, y = self._image01_to_view_px(p_image01)
 
         label_p = (x - 100, y - 41)
@@ -150,9 +150,27 @@ class Renderer:
         self.painter.setBrush(QBrush(QColor(255, 255, 255)))
         self.painter.setFont(QFont("Arial", 15))
 
-        background_rect = self.painter.boundingRect(label_rect, Qt.AlignmentFlag.AlignCenter, label_str)
+        background_rect = self.painter.boundingRect(label_rect, Qt.AlignmentFlag.AlignCenter, name)
         self.painter.fillRect(background_rect, QColor(255, 255, 255))
-        self.painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, label_str)
+        self.painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, name)
+
+    def draw_box_label(self, p1_image01, p2_image01, name: str):
+        x1, y1 = self._image01_to_view_px(p1_image01)
+
+        self.painter.setOpacity(1.0)
+
+        # label near top-left
+        label_p = (x1, y1 - 10)
+        label_rect = QRect(label_p[0], label_p[1] - 20, 200, 30)
+
+        self.painter.setPen(QPen(QColor(0, 0, 0)))
+        self.painter.setBrush(QBrush(QColor(255, 255, 255)))
+        self.painter.setFont(QFont("Arial", 15))
+
+        background_rect = self.painter.boundingRect(label_rect, Qt.AlignmentFlag.AlignVCenter, name)
+        self.painter.fillRect(background_rect, QColor(255, 255, 255))
+        self.painter.drawText(label_rect, Qt.AlignmentFlag.AlignVCenter, name)
+
 
     def draw_instance_label(self, p1_i01, p2_i01, instance_name: str):
         x1, y1 = self._image01_to_view_px(p1_i01)
@@ -225,3 +243,41 @@ class Renderer:
         w = abs(x2 - x1)
         h = abs(y2 - y1)
         self.painter.drawRect(left, top, w, h)
+
+    def draw_polygon(self, points: List[Tuple[float, float]], color: QColor, opacity=1.0, fill_opacity=0.):
+        view_points = [QPointF(*self._image01_to_view_px(p)) for p in points]
+
+        if len(view_points) >= 2:
+            self.painter.setOpacity(opacity)
+            self.painter.setPen(QPen(color, 1))
+            self.painter.setBrush(QBrush(color, Qt.BrushStyle.NoBrush))
+            polygon = QtGui.QPolygonF(view_points)
+            self.painter.drawPolygon(polygon)
+
+            if fill_opacity > 0:
+                self.painter.setOpacity(fill_opacity)
+                self.painter.setBrush(QBrush(color, Qt.BrushStyle.SolidPattern))
+                self.painter.drawPolygon(polygon)
+
+        self.painter.setOpacity(opacity)
+        self.painter.setPen(QPen(color, 2))
+        self.painter.setBrush(QBrush(color, Qt.BrushStyle.SolidPattern))
+        for p in view_points:
+            self.painter.drawEllipse(p, POINT_RADIUS, POINT_RADIUS)
+
+    def draw_polyline(self, points: List[Tuple[float, float]], color: QColor, opacity=1.0, width=2):
+        view_points = [QPointF(*self._image01_to_view_px(p)) for p in points]
+
+        if len(view_points) >= 2:
+            self.painter.setOpacity(opacity)
+            self.painter.setPen(QPen(color, width))
+            self.painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+
+            polygon = QtGui.QPolygonF(view_points)
+            self.painter.drawPolyline(polygon)
+
+        self.painter.setOpacity(opacity)
+        self.painter.setPen(QPen(color, 2))
+        self.painter.setBrush(QBrush(color, Qt.BrushStyle.SolidPattern))
+        for p in view_points:
+            self.painter.drawEllipse(p, POINT_RADIUS, POINT_RADIUS)
