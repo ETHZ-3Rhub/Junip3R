@@ -15,7 +15,7 @@ from junip3r.labeller.data.repository.context import ContextRepository
 from junip3r.labeller.data.repository.image import ImageRepository
 from junip3r.labeller.data.repository.label import JuniperLabelRepository
 from junip3r.labeller.data.types.abc import IInstanceType, Selection
-from junip3r.labeller.legacy.convert_legacy_labels import LegacyLabelConverter
+from junip3r.labeller.legacy.legacy_label_converter import LegacyLabelConverter
 from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.model.context_model import ContextModel
 from junip3r.labeller.model.image_settings_model import ImageSettingsModel
