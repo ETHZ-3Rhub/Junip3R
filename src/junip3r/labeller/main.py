@@ -1,51 +1,64 @@
-import colorsys
 import logging
 import sys
-from importlib.resources import files
 from pathlib import Path
-from typing import Optional, Dict, Tuple
+from importlib.resources import files
+from typing import Optional, Dict, Tuple, List
 
 import yaml
 from PySide6 import QtWidgets
-from PySide6.QtGui import QColor, QIcon
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
-
-from junip3r.logging_setup import create_logging_manager
-from junip3r.labeller.model.app_model import AppModel
-from junip3r.labeller.data.repository.abc import IPointSelectionRepository, ISettingsRepository
-from junip3r.labeller.data.repository.config import LabellerConfigRepository
+from junip3r.labeller.config.parser import parse_config
+from junip3r.labeller.data.repository.abc import ISelectionRepository, ISettingsRepository, IConfigRepository
 from junip3r.labeller.data.repository.context import ContextRepository
 from junip3r.labeller.data.repository.image import ImageRepository
 from junip3r.labeller.data.repository.label import JuniperLabelRepository
-from junip3r.labeller.data.types.data import BoundingBoxType
-from junip3r.labeller.data.types.data import InstanceType, KeypointType
-from junip3r.labeller.model.editor_model import EditorModel
+from junip3r.labeller.data.types.abc import IInstanceType, Selection
+from junip3r.labeller.legacy.convert_legacy_labels import LegacyLabelConverter
+from junip3r.labeller.model.app_model import AppModel
+from junip3r.labeller.model.context_model import ContextModel
+from junip3r.labeller.model.image_settings_model import ImageSettingsModel
+from junip3r.labeller.model.pose_image_model import PoseImageModel
 from junip3r.labeller.widgets.main_window import EditorMainWindow
-
+from junip3r.logging_setup import create_logging_manager
 
 logger = logging.getLogger(__name__)
 
 
-class MockSelectionRepository(IPointSelectionRepository):
-    def __init__(self):
-        self._selections: Dict[int, Tuple[Optional[str], int]] = {}
-        self._new_instance_type_index: Dict[int, Optional[int]] = {}
+class ConfigRepository(IConfigRepository):
+    def __init__(self, instance_types: List[IInstanceType], expected_instance_types: List[IInstanceType]):
+        self._instance_types = instance_types
+        self._expected_instance_types = expected_instance_types
 
-    def get_selection(self, image_index: int) -> Tuple[Optional[str], int]:
+    def get_instance_types(self, image_index: int) -> List[IInstanceType]:
+        return self._instance_types
+
+    def get_expected_instances(self, image_index: int) -> List[IInstanceType]:
+        return self._expected_instance_types
+
+    def get_tag_names(self, image_index: int) -> List[str]: ...
+
+
+class SelectionRepository(ISelectionRepository):
+    def __init__(self):
+        self._selections: Dict[int, Optional[Selection]] = {}
+        self._new_instance_types: Dict[int, Optional[IInstanceType]] = {}
+
+    def get_selection(self, image_index: int) -> Optional[Selection]:
         return self._selections.get(image_index, (None, 0))
 
-    def set_selection(self, image_index: int, instance_id: Optional[str], point_index: int):
-        self._selections[image_index] = (instance_id, point_index)
+    def set_selection(self, image_index: int, selection: Optional[Selection]):
+        self._selections[image_index] = selection
 
-    def get_new_instance_type_index(self, image_index: int) -> int:
-        return self._new_instance_type_index.get(image_index) or 0
+    def get_new_instance_type(self, image_index: int) -> Optional[IInstanceType]:
+        return self._new_instance_types.get(image_index, None)
 
-    def set_new_instance_type_index(self, image_index: int, instance_type_index: int):
-        self._new_instance_type_index[image_index] = instance_type_index
+    def set_new_instance_type(self, image_index: int, instance_type: Optional[IInstanceType]):
+        self._new_instance_types[image_index] = instance_type
 
 
-class MockSettingsRepository(ISettingsRepository):
+class SettingsRepository(ISettingsRepository):
     def __init__(self):
         self._brightness = 0.0
         self._contrast = 0.0
@@ -58,80 +71,12 @@ class MockSettingsRepository(ISettingsRepository):
         self._contrast = contrast
 
 
-def color_from_hue(hue: float) -> Tuple[int, int, int]:
-    color = colorsys.hsv_to_rgb(hue, 1, 1)
-    return int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)
-
-
-def color_from_string(color_string: str) -> Tuple[int, int, int]:
-    if color_string.startswith("#"):
-        return int(color_string[1:3], 16), int(color_string[3:5], 16), int(color_string[5:7], 16)
-    else:
-        color = QColor(color_string)
-        if not color.isValid():
-            return 0, 0, 0
-        else:
-            return color.red(), color.green(), color.blue()
-
-
-def load_instance_types(config_file: Path):
+def from_config_file(config_file: Path, integrated: bool = False) -> EditorMainWindow:
+    project_folder = config_file.parent
     config = yaml.safe_load(open(config_file, 'r'))
 
-    instance_type_dicts = [instance_type for instance_type in config["instance_types"]]
-    instance_types = []
-    for instance_type_dict in instance_type_dicts:
-        name = instance_type_dict["name"]
-        points = instance_type_dict["points"]
-        colors = instance_type_dict["colors"] if "colors" in instance_type_dict else {}
-        skeleton = instance_type_dict["skeleton"]
-        skeleton = [(points.index(skeleton_point[0]), points.index(skeleton_point[1])) for skeleton_point in skeleton]
-
-        box_color = (0, 0, 0)
-        if "box_color" in instance_type_dict:
-            box_color = color_from_string(instance_type_dict["box_color"])
-
-        skeleton_color = (0, 0, 0)
-        if "skeleton_color" in instance_type_dict:
-            skeleton_color = color_from_string(instance_type_dict["skeleton_color"])
-
-        if "bounding_box_type" not in instance_type_dict:
-            bounding_box_type = BoundingBoxType.AUTOMATIC
-        else:
-            if instance_type_dict["bounding_box_type"] == "automatic":
-                bounding_box_type = BoundingBoxType.AUTOMATIC
-            elif instance_type_dict["bounding_box_type"] == "manual":
-                bounding_box_type = BoundingBoxType.MANUAL
-            else:
-                raise ValueError(f"Invalid bounding box type: {instance_type_dict['bounding_box_type']}")
-
-        point_types = []
-        for point_index, point in enumerate(points):
-            color = None
-            if point_index < len(colors):
-                color = color_from_string(colors[point_index])
-            if color is None:
-                point_percentage = point_index / len(points)
-                color = color_from_hue(point_percentage)
-            point_types.append(KeypointType(point, color))
-
-        instance_types.append(InstanceType(name, bounding_box_type, point_types, skeleton, box_color, skeleton_color))
-
-    instance_type_names = [instance_type.name for instance_type in instance_types]
-    expected_instance_types = [
-        instance_types[instance_type_names.index(instance_type_name)]
-        for instance_type_name in config["instances"]
-    ]
-
-    tags = config.get("tags") or []
-
-    return instance_types, expected_instance_types, tags
-
-
-def app_model_from_config_file(config_file: Path):
-    project_folder = config_file.parent
-
-    instance_types, expected_instance_types, tags = load_instance_types(config_file)
-    labeller_config_repository = LabellerConfigRepository(instance_types, expected_instance_types, tags)
+    instance_types, expected_instance_types, tags = parse_config(config)
+    config_repository = ConfigRepository(instance_types, expected_instance_types)
 
     image_file_endings = [".png", ".jpg", ".jpeg"]
     image_folder = project_folder / "images"
@@ -147,35 +92,60 @@ def app_model_from_config_file(config_file: Path):
                 return context_file
         return None
 
-    context_files = [cf for cf in (find_context_file(f) for f in image_files) if cf is not None]
-    context_repository = ContextRepository(context_files)
+    context_files = [cf for cf in (find_context_file(f) for f in image_files)]
+    if any(cf is not None for cf in context_files):
+        context_repository = ContextRepository(context_files)
+        context_model = ContextModel(context_repository)
+    else:
+        context_model = None
+
+    image_settings_model = ImageSettingsModel()
 
     label_folder = project_folder / "labels"
-    label_files = [label_folder / (image_file.stem + ".json") for image_file in image_files]
+    def find_legacy_label_file(image_file: Path) -> Optional[Tuple[Path, Path]]:
+        label_file = label_folder / (image_file.stem + ".csv")
+        if label_file.exists():
+            new_label_file = label_folder / (image_file.stem + ".json")
+            if not new_label_file.exists():
+                return label_file, new_label_file
+        return None
+
+    legacy_label_files = [lf for lf in (find_legacy_label_file(f) for f in image_files) if lf is not None]
+    if len(legacy_label_files) > 0:
+        legacy_converter = LegacyLabelConverter(instance_types)
+        for old_file, new_file in legacy_label_files:
+            legacy_converter.convert_legacy_labels(old_file, new_file)
+
+    def find_label_file(image_file: Path) -> Path:
+        label_file = label_folder / (image_file.stem + ".json")
+        return label_file
+
+    label_files = [lf for lf in (find_label_file(f) for f in image_files)]
     label_repository = JuniperLabelRepository(instance_types, label_files)
 
-    app_model = AppModel()
-    app_model._image_repository = image_repository
-    app_model._context_repository = context_repository
-    app_model._config_repository = labeller_config_repository
-    app_model._label_repository = label_repository
-    app_model._selection_repository = MockSelectionRepository()
-    app_model._settings_repository = MockSettingsRepository()
+    app_model = AppModel(image_repository, config_repository, label_repository, SelectionRepository())
+    pose_image_model = PoseImageModel(app_model)
 
-    return app_model
+    if context_model is not None:
+        pose_image_model.image_navigation_state_changed.connect(context_model.set_image_navigation_state)
 
+    editor = EditorMainWindow(show_frame_extractor=integrated)
+    editor.set_model(pose_image_model, context_model, image_settings_model)
 
-def from_config_file(config_file: Path, show_frame_extractor: bool = False, parent=None) -> EditorMainWindow:
-    app_model = app_model_from_config_file(config_file)
-    editor_model = EditorModel(app_model)
-
-    labeller = EditorMainWindow(show_frame_extractor=show_frame_extractor, parent=parent)
-    labeller.set_model(editor_model)
-
-    return labeller
+    return editor
 
 
 def main():
+    _excepthook = sys.excepthook
+
+    def exception_hook(exctype, value, traceback):
+        logger.critical(
+            "Unhandled exception", exc_info=(exctype, value, traceback)
+        )
+        _excepthook(exctype, value, traceback)
+
+    sys.excepthook = exception_hook
+
     log_manager = create_logging_manager(run_mode="standalone")
 
     try:
@@ -197,17 +167,15 @@ def main():
         app_icon = QIcon(str(res_folder / "junip3r_logo.png"))
         app.setWindowIcon(app_icon)
 
-        log_manager.start_app_run("labeller")
-        logger.info("starting standalone labeller",
-                    extra={"event_category": "lifecycle", "event_name": "app_start", "app_name": "labeller"})
+        log_manager.start_app_run("viewer")
+        logger.info("starting standalone viewer", extra={"event_category": "lifecycle", "event_name": "app_start", "app_name": "viewer"})
 
-        labeller = from_config_file(config_file, show_frame_extractor=False)
-        labeller.show()
+        window = from_config_file(config_file)
+        window.show()
 
         sys.exit(app.exec())
     finally:
         log_manager.close()
-
 
 
 if __name__ == "__main__":

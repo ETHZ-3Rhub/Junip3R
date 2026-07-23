@@ -7,7 +7,7 @@ from junip3r.labeller.data.repository.abc import IContextRepository, TemporalCon
 
 
 class ContextRepository(IContextRepository):
-    def __init__(self, context_files: List[Path]):
+    def __init__(self, context_files: List[Optional[Path]]):
         self._context_files = context_files
 
     def get_context(self, image_index: int) -> Optional[TemporalContext]:

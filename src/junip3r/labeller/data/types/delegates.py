@@ -1,251 +1,353 @@
-from dataclasses import dataclass, replace, field
-from enum import Enum
-from typing import Tuple, Protocol, List, Optional, runtime_checkable
+from dataclasses import dataclass, field, replace
+from typing import List, Optional, Tuple, Self, Sequence
+
+from junip3r.labeller.data.types.abc import ILabellerParentObject, LabellerObjectType, Color, Point, Box, \
+    IPolygonPoint, IInstanceType, ILabellerObject, ISkeleton, InstanceID
 
 
-class InstanceMemberType(Enum):
-    BOX = 0
-    KEYPOINT = 1
-    POLYGON = 2
-    POLYLINE = 3
+def _normalize_box(box: Optional[Box]) -> Optional[Box]:
+    if box is None:
+        return None
+    (x1, y1), (x2, y2) = box
+    x1_ = min(x1, x2)
+    y1_ = min(y1, y2)
+    x2_ = max(x1, x2)
+    y2_ = max(y1, y2)
+    return (x1_, y1_), (x2_, y2_)
 
 
-@runtime_checkable
-class IMemberDelegate(Protocol):
-    @property
-    def instance_id(self) -> Optional[str]: ...
-
-    @property
-    def member_index(self) -> int: ...
-
-    @property
-    def type(self) -> InstanceMemberType: ...
-
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def bounds(self) -> Optional[Tuple[Tuple[float, float], Tuple[float, float]]]: ...
-
-
-@runtime_checkable
-class IKeypointDelegate(IMemberDelegate, Protocol):
-    @property
-    def color(self) -> Tuple[int, int, int]: ...
-
-    @property
-    def p(self) -> Optional[Tuple[float, float]]: ...
-
-    @property
-    def visibility(self) -> float: ...
-
-
-@runtime_checkable
-class IBoundingBoxDelegate(IMemberDelegate, Protocol):
-    @property
-    def color(self) -> Tuple[int, int, int]: ...
-
-    @property
-    def box(self) -> Optional[Tuple[Tuple[float, float], Tuple[float, float]]]: ...
-
-
-@runtime_checkable
-class IPolygonDelegate(IMemberDelegate, Protocol):
-    @property
-    def color(self) -> Tuple[int, int, int]: ...
-
-    @property
-    def points(self) -> List[Tuple[float, float]]: ...
-
-
-@runtime_checkable
-class IPolylineDelegate(IMemberDelegate, Protocol):
-    @property
-    def color(self) -> Tuple[int, int, int]: ...
-
-    @property
-    def points(self) -> List[Tuple[float, float]]: ...
-
-
-@runtime_checkable
-class ISkeletonDelegate(Protocol):
-    @property
-    def lines(self) -> List[Tuple[int, int]]: ...
-
-    @property
-    def color(self) -> Tuple[int, int, int]: ...
-
-
-@runtime_checkable
-class IInstanceTypeDelegate(Protocol):
-    @property
-    def name(self) -> str: ...
-
-
-@runtime_checkable
-class IInstanceDelegate(Protocol):
-    @property
-    def instance_id(self) -> Optional[str]: ...
-
-    @property
-    def type(self) -> IInstanceTypeDelegate: ...
-
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def members(self) -> List[IMemberDelegate]: ...
-
-    @property
-    def skeleton(self) -> 'ISkeletonDelegate': ...
-
-    @property
-    def bounds(self) -> Optional[Tuple[Tuple[float, float], Tuple[float, float]]]: ...
-
-
-@dataclass(frozen=True)
-class BoundingBoxDelegate:
-    instance_id: Optional[str] = None
-    name: str = "Bounding Box"
-    color: Tuple[int, int, int] = (0, 0, 255)
-    box: Optional[Tuple[Tuple[float, float], Tuple[float, float]]] = None
-
-    @property
-    def member_index(self):
-        return 0
-
-    @property
-    def type(self):
-        return InstanceMemberType.BOX
-
-    @property
-    def bounds(self) -> Optional[Tuple[Tuple[float, float], Tuple[float, float]]]:
-        return self.box
-
-    def with_box(self, box: Tuple[Tuple[float, float], Tuple[float, float]]) -> 'BoundingBoxDelegate':
-        return replace(self, box=box)
-
-
-@dataclass(frozen=True)
-class KeypointDelegate:
-    instance_id: Optional[str] = None
+@dataclass
+class Keypoint:
+    instance_id: InstanceID = None
     member_index: int = 0
-    keypoint_index: int = 0
     name: str = "Keypoint"
-    color: Tuple[int, int, int] = (255, 0, 0)
-    p: Optional[Tuple[float, float]] = None
-    visibility: float = 0.0
+    color: Color = (255, 0, 0)
+    p: Optional[Point] = None
+    visibility: float = 2.0
+
+    @property
+    def path(self):
+        return self.instance_id, self.member_index
 
     @property
     def type(self):
-        return InstanceMemberType.KEYPOINT
+        return LabellerObjectType.KEYPOINT
 
     @property
-    def bounds(self) -> Optional[Tuple[Tuple[float, float], Tuple[float, float]]]:
+    def bounds(self) -> Optional[Box]:
         return (self.p, self.p) if self.p is not None else None
 
-    def with_p(self, p: Tuple[float, float]) -> 'KeypointDelegate':
+    @property
+    def is_set(self) -> bool:
+        return self.p is not None
+
+    def with_instance_id(self, instance_id: InstanceID) -> Self:
+        return replace(self, instance_id=instance_id)
+
+    def with_p(self, p: Optional[Point]) -> Self:
+        return replace(self, p=p)
+
+    def with_visibility(self, visibility: float) -> Self:
+        return replace(self, visibility=visibility)
+
+
+@dataclass
+class BoundingBoxCorner:
+    instance_id: InstanceID = None
+    member_index: int = 0
+    corner_index: int = 0
+    name: str = "Bounding Box Corner"
+    color: Color = (0, 0, 255)
+    p: Point = (0.0, 0.0)
+
+    @property
+    def type(self):
+        return LabellerObjectType.BOUNDING_BOX_CORNER
+
+    @property
+    def path(self):
+        return self.instance_id, self.member_index, self.corner_index
+
+    @property
+    def bounds(self) -> Optional[Box]:
+        return self.p, self.p
+
+    @property
+    def is_set(self) -> bool:
+        return True
+
+
+@dataclass
+class BoundingBox:
+    instance_id: InstanceID = None
+    member_index: int = 0
+    name: str = "Bounding Box"
+    color: Color = (0, 0, 255)
+    box: Optional[Box] = None
+
+    _corners: Optional[Tuple[BoundingBoxCorner, BoundingBoxCorner, BoundingBoxCorner, BoundingBoxCorner]] = None
+
+    def __post_init__(self):
+        if self.box is not None:
+            self.box = _normalize_box(self.box)
+            (x1, y1), (x2, y2) = self.box
+            self._corners = (
+                BoundingBoxCorner(self.instance_id, self.member_index, 0, p=(x1, y1)),
+                BoundingBoxCorner(self.instance_id, self.member_index, 1, p=(x2, y1)),
+                BoundingBoxCorner(self.instance_id, self.member_index, 2, p=(x2, y2)),
+                BoundingBoxCorner(self.instance_id, self.member_index, 3, p=(x1, y2)),
+            )
+
+    @property
+    def corners(self) -> Optional[Tuple[BoundingBoxCorner, BoundingBoxCorner, BoundingBoxCorner, BoundingBoxCorner]]:
+        return self._corners
+
+    @property
+    def path(self):
+        return self.instance_id, self.member_index
+
+    @property
+    def type(self):
+        return LabellerObjectType.BOUNDING_BOX
+
+    @property
+    def members(self) -> Sequence[ILabellerObject]:
+        if self._corners is not None:
+            return self._corners
+        return []
+
+    @property
+    def bounds(self) -> Optional[Box]:
+        return self.box
+
+    @property
+    def is_set(self) -> bool:
+        return self.box is not None
+
+    def with_instance_id(self, instance_id: InstanceID) -> Self:
+        return replace(self, instance_id=instance_id)
+
+    def with_box(self, box: Optional[Box]) -> Self:
+        return replace(self, box=_normalize_box(box))
+
+
+@dataclass
+class PolygonPoint:
+    instance_id: InstanceID = None
+    member_index: int = 0
+    point_index: int = 0
+    name: str = "Polygon Point"
+    color: Color = (255, 165, 0)
+    p: Point = (0.0, 0.0)
+
+    @property
+    def path(self):
+        return self.instance_id, self.member_index, self.point_index
+
+    @property
+    def type(self):
+        return LabellerObjectType.POLYGON_POINT
+
+    @property
+    def bounds(self) -> Optional[Box]:
+        return self.p, self.p
+
+    @property
+    def is_set(self) -> bool:
+        return True
+
+    def with_instance_id(self, instance_id: InstanceID) -> Self:
+        return replace(self, instance_id=instance_id)
+
+    def with_p(self, p: Point) -> Self:
         return replace(self, p=p)
 
 
-@dataclass(frozen=True)
-class PolygonDelegate:
-    instance_id: Optional[str] = None
+@dataclass
+class Polygon:
+    instance_id: InstanceID = None
     member_index: int = 0
     name: str = "Polygon"
-    color: Tuple[int, int, int] = (255, 0, 0)
-    points: List[Tuple[float, float]] = field(default_factory=list)
+    color: Color = (255, 165, 0)
+    num_points: Optional[int] = None
+    points: Sequence[IPolygonPoint] = field(default_factory=list)
+
+    @property
+    def path(self):
+        return self.instance_id, self.member_index
 
     @property
     def type(self):
-        return InstanceMemberType.POLYGON
+        return LabellerObjectType.POLYGON
 
     @property
-    def bounds(self) -> Optional[Tuple[Tuple[float, float], Tuple[float, float]]]:
+    def members(self) -> Sequence[ILabellerObject]:
+        return self.points
+
+    @property
+    def bounds(self) -> Optional[Box]:
         if len(self.points) <= 0:
             return None
-        min_x = min(p[0] for p in self.points)
-        min_y = min(p[1] for p in self.points)
-        max_x = max(p[0] for p in self.points)
-        max_y = max(p[1] for p in self.points)
+        min_x = min(p.p[0] for p in self.points)
+        min_y = min(p.p[1] for p in self.points)
+        max_x = max(p.p[0] for p in self.points)
+        max_y = max(p.p[1] for p in self.points)
         return (min_x, min_y), (max_x, max_y)
 
-    def with_points(self, points: List[Tuple[float, float]]) -> 'PolygonDelegate':
+    @property
+    def is_set(self) -> bool:
+        return len(self.points) > 0
+
+    def with_instance_id(self, instance_id: InstanceID) -> Self:
+        points = [p.with_instance_id(instance_id) for p in self.points]
+        return replace(self, instance_id=instance_id, points=points)
+
+    def with_points(self, points: Sequence[Point]) -> Self:
+        points = [
+            PolygonPoint(self.instance_id, self.member_index, i, p=p)
+            for i, p in enumerate(points)
+        ]
         return replace(self, points=points)
 
+    def replace_point(self, point_index: int, point: Point) -> Self:
+        points = list(self.points)
+        points[point_index] = points[point_index].with_p(point)
+        return replace(self, points=tuple(points))
 
-@dataclass(frozen=True)
-class PolylineDelegate:
-    instance_id: Optional[str] = None
+
+@dataclass
+class Polyline:
+    instance_id: InstanceID = None
     member_index: int = 0
     name: str = "Polyline"
-    color: Tuple[int, int, int] = (255, 0, 0)
-    points: List[Tuple[float, float]] = field(default_factory=list)
+    color: Color = (255, 0, 0)
+    num_points: Optional[int] = None
+    points: Sequence[IPolygonPoint] = field(default_factory=list)
+
+    @property
+    def path(self):
+        return self.instance_id, self.member_index
 
     @property
     def type(self):
-        return InstanceMemberType.POLYLINE
+        return LabellerObjectType.POLYLINE
 
     @property
-    def bounds(self) -> Optional[Tuple[Tuple[float, float], Tuple[float, float]]]:
+    def members(self) -> Sequence[ILabellerObject]:
+        return self.points
+
+    @property
+    def bounds(self) -> Optional[Box]:
         if len(self.points) <= 0:
             return None
-        min_x = min(p[0] for p in self.points)
-        min_y = min(p[1] for p in self.points)
-        max_x = max(p[0] for p in self.points)
-        max_y = max(p[1] for p in self.points)
+        min_x = min(p.p[0] for p in self.points)
+        min_y = min(p.p[1] for p in self.points)
+        max_x = max(p.p[0] for p in self.points)
+        max_y = max(p.p[1] for p in self.points)
         return (min_x, min_y), (max_x, max_y)
 
-    def with_points(self, points: List[Tuple[float, float]]) -> 'PolylineDelegate':
+    @property
+    def is_set(self) -> bool:
+        return len(self.points) > 0
+
+    def with_instance_id(self, instance_id: InstanceID) -> Self:
+        points = [p.with_instance_id(instance_id) for p in self.points]
+        return replace(self, instance_id=instance_id, points=points)
+
+    def with_points(self, points: Sequence[Point]) -> Self:
+        points = [
+            PolygonPoint(self.instance_id, self.member_index, i, p=p)
+            for i, p in enumerate(points)
+        ]
         return replace(self, points=points)
 
+    def replace_point(self, point_index: int, point: Point) -> Self:
+        points = list(self.points)
+        points[point_index] = points[point_index].with_p(point)
+        return replace(self, points=tuple(points))
 
-@dataclass(frozen=True)
-class SkeletonDelegate:
+
+@dataclass
+class Skeleton:
     lines: List[Tuple[int, int]] = field(default_factory=list)
-    color: Tuple[int, int, int] = (0, 0, 0)
-
-    def with_lines(self, lines: List[Tuple[int, int]]) -> 'SkeletonDelegate':
-        return replace(self, lines=lines)
+    color: Color = (0, 0, 0)
 
 
-@dataclass(frozen=True)
-class InstanceTypeDelegate:
+@dataclass
+class Instance:
+    instance_id: InstanceID
     name: str
-
-
-@dataclass(frozen=True)
-class InstanceDelegate:
-    instance_id: Optional[str]
-    name: str
-    type: InstanceTypeDelegate
-    box: Optional[BoundingBoxDelegate] = None
-    keypoints: List[KeypointDelegate] = field(default_factory=list)
-    skeleton: SkeletonDelegate = SkeletonDelegate()
+    instance_type: IInstanceType
+    members: Tuple[ILabellerObject, ...] = field(default_factory=tuple)
+    skeleton: ISkeleton = field(default_factory=Skeleton)
 
     @property
-    def members(self) -> List[IMemberDelegate]:
-        if self.box is not None:
-            members = [self.box] + self.keypoints
-        else:
-            members = self.keypoints
-        return members
+    def parent(self) -> Optional[ILabellerParentObject]:
+        return None
 
     @property
-    def bounds(self) -> Optional[Tuple[Tuple[float, float], Tuple[float, float]]]:
+    def type(self):
+        return LabellerObjectType.INSTANCE
+
+    @property
+    def bounds(self) -> Optional[Box]:
         if len(self.members) <= 0:
             return None
-        min_x = min(m.bounds[0][0] for m in self.members if m.bounds is not None)
-        min_y = min(m.bounds[0][1] for m in self.members if m.bounds is not None)
-        max_x = max(m.bounds[1][0] for m in self.members if m.bounds is not None)
-        max_y = max(m.bounds[1][1] for m in self.members if m.bounds is not None)
+
+        sub_bounds = [m.bounds for m in self.members if m.bounds is not None]
+        if len(sub_bounds) <= 0:
+            return None
+
+        min_x = min(b[0][0] for b in sub_bounds)
+        min_y = min(b[0][1] for b in sub_bounds)
+        max_x = max(b[1][0] for b in sub_bounds)
+        max_y = max(b[1][1] for b in sub_bounds)
         return (min_x, min_y), (max_x, max_y)
 
-    def with_box(self, box: BoundingBoxDelegate) -> 'InstanceDelegate':
-        return replace(self, box=box)
+    @property
+    def is_set(self) -> bool:
+        return any(m.is_set for m in self.members)
 
-    def with_keypoints(self, keypoints: List[KeypointDelegate]) -> 'InstanceDelegate':
-        return replace(self, keypoints=keypoints)
+    def with_instance_id(self, instance_id: InstanceID) -> Self:
+        members = [m.with_instance_id(instance_id) for m in self.members]
+        return replace(self, instance_id=instance_id, members=tuple(members))
 
-    def with_skeleton(self, skeleton: SkeletonDelegate) -> 'InstanceDelegate':
-        return replace(self, skeleton=skeleton)
+    def with_name(self, name: str) -> Self:
+        return replace(self, name=name)
+
+    def with_members(self, members: Sequence[ILabellerObject]) -> Self:
+        return replace(self, members=tuple(members))
+
+    def replace_member(self, member_index: int, member: ILabellerObject) -> Self:
+        members = list(self.members)
+        members[member_index] = member
+        return replace(self, members=tuple(members))
+
+
+@dataclass
+class NewInstance:
+    instance_type: IInstanceType
+
+    @property
+    def parent(self) -> Optional[ILabellerParentObject]:
+        return None
+
+    @property
+    def instance_id(self) -> InstanceID:
+        return None
+
+    @property
+    def name(self) -> str:
+        return "New Instance"
+
+    @property
+    def members(self) -> List[ILabellerObject]:
+        return []
+
+    @property
+    def skeleton(self) -> ISkeleton:
+        return Skeleton()
+
+    def with_instance_id(self, instance_id: InstanceID) -> Self:
+        members = [m.with_instance_id(instance_id) for m in self.members]
+        return replace(self, instance_id=instance_id, members=tuple(members))

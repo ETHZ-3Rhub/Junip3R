@@ -1,135 +1,218 @@
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, Sequence, cast, Tuple
 
 import numpy as np
-from PySide6.QtCore import QObject, Signal
 
-from junip3r.labeller.data.repository.abc import ILabellerConfigRepository, IImageRepository, ILabelRepository, IContextRepository, \
-    IMetadataRepository, ISettingsRepository, IPointSelectionRepository, TemporalContext
-from junip3r.labeller.data.types.abc import IInstanceType, IInstance
+from junip3r.labeller.data.repository.abc import ILabelRepository, IImageRepository, IConfigRepository, \
+    ISelectionRepository
+from junip3r.labeller.data.types.abc import InstanceID, Selection, Point, Box, IKeypoint, IInstance, IInstanceType, \
+    ILabellerObject, IBoundingBox, IPolygon, IPolyline, LabellerObjectType
+from junip3r.labeller.model.undo_commands import IUndoModel
 
 
-class AppModel(QObject):
-    image_index_changed = Signal(int)
+class AppModel(IUndoModel):
+    def __init__(
+            self,
+            image_repository: IImageRepository,
+            config_repository: IConfigRepository,
+            label_repository: ILabelRepository,
+            selection_repository: ISelectionRepository,
+            parent=None
+    ):
+        super().__init__(parent)
 
-    instance_added = Signal(int, IInstance)
-    instance_deleted = Signal(int, object)
-    instance_updated = Signal(int, IInstance)
+        self._image_repository = image_repository
+        self._config_repository = config_repository
+        self._label_repository = label_repository
+        self._selection_repository = selection_repository
 
-    new_instance_type_changed = Signal(int, IInstanceType)
-    selection_changed = Signal(int, object, int)
-    settings_changed = Signal(int, float, float)
+        self._num_images = self._image_repository.get_num_images()
 
-    def __init__(self):
-        super().__init__()
+        self._image: Optional[Tuple[int, np.ndarray]] = None
+        self._instance_types: Optional[Tuple[int, Sequence[IInstanceType]]] = None
+        self._expected_instances: Optional[Tuple[int, Sequence[IInstanceType]]] = None
+        self._instances: Optional[Tuple[int, Sequence[IInstance]]] = None
+        self._selection: Optional[Tuple[int, Optional[Selection]]] = None
+        self._new_instance_type: Optional[Tuple[int, Optional[IInstanceType]]] = None
 
-        self._config_repository: ILabellerConfigRepository = None
-        self._image_repository: IImageRepository = None
-        self._label_repository: ILabelRepository = None
-        self._context_repository: IContextRepository = None
-        self._metadata_repository: IMetadataRepository = None
-        self._settings_repository: ISettingsRepository = None
-        self._selection_repository: IPointSelectionRepository = None
+    def _get_image(self, image_index: int) -> np.ndarray:
+        if self._image is None or self._image[0] != image_index:
+            self._image = (image_index, self._image_repository.get_image(image_index))
+        _, image = self._image
+        return image
 
-        self._image_index = 0
+    def _get_instance_types(self, image_index: int) -> Sequence[IInstanceType]:
+        if self._instance_types is None or self._instance_types[0] != image_index:
+            self._instance_types = (image_index, self._config_repository.get_instance_types(image_index))
+        _, instance_types = self._instance_types
+        return instance_types
 
-        self._new_instance_type_names: Dict[int, str] = {}
+    def _get_expected_instances(self, image_index: int) -> Sequence[IInstanceType]:
+        if self._expected_instances is None or self._expected_instances[0] != image_index:
+            self._expected_instances = (image_index, self._config_repository.get_expected_instances(image_index))
+        _, expected_instances = self._expected_instances
+        return expected_instances
+
+    def _get_instances(self, image_index: int) -> Sequence[IInstance]:
+        if self._instances is None or self._instances[0] != image_index:
+            self._instances = (image_index, self._label_repository.get_instances(image_index))
+        _, instances = self._instances
+        return instances
+
+    def _get_selection(self, image_index: int) -> Selection:
+        if self._selection is None or self._selection[0] != image_index:
+            self._selection = (image_index, self._selection_repository.get_selection(image_index))
+        _, selection = self._selection
+        return selection
+
+    def _get_new_instance_type(self, image_index: int) -> IInstanceType | None:
+        if self._new_instance_type is None or self._new_instance_type[0] != image_index:
+            self._new_instance_type = (image_index, self._selection_repository.get_new_instance_type(image_index))
+        _, new_instance_type = self._new_instance_type
+        return new_instance_type
 
     def get_num_images(self) -> int:
-        return self._image_repository.get_num_images()
+        return self._num_images
 
-    def get_image_index(self) -> int:
-        return self._image_index
+    def get_image(self, image_index: int) -> np.ndarray:
+        return self._get_image(image_index)
 
     def get_image_name(self, image_index: int) -> str:
         return self._image_repository.get_image_name(image_index)
 
-    def get_image(self, image_index: int) -> np.ndarray:
-        return self._image_repository.get_image(image_index)
+    def get_instance_types(self, image_index: int) -> Sequence[IInstanceType]:
+        return self._get_instance_types(image_index)
 
-    def get_context(self, image_index: int) -> Optional[TemporalContext]:
-        return self._context_repository.get_context(image_index)
+    def get_expected_instances(self, image_index: int) -> Sequence[IInstanceType]:
+        return self._get_expected_instances(image_index)
 
-    def get_instance_types(self, _image_index: int) -> List[IInstanceType]:
-        return self._config_repository.get_instance_types()
+    def get_instances(self, image_index: int) -> Sequence[IInstance]:
+        return self._get_instances(image_index)
 
-    def get_instance_type(self, image_index: int, instance_type_name: str) -> IInstanceType:
-        instance_types = self.get_instance_types(image_index)
-        instance_type = next((t for t in instance_types if t.name == instance_type_name), None)
-        assert instance_type is not None, f"Instance type {instance_type_name} not found"
-        return instance_type
+    def get_instance(self, image_index: int, instance_id: InstanceID) -> Optional[IInstance]:
+        instances = self._get_instances(image_index)
+        return next((instance for instance in instances if instance.instance_id == instance_id), None)
 
-    def get_expected_instance_types(self, image_index: int) -> List[IInstanceType]:
-        return self._config_repository.get_expected_instances(image_index)
+    def set_instances(self, image_index: int, instances: Sequence[IInstance]) -> None:
+        self._instances = (image_index, list(instances))
+        self._label_repository.set_instances(image_index, list(instances))
 
-    def get_new_instance_type(self, image_index: int) -> IInstanceType:
-        if image_index not in self._new_instance_type_names:
-            expected_instances = self._config_repository.get_expected_instances(image_index)
-            if expected_instances:
-                new_instance_type = expected_instances[0]
-            else:
-                new_instance_type = self.get_instance_types(image_index)[0]
-            self._new_instance_type_names[image_index] = new_instance_type.name
+    def insert_instance(self, image_index: int, instance: IInstance, insertion_index: int = None) -> None:
+        instances = list(self._get_instances(image_index))
+        if insertion_index is None:
+            instances.append(instance)
+        else:
+            instances.insert(insertion_index, instance)
+        self.set_instances(image_index, instances)
 
-        new_instance_type_name = self._new_instance_type_names[image_index]
-        return self.get_instance_type(image_index, new_instance_type_name)
+    def remove_instance(self, image_index: int, instance_id: InstanceID) -> None:
+        instances = self._get_instances(image_index)
+        instances = [instance for instance in instances if instance.instance_id != instance_id]
+        self.set_instances(image_index, instances)
 
-    def set_new_instance_type(self, image_index: int, instance_type_name: str):
-        instance_type = self.get_instance_type(image_index, instance_type_name)
-        self._new_instance_type_names[image_index] = instance_type_name
-        self.new_instance_type_changed.emit(image_index, instance_type)
+    def replace_instance(self, image_index: int, instance_id: InstanceID, instance: IInstance) -> None:
+        instances = self._get_instances(image_index)
+        instances = [instance if inst.instance_id == instance_id else inst for inst in instances]
+        self.set_instances(image_index, instances)
 
-    def get_instances(self, image_index: int) -> List[IInstance]:
-        return self._label_repository.get_instances(image_index)
-
-    def get_instance(self, image_index: int, instance_id: str) -> Optional[IInstance]:
-        return next((i for i in self.get_instances(image_index) if i.id == instance_id), None)
-
-    def get_selection(self, image_index: int) -> Tuple[Optional[str], int]:
-        return self._selection_repository.get_selection(image_index)
-
-    def set_selection(self, image_index: int, instance_id: Optional[str], point_index: int):
-        self._selection_repository.set_selection(image_index, instance_id, point_index)
-        self.selection_changed.emit(image_index, instance_id, point_index)
-
-    def add_instance(self, image_index: int, instance: IInstance):
-        instances = self.get_instances(image_index)
-        instances.append(instance)
-        self._label_repository.set_instances(image_index, instances)
-        self.instance_added.emit(image_index, instance)
-
-    def delete_instance(self, image_index: int, instance_id: str):
-        instances = self.get_instances(image_index)
-        instance_index = [i.id for i in instances].index(instance_id)
-        del instances[instance_index]
-        self._label_repository.set_instances(image_index, instances)
-        self.instance_deleted.emit(image_index, instance_id)
-
-    def set_instance(self, image_index: int, instance: IInstance):
-        instances = self.get_instances(image_index)
-        instance_index = [i.id for i in instances].index(instance.id)
-        instances[instance_index] = instance
-        self._label_repository.set_instances(image_index, instances)
-        self.instance_updated.emit(image_index, instance)
-
-    def previous_image(self):
-        if self._image_index <= 0:
+    def change_instance_type(self, image_index: int, instance_id: InstanceID, instance_type: IInstanceType) -> None:
+        instance = self.get_instance(image_index, instance_id)
+        if instance is None:
             return
-        self.set_image_index(self._image_index - 1)
+        new_instance = instance_type.new_instance(instance_id=instance.instance_id, name=instance_type.name)
 
-    def next_image(self):
-        if self._image_index >= self.get_num_images() - 1:
+        for member_index, (old_member, new_member) in enumerate(zip(instance.members, new_instance.members)):
+            if old_member.type != new_member.type:
+                break
+            if old_member.type == LabellerObjectType.KEYPOINT:
+                new_member = new_member.with_p(old_member.p)
+            elif old_member.type == LabellerObjectType.BOUNDING_BOX:
+                new_member = new_member.with_box(old_member.box)
+            elif old_member.type == LabellerObjectType.POLYGON:
+                new_member = new_member.with_points(old_member.points)
+            elif old_member.type == LabellerObjectType.POLYLINE:
+                new_member = new_member.with_points(old_member.points)
+            new_instance = new_instance.replace_member(member_index, new_member)
+
+        self.replace_instance(image_index, instance_id, new_instance)
+
+    def get_selection(self, image_index: int) -> Optional[Selection]:
+        return self._get_selection(image_index)
+
+    def set_selection(self, image_index: int, selection: Optional[Selection]) -> None:
+        self._selection = (image_index, selection)
+        self._selection_repository.set_selection(image_index, selection)
+
+    def get_new_instance_type(self, image_index: int) -> IInstanceType | None:
+        return self._get_new_instance_type(image_index)
+
+    def set_new_instance_type(self, image_index: int, instance_type: IInstanceType | None) -> None:
+        self._new_instance_type = (image_index, instance_type)
+        self._selection_repository.set_new_instance_type(image_index, instance_type)
+
+    def get_member(self, image_index: int, selection: Selection) -> ILabellerObject:
+        instance_id, member_index = selection
+        instance = self.get_instance(image_index, instance_id)
+        assert instance is not None
+        return instance.members[member_index]
+
+    def set_keypoint(self, image_index: int, selection: Selection, point: Point | None,
+                     visibility: float = 2.0) -> None:
+        instance_id, member_index = selection
+        instance = self.get_instance(image_index, instance_id)
+        if instance is None:
             return
-        self.set_image_index(self._image_index + 1)
+        member = cast(IKeypoint, instance.members[member_index])
+        member = member.with_p(point)
+        member = member.with_visibility(visibility)
+        instance = instance.replace_member(member_index, member)
+        self.replace_instance(image_index, instance_id, instance)
 
-    def get_settings(self, image_index: int) -> Tuple[float, float]:
-        return self._settings_repository.get_settings(image_index)
-
-    def set_settings(self, image_index: int, brightness: float, contrast: float):
-        self._settings_repository.set_settings(image_index, brightness, contrast)
-        self.settings_changed.emit(image_index, brightness, contrast)
-
-    def set_image_index(self, image_index: int):
-        if image_index < 0 or image_index >= self.get_num_images():
+    def set_bounding_box(self, image_index: int, selection: Selection, box: Box | None) -> None:
+        instance_id, member_index = selection
+        instance = self.get_instance(image_index, instance_id)
+        if instance is None:
             return
-        self._image_index = image_index
-        self.image_index_changed.emit(self._image_index)
+        member = cast(IBoundingBox, instance.members[member_index])
+        member = member.with_box(box)
+        instance = instance.replace_member(member_index, member)
+        self.replace_instance(image_index, instance_id, instance)
+
+    def set_polygon(self, image_index: int, selection: Selection, points: Sequence[Point]) -> None:
+        instance_id, member_index = selection
+        instance = self.get_instance(image_index, instance_id)
+        if instance is None:
+            return
+        member = cast(IPolygon, instance.members[member_index])
+        member = member.with_points(points)
+        instance = instance.replace_member(member_index, member)
+        self.replace_instance(image_index, instance_id, instance)
+
+    def set_polyline(self, image_index: int, selection: Selection, points: Sequence[Point]) -> None:
+        instance_id, member_index = selection
+        instance = self.get_instance(image_index, instance_id)
+        if instance is None:
+            return
+        member = cast(IPolyline, instance.members[member_index])
+        member = member.with_points(points)
+        instance = instance.replace_member(member_index, member)
+        self.replace_instance(image_index, instance_id, instance)
+
+    def set_polygon_point(self, image_index: int, selection: Selection, point_index: int, point: Point) -> None:
+        instance_id, member_index = selection
+        instance = self.get_instance(image_index, instance_id)
+        if instance is None:
+            return
+        member = cast(IPolygon, instance.members[member_index])
+        member = member.replace_point(point_index, point)
+        instance = instance.replace_member(member_index, member)
+        self.replace_instance(image_index, instance_id, instance)
+
+    def set_polyline_point(self, image_index: int, selection: Selection, point_index: int, point: Point) -> None:
+        instance_id, member_index = selection
+        instance = self.get_instance(image_index, instance_id)
+        if instance is None:
+            return
+        member = cast(IPolyline, instance.members[member_index])
+        member = member.replace_point(point_index, point)
+        instance = instance.replace_member(member_index, member)
+        self.replace_instance(image_index, instance_id, instance)

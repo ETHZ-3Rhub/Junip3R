@@ -3,7 +3,7 @@ from typing import Optional
 from PySide6.QtCore import Qt, QSize, Slot
 from PySide6.QtWidgets import QFrame, QSizePolicy, QVBoxLayout, QStackedWidget, QWidget, QHBoxLayout, QLabel, QSlider
 
-from junip3r.labeller.model.context_model import ContextState, ContextModel
+from junip3r.labeller.model.context_model import ContextModel, ContextState
 
 
 class ContextOverlay(QFrame):

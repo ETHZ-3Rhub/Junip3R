@@ -16,7 +16,9 @@ class ImageRepository(IImageRepository):
 
     def get_image(self, image_index: int) -> np.ndarray:
         image_file = self._image_files[image_index]
-        return cv2.imread(str(image_file))
+        image = cv2.imread(str(image_file))
+        assert image is not None, f"Failed to read image from {image_file}"
+        return image
 
     def get_image_name(self, image_index: int) -> str:
         return self._image_files[image_index].stem

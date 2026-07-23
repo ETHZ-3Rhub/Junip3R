@@ -1,13 +1,12 @@
-import time
 from dataclasses import dataclass, replace
-from typing import Optional, Tuple, List
+from typing import Optional
 
 import numpy as np
 from PySide6.QtCore import QObject, Signal, QThread
 
-from junip3r.labeller.data.repository.abc import TemporalContext, IContextRepository
-from junip3r.labeller.data.types.abc import IInstance, IInstanceType
-from junip3r.labeller.model.editor_model import EditorModel
+from junip3r.labeller.data.repository.abc import IContextRepository
+from junip3r.labeller.data.types.abc import TemporalContext
+from junip3r.labeller.model.image_state import ImageNavigationState
 
 
 @dataclass(frozen=True)
@@ -51,26 +50,22 @@ class ContextLoadWorker(QObject):
 
 
 class ContextModel(QObject):
-    changed = Signal(ContextState)
+    changed = Signal(object)
 
     _context_load_requested = Signal(int)
 
-    def __init__(self, model: EditorModel):
+    def __init__(self, context_repository: IContextRepository):
         super().__init__()
-
-        self._model = model
 
         self._state = ContextState()
         self._image_index = 0
 
-        self._context_load_worker = ContextLoadWorker(model)
+        self._context_load_worker = ContextLoadWorker(context_repository)
         self._context_load_worker_thread = QThread()
         self._context_load_worker.moveToThread(self._context_load_worker_thread)
 
         self._context_load_worker.context_loaded.connect(self._context_loaded)
         self._context_load_requested.connect(self._context_load_worker.load_context)
-
-        self._model.image_index_changed.connect(self._image_index_changed)
 
         self._context_load_worker_thread.start()
         self._context_load_requested.emit(self._image_index)
@@ -94,10 +89,10 @@ class ContextModel(QObject):
     def move_context(self, delta: int):
         self.set_context_pos(self._state.pos + delta)
 
-    def _image_index_changed(self, image_index: int):
-        self._image_index = image_index
+    def set_image_navigation_state(self, state: ImageNavigationState):
+        self._image_index = state.image_index
         self._state = replace(self._state, loaded=False, pos=0, context=None)
-        self._context_load_requested.emit(image_index)
+        self._context_load_requested.emit(self._image_index)
         self.changed.emit(self._state)
 
     def _context_loaded(self, image_index: int, context: Optional[TemporalContext]):

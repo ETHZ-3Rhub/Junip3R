@@ -1,16 +1,21 @@
-from dataclasses import dataclass
-from typing import Optional, List, Tuple, cast
+from dataclasses import dataclass, field, replace
+from typing import Optional, List, Tuple, cast, Iterator, Mapping, Sequence
 
 import numpy as np
-from PySide6 import QtGui
+from PySide6 import QtGui, QtCore
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QLabel
 
+from junip3r.labeller.data.types.abc import IInstance, IKeypoint, ILabellerObject, LabellerObjectType, IBoundingBox, \
+    IPolygon, IPolyline, IPolygonPoint, Point, IBoundingBoxCorner, Box
 from junip3r.labeller.model.camera_model import CameraState
-from junip3r.labeller.model.delegate_model import KeypointDelegate
-from junip3r.labeller.data.types.delegates import BoundingBoxDelegate, InstanceDelegate, IInstanceDelegate, \
-    IKeypointDelegate, IBoundingBoxDelegate, IPolygonDelegate, IPolylineDelegate, InstanceMemberType
+from junip3r.labeller.model.context_model import ContextState
+from junip3r.labeller.model.image_settings_model import ImageSettingsState
+from junip3r.labeller.model.image_state import OperationState
+from junip3r.labeller.model.pose_image_model import ImageState, ImageStateChangeFlags
+from junip3r.labeller.model.operations import Operation, DragPoint, DrawBox, DrawPolygon, DragPolygonPoint, \
+    DragBoundingBoxCorner, DrawPolyline
 from junip3r.labeller.widgets.renderer import ImageFrame, Renderer
 
 
@@ -43,40 +48,100 @@ def _adjust_brightness_contrast(image: np.ndarray, brightness: float, contrast: 
 
 
 @dataclass(frozen=True)
+class Position:
+    pos_world: Point
+    camera_context: Optional[CameraState] = None
+    image_context: Optional[ImageFrame] = None
+
+    @property
+    def pos_view(self) -> Optional[Point]:
+        if self.camera_context is None:
+            return None
+        return self.camera_context.world_to_view(*self.pos_world)
+
+    @property
+    def pos_image01(self) -> Optional[Point]:
+        if self.image_context is None:
+            return None
+        pos_imagepx = self.image_context.world_to_imagepx(*self.pos_world)
+        return self.image_context.imagepx_to_image01(*pos_imagepx)
+
+
+@dataclass(frozen=True)
 class PointerEvent:
-    pos: Tuple[float, float]
+    position: Position
     button: Qt.MouseButton
     buttons: Qt.MouseButton
     modifiers: Qt.KeyboardModifier
 
+    camera_state: CameraState
+    image_frame: Optional[ImageFrame] = None
+
+    hovered_member: Optional[ILabellerObject] = None
+
 
 @dataclass(frozen=True)
 class WheelEvent:
-    pos: Tuple[float, float]
+    position: Position
     delta_x: int
     delta_y: int
     modifiers: Qt.KeyboardModifier
 
 
 @dataclass(frozen=True)
-class DragPreview:
-    instance_id: str
-    keypoint_index: int
-    pos_image01: Tuple[float, float]
+class RenderOverrides:
+    keypoint_highlights: Mapping[int, bool] = field(default_factory=dict)
+    keypoint_positions: Mapping[int, Point | None] = field(default_factory=dict)
+    bounding_box_corner_highlights: Mapping[int, bool] = field(default_factory=dict)
+    bounding_box_positions: Mapping[int, Box | None] = field(default_factory=dict)
+    bounding_box_corner_positions: Mapping[int, Point | None] = field(default_factory=dict)
+    polygon_point_highlights: Mapping[int, bool] = field(default_factory=dict)
+    polygon_point_positions: Mapping[int, Point] = field(default_factory=dict)
+
+    def is_keypoint_highlighted(self, member: IKeypoint) -> bool:
+        key = id(member)
+        return key in self.keypoint_highlights and self.keypoint_highlights[key]
+
+    def effective_keypoint_position(self, member: IKeypoint) -> Optional[Point]:
+        key = id(member)
+        if key in self.keypoint_positions:
+            return self.keypoint_positions[key]
+        return member.p
+
+    def is_bounding_box_corner_highlighted(self, member: IBoundingBoxCorner) -> bool:
+        key = id(member)
+        return key in self.bounding_box_corner_highlights and self.bounding_box_corner_highlights[key]
+
+    def effective_bounding_box_corner_position(self, member: IBoundingBoxCorner) -> Optional[Point]:
+        key = id(member)
+        if key in self.bounding_box_corner_positions:
+            return self.bounding_box_corner_positions[key]
+        return member.p
+
+    def effective_bounding_box_position(self, member: IBoundingBox) -> Optional[Box]:
+        key = id(member)
+        if key in self.bounding_box_positions:
+            return self.bounding_box_positions[key]
+        return member.box
+
+    def is_polygon_point_highlighted(self, member: IPolygonPoint) -> bool:
+        key = id(member)
+        return key in self.polygon_point_highlights and self.polygon_point_highlights[key]
+
+    def effective_polygon_point_position(self, member: IPolygonPoint) -> Point:
+        key = id(member)
+        if key in self.polygon_point_positions:
+            return self.polygon_point_positions[key]
+        return member.p
 
 
-@dataclass(frozen=True)
-class BoxPreview:
-    instance_id: Optional[str]
-    p1_image01: Tuple[float, float]
-    p2_image01: Tuple[float, float]
-    color: Tuple[int, int, int] = (0, 0, 255)
-
-
-@dataclass(frozen=True)
-class PolygonPreview:
-    points_image01: List[Tuple[float, float]]
-    color: Tuple[int, int, int] = (0, 0, 255)
+@dataclass
+class RenderingContext:
+    renderer: Renderer
+    camera_state: CameraState
+    image_frame: ImageFrame
+    overrides: RenderOverrides
+    painter: QtGui.QPainter
 
 
 class PoseImage(QLabel):
@@ -98,86 +163,100 @@ class PoseImage(QLabel):
 
         self._camera_state = CameraState((self.width(), self.height()))
 
-        self._image: Optional[np.ndarray] = None
-        self._context_image: Optional[np.ndarray] = None
-
-        self._instances: List[InstanceDelegate] = []
-
         self._brightness = 0.0
         self._contrast = 0.0
 
-        self._inspect_mode: bool = False
-        self._drag_preview: Optional[DragPreview] = None
-        self._box_preview: Optional[BoxPreview] = None
-        self._polygon_preview: Optional[PolygonPreview] = None
-        self._hovered_keypoint: Optional[KeypointDelegate] = None
-        self._crosshair_pos_view: Optional[Tuple[float, float]] = None
+        self._mouse_pos_view: Point = (0, 0)
 
-    def set_image(self, image: Optional[np.ndarray]):
-        self._image = image
-        self.update()
+        self._state = ImageState()
+        self._context_state = ContextState()
+        self._image_settings_state = ImageSettingsState()
+        self._operation_state = OperationState()
 
-    def set_context_image(self, image: Optional[np.ndarray]):
-        self._context_image = image
-        self.update()
+        self._hovered_member: Optional[ILabellerObject] = None
+
+        self._hovered_members: List[ILabellerObject] = []
+        self._new_hovered_members: List[ILabellerObject] = []
+
+        self._update_timer = QtCore.QTimer()
+        self._update_timer.setInterval(1000 // 60)
+        self._update_timer.timeout.connect(self._update_if_needed)
+        self._update_timer.start()
+
+        self._update_pending = False
+
+    def set_image_state(self, state: ImageState, flags: ImageStateChangeFlags):
+        self._state = state
+        hovered_members = self.find_members(self._mouse_pos_view)
+        self._new_hovered_members = [member for member in hovered_members if member not in self._hovered_members]
+        self._hovered_members = hovered_members
+        self._hovered_member = self.find_member(self._mouse_pos_view)
+        self._update_pending = True
+
+    def set_context_state(self, state: ContextState):
+        self._context_state = state
+        self._update_pending = True
+
+    def set_image_settings_state(self, state: ImageSettingsState):
+        self._image_settings_state = state
+        self._update_pending = True
+        
+    def set_operation_state(self, operation_state: OperationState):
+        self._operation_state = operation_state
+        self._update_pending = True
 
     def set_camera_state(self, camera_state: CameraState):
         self._camera_state = camera_state
         self.update()
 
-    def set_instances(self, instances: List[InstanceDelegate]):
-        self._instances = instances
-        self.update()
-
-    def set_inspect_mode(self, inspect_mode: bool):
-        self._inspect_mode = inspect_mode
-        self.update()
-
-    def set_settings(self, brightness: float, contrast: float):
-        self._brightness = brightness
-        self._contrast = contrast
-        self.update()
-
-    def set_drag_preview(self, drag_preview: Optional[DragPreview]):
-        self._drag_preview = drag_preview
-        self.update()
-
-    def set_box_preview(self, box_preview: Optional[BoxPreview]):
-        self._box_preview = box_preview
-        self.update()
-
-    def set_polygon_preview(self, polygon_preview: Optional[PolygonPreview]):
-        self._polygon_preview = polygon_preview
-        self.update()
-
-    def set_hovered_keypoint(self, keypoint: Optional[KeypointDelegate]):
-        self._hovered_keypoint = keypoint
-        self.update()
-
-    def set_crosshair_position(self, pos_view: Optional[Tuple[float, float]]):
-        self._crosshair_pos_view = pos_view
-        self.update()
-
     # --- Event handlers ---
+
+    @property
+    def _image_frame(self) -> Optional[ImageFrame]:
+        if self._state.image is None:
+            return None
+        return ImageFrame(self._state.image.shape[1], self._state.image.shape[0])
 
     def mousePressEvent(self, event: QMouseEvent):
         pos = (event.position().x(), event.position().y())
-        pointer_event = PointerEvent(pos, event.button(), event.buttons(), event.modifiers())
+        pos_world = self._camera_state.view_to_world(*pos)
+        position = Position(pos_world, self._camera_state, self._image_frame)
+
+        pointer_event = PointerEvent(position, event.button(), event.buttons(), event.modifiers(), self._camera_state, self._image_frame, self._hovered_member)
         self.mouse_pressed.emit(pointer_event)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         pos = (event.position().x(), event.position().y())
-        pointer_event = PointerEvent(pos, event.button(), event.buttons(), event.modifiers())
+        pos_world = self._camera_state.view_to_world(*pos)
+        position = Position(pos_world, self._camera_state, self._image_frame)
+
+        pointer_event = PointerEvent(position, event.button(), event.buttons(), event.modifiers(), self._camera_state, self._image_frame, self._hovered_member)
         self.mouse_released.emit(pointer_event)
 
     def mouseMoveEvent(self, event: QMouseEvent):
+        self._update_pending = True
+
         pos = (event.position().x(), event.position().y())
-        pointer_event = PointerEvent(pos, event.button(), event.buttons(), event.modifiers())
+        self._mouse_pos_view = pos
+
+        pos_world = self._camera_state.view_to_world(*pos)
+        position = Position(pos_world, self._camera_state, self._image_frame)
+
+        self._hovered_members = self.find_members(pos)
+        hovered_member = self.find_member(pos)
+        if hovered_member != self._hovered_member:
+            self._hovered_member = hovered_member
+            self._new_hovered_members = []
+
+        pointer_event = PointerEvent(position, event.button(), event.buttons(), event.modifiers(), self._camera_state, self._image_frame, self._hovered_member)
         self.mouse_moved.emit(pointer_event)
 
     def wheelEvent(self, event):
         pos = (event.position().x(), event.position().y())
-        wheel_event = WheelEvent(pos, event.angleDelta().x(), event.angleDelta().y(), event.modifiers())
+        pos_world = self._camera_state.view_to_world(*pos)
+        position = Position(pos_world, self._camera_state, self._image_frame)
+
+        wheel_event = WheelEvent(position, event.angleDelta().x(), event.angleDelta().y(), event.modifiers())
         self.wheel_moved.emit(wheel_event)
 
     def resizeEvent(self, event):
@@ -186,186 +265,264 @@ class PoseImage(QLabel):
 
     # --- Rendering ---
 
-    def _draw_instances(self, renderer: Renderer, instances: List[IInstanceDelegate]):
+    def _hover_overrides(self, mouse_pos_image01: Point):
+        if self._operation_state.operation.allow_drag:
+            return RenderOverrides(
+                keypoint_highlights={
+                    id(member): True
+                    for member in [self._hovered_member]
+                    if member is not None and member.type == LabellerObjectType.KEYPOINT
+                },
+                polygon_point_highlights={
+                    id(member): True
+                    for member in [self._hovered_member]
+                    if member is not None and member.type == LabellerObjectType.POLYGON_POINT
+                },
+                bounding_box_corner_highlights={
+                    id(member): True
+                    for member in [self._hovered_member]
+                    if member is not None and member.type == LabellerObjectType.BOUNDING_BOX_CORNER
+                }
+            )
+        return RenderOverrides()
+
+    def _operation_overrides(self, overrides: RenderOverrides, operation: Operation, mouse_pos_image01: Point) -> RenderOverrides:
+        match operation:
+            case DragPoint(member):
+                keypoint_highlights = {**overrides.keypoint_highlights, id(member): True}
+                keypoint_positions = {**overrides.keypoint_positions, id(member): mouse_pos_image01}
+
+                return replace(overrides, keypoint_highlights=keypoint_highlights, keypoint_positions=keypoint_positions)
+            case DragBoundingBoxCorner(bounding_box, member, opposing_corner):
+                bounding_box_corner_highlights = {**overrides.bounding_box_corner_highlights, id(member): True}
+                bounding_box_corner_positions = {**overrides.bounding_box_corner_positions, id(member): mouse_pos_image01}
+                bounding_box_positions = {**overrides.bounding_box_positions, id(bounding_box): (opposing_corner.p, mouse_pos_image01)}
+
+                return replace(overrides, bounding_box_corner_highlights=bounding_box_corner_highlights, bounding_box_corner_positions=bounding_box_corner_positions, bounding_box_positions=bounding_box_positions)
+            case DragPolygonPoint(member):
+                polygon_point_highlights = {**overrides.polygon_point_highlights, id(member): True}
+                polygon_point_positions = {**overrides.polygon_point_positions, id(member): mouse_pos_image01}
+
+                return replace(overrides, polygon_point_highlights=polygon_point_highlights, polygon_point_positions=polygon_point_positions)
+            case _:
+                return overrides
+
+    def _draw_skeleton(self, rc: RenderingContext, instance: IInstance, opacity: float = 1.0):
+        color = QtGui.QColor(*instance.skeleton.color)
+
+        for i1, i2 in instance.skeleton.lines:
+            member_1 = instance.members[i1]
+            member_2 = instance.members[i2]
+
+            if not isinstance(member_1, IKeypoint) or not isinstance(member_2, IKeypoint):
+                continue
+
+            p1_image01 = rc.overrides.effective_keypoint_position(member_1)
+            p2_image01 = rc.overrides.effective_keypoint_position(member_2)
+
+            if p1_image01 is None or p2_image01 is None:
+                continue
+
+            rc.renderer.draw_skeleton_line(p1_image01, p2_image01, color, opacity=opacity)
+
+    def _draw_member(self, rc: RenderingContext, member: ILabellerObject, opacity: float = 1.0):
+         if member.type == LabellerObjectType.KEYPOINT:
+             member = cast(IKeypoint, member)
+             p = rc.overrides.effective_keypoint_position(member)
+             highlighted = rc.overrides.is_keypoint_highlighted(member)
+             if p is not None and member.visibility > 0.5:
+                 visible = member.visibility > 1.5
+                 color = QtGui.QColor(*member.color)
+                 rc.renderer.draw_keypoint(p, color, visible, highlighted, opacity=opacity)
+         elif member.type == LabellerObjectType.BOUNDING_BOX:
+             member = cast(IBoundingBox, member)
+             box = rc.overrides.effective_bounding_box_position(member)
+             if box is not None:
+                 color = QtGui.QColor(*member.color)
+                 p1, p2 = box
+                 rc.renderer.draw_bounding_box(p1, p2, color, opacity=opacity)
+                 corners = member.corners
+                 if corners is not None:
+                     for corner in corners:
+                         highlighted = rc.overrides.is_bounding_box_corner_highlighted(corner)
+                         if highlighted:
+                            p = rc.overrides.effective_bounding_box_corner_position(corner)
+                            rc.renderer.draw_bounding_box_corner(p, color, opacity=opacity)
+         elif member.type == LabellerObjectType.POLYGON:
+             member = cast(IPolygon, member)
+             points = [rc.overrides.effective_polygon_point_position(p) for p in member.points]
+             highlighted = [rc.overrides.is_polygon_point_highlighted(p) for p in member.points]
+             if len(points) > 0:
+                 color = QtGui.QColor(*member.color)
+                 rc.renderer.draw_polygon(points, color, opacity=opacity, fill_opacity=opacity/5)
+                 for point, highlighted in zip(points, highlighted):
+                     rc.renderer.draw_polygon_point(point, color, highlighted, opacity=opacity)
+         elif member.type == LabellerObjectType.POLYLINE:
+             member = cast(IPolyline, member)
+             points = [rc.overrides.effective_polygon_point_position(p) for p in member.points]
+             highlighted = [rc.overrides.is_polygon_point_highlighted(p) for p in member.points]
+             if len(points) > 0:
+                 color = QtGui.QColor(*member.color)
+                 rc.renderer.draw_polyline(points, color, opacity=opacity)
+                 for point, highlighted in zip(points, highlighted):
+                     rc.renderer.draw_polygon_point(point, color, highlighted, opacity=opacity)
+
+    def _draw_instances(self, rc: RenderingContext, instances: Sequence[IInstance], opacity: float = 1.0):
         for instance in instances:
-            color = QtGui.QColor(*instance.skeleton.color)
-
-            for i1, i2 in instance.skeleton.lines:
-                member_1 = instance.members[i1]
-                member_2 = instance.members[i2]
-
-                if not isinstance(member_1, KeypointDelegate) or not isinstance(member_2, KeypointDelegate):
-                    continue
-
-                p1_image01 = member_1.p
-                p2_image01 = member_2.p
-
-                if p1_image01 is None or p2_image01 is None:
-                    continue
-
-                renderer.draw_skeleton_line(p1_image01, p2_image01, color, opacity=1)
+            self._draw_skeleton(rc, instance, opacity)
 
         for instance in instances:
             for member in instance.members:
-                if member.type == InstanceMemberType.KEYPOINT:
-                    member = cast(IKeypointDelegate, member)
-                    p = member.p
-                    if p is not None and member.visibility > 0.5:
-                        visible = member.visibility > 1.5
-                        color = QtGui.QColor(*member.color)
-                        renderer.draw_point(p, color, visible, opacity=1)
-                elif member.type == InstanceMemberType.BOX:
-                    member = cast(IBoundingBoxDelegate, member)
-                    box = member.box
-                    if box is not None:
-                        color = QtGui.QColor(*member.color)
-                        p1, p2 = box
-                        renderer.draw_bounding_box(p1, p2, color, opacity=1)
-                elif member.type == InstanceMemberType.POLYGON:
-                    member = cast(IPolygonDelegate, member)
-                    points = member.points
-                    if len(points) > 0:
-                        color = QtGui.QColor(*member.color)
-                        renderer.draw_polygon(points, color, opacity=1, fill_opacity=0.2)
-                elif member.type == InstanceMemberType.POLYLINE:
-                    member = cast(IPolylineDelegate, member)
-                    points = member.points
-                    if len(points) > 0:
-                        color = QtGui.QColor(*member.color)
-                        renderer.draw_polyline(points, color, opacity=1)
+                self._draw_member(rc, member, opacity)
 
-    def _draw_all_labels(self, renderer: Renderer):
-        for instance in self._instances:
-            bounds = instance.bounds
+    def _draw_label(self, rc: RenderingContext, member: ILabellerObject):
+        match member.type:
+            case LabellerObjectType.INSTANCE:
+                bounds = member.bounds
+                if bounds is not None:
+                    rc.renderer.draw_instance_label(bounds[0], bounds[1], member.name)
+            case LabellerObjectType.KEYPOINT:
+                member = cast(IKeypoint, member)
+                if member.p is not None:
+                    rc.renderer.draw_point_label(member.p, member.name)
+            case LabellerObjectType.BOUNDING_BOX | LabellerObjectType.POLYGON | LabellerObjectType.POLYLINE:
+                if member.bounds is not None:
+                    rc.renderer.draw_box_label(member.bounds[0], member.name)
 
-            if bounds is not None:
-                p1_i_image01, p2_i_image01 = bounds
-                renderer.draw_instance_label(p1_i_image01, p2_i_image01, instance.name)
+    def _draw_hovered_label(self, rc: RenderingContext):
+        if not self._operation_state.operation.allow_inspection:
+            return
+        for member in self._hovered_members:
+            if member in self._new_hovered_members:
+                continue
+            if member.type in [LabellerObjectType.KEYPOINT, LabellerObjectType.BOUNDING_BOX, LabellerObjectType.POLYGON, LabellerObjectType.POLYLINE]:
+                self._draw_label(rc, member)
 
+    def _draw_all_labels(self, rc: RenderingContext):
+        for instance in self._state.instances:
+            self._draw_label(rc, instance)
             for member in instance.members:
-                if member.type == InstanceMemberType.KEYPOINT:
-                    bounds = member.bounds
-                    if bounds is not None:
-                        p_image01 = bounds[0]
-                        renderer.draw_point_label(p_image01, member.name)
+                self._draw_label(rc, member)
+
+    def _draw_crosshair(self, rc: RenderingContext, pos_view: Point):
+        rc.renderer.draw_crosshair(pos_view)
+
+    def _draw_operation(self, rc: RenderingContext, operation: Operation):
+        mouse_pos_world = rc.camera_state.view_to_world(*self._mouse_pos_view)
+        mouse_pos_imagepx = rc.image_frame.world_to_imagepx(*mouse_pos_world)
+        mouse_pos_image01 = rc.image_frame.imagepx_to_image01(*mouse_pos_imagepx)
+
+        match operation:
+            case DrawBox(member, p1):
+                if p1 is None:
+                    self._draw_crosshair(rc, self._mouse_pos_view)
                 else:
-                    bounds = member.bounds
-                    if bounds is not None:
-                        p1_i_image01, p2_i_image01 = bounds
-                        renderer.draw_box_label(p1_i_image01, p2_i_image01, member.name)
+                    color = QtGui.QColor(*member.color)
+                    mouse_pos_image01 = (max(0.0, min(1.0, mouse_pos_image01[0])), max(0.0, min(1.0, mouse_pos_image01[1])))
+                    rc.renderer.draw_bounding_box(p1, mouse_pos_image01, color, opacity=1)
+            case DrawPolygon(member, points):
+                color = QtGui.QColor(*member.color)
+                if len(points) > 0:
+                    points = list(points) + [mouse_pos_image01]
+                    rc.renderer.draw_polygon(points, color, opacity=1, fill_opacity=0.2)
 
-    def _draw_hovered_label(self, renderer: Renderer):
-        if self._hovered_keypoint is None:
-            return
+                    start_point = points[0]
+                    start_point_imagepx = rc.image_frame.image01_to_imagepx(*start_point)
+                    start_point_world = rc.image_frame.imagepx_to_world(*start_point_imagepx)
+                    start_point_view = rc.camera_state.world_to_view(*start_point_world)
+                    start_point_highlighted = self._hit_test_polygon_point(start_point_view, self._mouse_pos_view)
+                    rc.renderer.draw_polygon_point(points[0], color, start_point_highlighted, opacity=1)
 
-        point = self._hovered_keypoint
-        p_image = point.p
-        label_str = point.name
+                    for point in points[1:]:
+                        rc.renderer.draw_polygon_point(point, color, opacity=1)
+            case DrawPolyline(member, points):
+                color = QtGui.QColor(*member.color)
+                if len(points) > 0:
+                    points = list(points) + [mouse_pos_image01]
+                    rc.renderer.draw_polyline(points, color, opacity=1)
 
-        if p_image is not None:
-            renderer.draw_point_label(p_image, label_str)
-
-    def _draw_bounding_box_in_progress(self, renderer: Renderer):
-        if self._box_preview is None:
-            return
-
-        color = QtGui.QColor(*self._box_preview.color)
-
-        p1_image01 = self._box_preview.p1_image01
-        p2_image01 = self._box_preview.p2_image01
-
-        renderer.draw_bounding_box(p1_image01, p2_image01, color, opacity=1)
-
-    def _draw_polygon_in_progress(self, renderer: Renderer):
-        if self._polygon_preview is None:
-            return
-
-        color = QtGui.QColor(*self._polygon_preview.color)
-        points_image01 = self._polygon_preview.points_image01
-
-        renderer.draw_polyline(points_image01, color, opacity=1)
-
-    def _draw_crosshair(self, renderer: Renderer):
-        if self._crosshair_pos_view is None:
-            return
-
-        renderer.draw_crosshair(self._crosshair_pos_view)
+                    for point in points:
+                        rc.renderer.draw_polygon_point(point, color, opacity=1)
 
     def paintEvent(self, event):
         super().paintEvent(event)
 
-        if self._context_image is not None:
-            image = self._context_image
+        if self._context_state.enabled and self._context_state.context:
+            image = self._context_state.image
         else:
-            image = self._image
+            image = self._state.image
 
         if image is None:
             return
 
+        image = _adjust_brightness_contrast(image, self._image_settings_state.brightness, self._image_settings_state.contrast)
+
         image_frame = ImageFrame(image.shape[1], image.shape[0])
 
-        instances = self._instances
+        mouse_pos_world = self._camera_state.view_to_world(*self._mouse_pos_view)
+        mouse_pos_imagepx = image_frame.world_to_imagepx(*mouse_pos_world)
+        mouse_pos_image01 = image_frame.imagepx_to_image01(*mouse_pos_imagepx)
 
-        if self._drag_preview is not None:
-            non_drag_instances = [i for i in instances if i.instance_id != self._drag_preview.instance_id]
-            drag_instance = next((i for i in instances if i.instance_id == self._drag_preview.instance_id), None)
-            if drag_instance:
-                drag_keypoints = [
-                    kp if i != self._drag_preview.keypoint_index else kp.with_p(self._drag_preview.pos_image01)
-                    for i, kp in enumerate(drag_instance.keypoints)
-                ]
-                drag_instance = drag_instance.with_keypoints(drag_keypoints)
-                instances = non_drag_instances + [drag_instance]
+        overrides = self._hover_overrides(mouse_pos_image01)
+        overrides = self._operation_overrides(overrides, self._operation_state.operation, mouse_pos_image01)
 
         painter = QtGui.QPainter(self)
         renderer = Renderer(self._camera_state, image_frame, painter)
+
+        rc = RenderingContext(renderer, self._camera_state, image_frame, overrides, painter)
 
         image = _adjust_brightness_contrast(image, self._brightness, self._contrast)
 
         renderer.draw_image(image)
 
-        self._draw_instances(renderer, instances)
+        if self._context_state.enabled:
+            opacity = 0.5
+        else:
+            opacity = 1.0
 
-        if self._inspect_mode:
-            self._draw_all_labels(renderer)
-        elif not self._drag_preview:
-            self._draw_hovered_label(renderer)
-
-        self._draw_bounding_box_in_progress(renderer)
-        self._draw_polygon_in_progress(renderer)
-        self._draw_crosshair(renderer)
+        self._draw_instances(rc, self._state.instances, opacity)
+        self._draw_operation(rc, self._operation_state.operation)
+        if self._operation_state.inspect_all:
+            self._draw_all_labels(rc)
+        else:
+            self._draw_hovered_label(rc)
 
         painter.end()
 
+    def _update_if_needed(self):
+        if self._update_pending:
+            self.update()
+            self._update_pending = False
+
     # --- Helpers ---
 
-    def hit_test_keypoint(self, keypoint: KeypointDelegate, pos_view: Tuple[float, float]) -> bool:
+    def hit_test_keypoint(self, keypoint: IKeypoint, pos_view: Tuple[float, float]) -> bool:
         p_keypoint_image01 = keypoint.p
 
         if p_keypoint_image01 is None:
             return False
 
-        if self._image is None:
+        image_frame = self._image_frame
+        if image_frame is None:
             return False
 
-        image_frame = ImageFrame(self._image.shape[1], self._image.shape[0])
+        effective_radius = Renderer.KEYPOINT_RADIUS_HIGHLIGHTED
+
         p_keypoint_imagepx = image_frame.image01_to_imagepx(*p_keypoint_image01)
         p_keypoint_world = image_frame.imagepx_to_world(*p_keypoint_imagepx)
         p_keypoint_view = self._camera_state.world_to_view(*p_keypoint_world)
-
         dist = (pos_view[0] - p_keypoint_view[0]) ** 2 + (pos_view[1] - p_keypoint_view[1]) ** 2
-        return dist < self.POINT_RADIUS ** 2
+        return dist < effective_radius ** 2
 
-    def hit_test_box(self, box: BoundingBoxDelegate, pos_view: Tuple[float, float]) -> bool:
+    def hit_test_box(self, box: IBoundingBox, pos_view: Tuple[float, float]) -> bool:
         if box.box is None:
             return False
 
         p1_image01, p2_image01 = box.box
 
-        if self._image is None:
+        image_frame = self._image_frame
+        if image_frame is None:
             return False
-
-        image_frame = ImageFrame(self._image.shape[1], self._image.shape[0])
 
         p1_imagepx = image_frame.image01_to_imagepx(*p1_image01)
         p2_imagepx = image_frame.image01_to_imagepx(*p2_image01)
@@ -378,18 +535,171 @@ class PoseImage(QLabel):
 
         return (p1_view[0] <= pos_view[0] <= p2_view[0]) and (p1_view[1] <= pos_view[1] <= p2_view[1])
 
-    def find_keypoint(self, pos_view: Tuple[float, float]) -> Optional[KeypointDelegate]:
-        for instance in reversed(self._instances):
-            for keypoint in reversed(instance.keypoints):
-                if self.hit_test_keypoint(keypoint, pos_view):
-                    return keypoint
+    def hit_test_bounding_box_corner(self, member: IBoundingBoxCorner, pos_view: Tuple[float, float]) -> bool:
+        p_keypoint_image01 = member.p
+
+        if p_keypoint_image01 is None:
+            return False
+
+        image_frame = self._image_frame
+        if image_frame is None:
+            return False
+
+        effective_radius = Renderer.BOUNDING_BOX_CORNER_RADIUS_HIGHLIGHTED
+
+        p_keypoint_imagepx = image_frame.image01_to_imagepx(*p_keypoint_image01)
+        p_keypoint_world = image_frame.imagepx_to_world(*p_keypoint_imagepx)
+        p_keypoint_view = self._camera_state.world_to_view(*p_keypoint_world)
+        dist = (pos_view[0] - p_keypoint_view[0]) ** 2 + (pos_view[1] - p_keypoint_view[1]) ** 2
+        return dist < effective_radius ** 2
+
+    def hit_test_polygon(self, polygon: IPolygon, pos_view: Tuple[float, float]) -> bool:
+        if len(polygon.points) <= 3:
+            return False
+
+        image_frame = self._image_frame
+        if image_frame is None:
+            return False
+
+        points_imagepx = [image_frame.image01_to_imagepx(*p.p) for p in polygon.points]
+        points_world = [image_frame.imagepx_to_world(*p) for p in points_imagepx]
+        points_view = [self._camera_state.world_to_view(*p) for p in points_world]
+
+        inside = False
+
+        px, py = pos_view
+        ax, ay = points_view[-1]
+
+        for bx, by in points_view:
+            crosses_y = (ay > py) != (by > py)
+
+            if crosses_y:
+                intersection_x = ax + (py - ay) * (bx - ax) / (by - ay)
+
+                if px < intersection_x:
+                    inside = not inside
+
+            ax, ay = bx, by
+
+        return inside
+
+    def _squared_distance_to_segment(self, p1_view: Point, p2_view: Point, pos_view: Point) -> float:
+        ax, ay = p1_view
+        bx, by = p2_view
+        px, py = pos_view
+
+        dx = bx - ax
+        dy = by - ay
+
+        segment_length_squared = dx * dx + dy * dy
+
+        # Degenerate segment: start and end are the same point.
+        if segment_length_squared == 0.0:
+            offset_x = px - ax
+            offset_y = py - ay
+            return offset_x * offset_x + offset_y * offset_y
+
+        # Project the point onto the infinite line, then clamp the projection
+        # to the actual segment.
+        t = ((px - ax) * dx + (py - ay) * dy) / segment_length_squared
+        t = max(0.0, min(1.0, t))
+
+        closest_x = ax + t * dx
+        closest_y = ay + t * dy
+
+        offset_x = px - closest_x
+        offset_y = py - closest_y
+
+        return offset_x * offset_x + offset_y * offset_y
+
+    def _hit_test_polyline(self, points_view: Sequence[Point], pos_view: Point, threshold: float = 5.0) -> bool:
+        if not points_view:
+            return False
+
+        threshold_squared = threshold * threshold
+
+        # A one-point polyline behaves like a point.
+        if len(points_view) == 1:
+            px, py = pos_view
+            x, y = points_view[0]
+            return (px - x) ** 2 + (py - y) ** 2 <= threshold_squared
+
+        return any(
+            self._squared_distance_to_segment(start, end, pos_view)
+            <= threshold_squared
+            for start, end in zip(points_view, points_view[1:])
+        )
+
+    def hit_test_polyline(self, polyline: IPolyline, pos_view: Tuple[float, float]) -> bool:
+        if len(polyline.points) <= 1:
+            return False
+
+        image_frame = self._image_frame
+        if image_frame is None:
+            return False
+
+        points_imagepx = [image_frame.image01_to_imagepx(*p.p) for p in polyline.points]
+        points_world = [image_frame.imagepx_to_world(*p) for p in points_imagepx]
+        points_view = [self._camera_state.world_to_view(*p) for p in points_world]
+
+        return self._hit_test_polyline(points_view, pos_view, 5.0)
+
+    def _hit_test_polygon_point(self, point_view: Point, pos_view: Point):
+        effective_radius = Renderer.POLYGON_POINT_RADIUS_HIGHLIGHTED
+        dist = (pos_view[0] - point_view[0]) ** 2 + (pos_view[1] - point_view[1]) ** 2
+        return dist < effective_radius ** 2
+
+    def hit_test_polygon_point(self, point: IPolygonPoint, pos_view: Tuple[float, float]) -> bool:
+        p_keypoint_image01 = point.p
+
+        if p_keypoint_image01 is None:
+            return False
+
+        image_frame = self._image_frame
+        if image_frame is None:
+            return False
+
+        p_keypoint_imagepx = image_frame.image01_to_imagepx(*p_keypoint_image01)
+        p_keypoint_world = image_frame.imagepx_to_world(*p_keypoint_imagepx)
+        p_keypoint_view = self._camera_state.world_to_view(*p_keypoint_world)
+        return self._hit_test_polygon_point(p_keypoint_view, pos_view)
+
+    def test_member(self, member: ILabellerObject, pos_view: Tuple[float, float]) -> bool:
+        if member.type == LabellerObjectType.KEYPOINT:
+            member = cast(IKeypoint, member)
+            return self.hit_test_keypoint(member, pos_view)
+        elif member.type == LabellerObjectType.BOUNDING_BOX:
+            member = cast(IBoundingBox, member)
+            return self.hit_test_box(member, pos_view)
+        elif member.type == LabellerObjectType.BOUNDING_BOX_CORNER:
+            member = cast(IBoundingBoxCorner, member)
+            return self.hit_test_bounding_box_corner(member, pos_view)
+        elif member.type == LabellerObjectType.POLYGON_POINT:
+            member = cast(IPolygonPoint, member)
+            return self.hit_test_polygon_point(member, pos_view)
+        elif member.type == LabellerObjectType.POLYGON:
+            member = cast(IPolygon, member)
+            return self.hit_test_polygon(member, pos_view)
+        elif member.type == LabellerObjectType.POLYLINE:
+            member = cast(IPolyline, member)
+            return self.hit_test_polyline(member, pos_view)
+        return False
+
+    def _iter_members(self, members: Sequence[ILabellerObject], pos_view: Tuple[float, float], types: List[LabellerObjectType] = None, blacklist: bool = False) -> Iterator[ILabellerObject]:
+        for member in reversed(members):
+            if hasattr(member, "members"):
+                for child in self._iter_members(member.members, pos_view, types, blacklist):
+                    yield child
+            if types is None or ((member.type in types) != blacklist):
+                if self.test_member(member, pos_view):
+                    yield member
+
+    def find_member(self, pos_view: Tuple[float, float]) -> Optional[ILabellerObject]:
+        for member in self._iter_members(self._state.instances, pos_view, [LabellerObjectType.BOUNDING_BOX, LabellerObjectType.POLYGON], blacklist=True):
+            return member
+        for member in self._iter_members(self._state.instances, pos_view, [LabellerObjectType.BOUNDING_BOX, LabellerObjectType.POLYGON], blacklist=False):
+            return member
         return None
 
-    def find_box(self, pos_view: Tuple[float, float]) -> Optional[BoundingBoxDelegate]:
-        for instance in reversed(self._instances):
-            box = instance.box
-            if box is None:
-                continue
-            if self.hit_test_box(box, pos_view):
-                return instance.box
-        return None
+    def find_members(self, pos_view: Tuple[float, float], types: List[LabellerObjectType] = None) -> List[ILabellerObject]:
+        return list(self._iter_members(self._state.instances, pos_view, types))

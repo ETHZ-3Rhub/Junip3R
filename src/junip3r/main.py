@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import sys
 from importlib.resources import files
 from pathlib import Path
@@ -91,7 +90,7 @@ class AppController(QObject):
     def _create_window(self, app_id: AppId) -> Any:
         logger.debug("creating window", extra={"event_category": "ui", "event_name": "create_window", "app_name": app_id})
         if app_id == "labeller":
-            return labeller_from_config_file(self.config_file, show_frame_extractor=True)
+            return labeller_from_config_file(self.config_file, integrated=True)
 
         if app_id == "frame_extractor":
             return frame_extractor_from_config_file(self.config_file, show_labeller=True)

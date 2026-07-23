@@ -1,36 +1,17 @@
 import json
 from pathlib import Path
-from typing import List
+from typing import List, cast
 
-from junip3r.labeller.data.repository.abc import ILabelRepository, IImageRepository
-from junip3r.labeller.data.types.abc import IInstance, IInstanceType
-from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox
+from junip3r.labeller.data.repository.abc import ILabelRepository
+from junip3r.labeller.data.types.abc import IInstance, IKeypoint, IBoundingBox, IPolygon, ILabellerObject, IPolyline, \
+    LabellerObjectType, IInstanceType
 
 
-class JuniperLabelRepository(ILabelRepository):
-    def __init__(self, instance_types: List[IInstanceType], label_files: List[Path]):
-        self._instance_types = {t.name: t for t in instance_types}
-        self._label_files = label_files
+class JuniperLabelLoader:
+    def __init__(self, instance_types: List[IInstanceType]):
+        self._instance_types = {it.name: it for it in instance_types}
 
-    @property
-    def num_images(self) -> int:
-        return len(self._label_files)
-
-    @classmethod
-    def from_image_names(cls, instance_types: List[IInstanceType], project_folder: Path, image_names: List[str]):
-        label_files = [project_folder / f"{image_name}.txt" for image_name in image_names]
-        return cls(instance_types, label_files)
-
-    @classmethod
-    def from_image_repository(cls, instance_types: List[IInstanceType], project_folder: Path, image_repository: IImageRepository):
-        image_names = [
-            image_repository.get_image_name(image_index)
-            for image_index in range(image_repository.get_num_images())
-        ]
-        return cls.from_image_names(instance_types, project_folder, image_names)
-
-    def get_instances(self, image_index: int) -> List[IInstance]:
-        label_file = self._label_files[image_index]
+    def load_instances(self, label_file: Path) -> List[IInstance]:
         if not label_file.exists():
             return []
 
@@ -38,21 +19,20 @@ class JuniperLabelRepository(ILabelRepository):
             try:
                 data = json.load(file)
             except json.JSONDecodeError as e:
-                # If file is empty, treat it as non-existent
+                # If file is empty, return empty list
                 file.seek(0)
                 if file.read() == "":
                     return []
-                # Otherwise, raise the exception
                 raise e
 
             version = data["version"]
-            assert version == "1.0.0"
-            instances = [self.instance_from_dict(instance_dict) for instance_dict in data["instances"]]
+            if version != "2.0.0":
+                raise ValueError(f"Unsupported label file version: {version}")
+
+            instances = [self._instance_from_dict(instance_dict) for instance_dict in data["instances"]]
             return instances
 
-    def set_instances(self, image_index: int, instances: List[IInstance]):
-        label_file = self._label_files[image_index]
-
+    def write_instances(self, label_file: Path, instances: List[IInstance]):
         if len(instances) == 0:
             if label_file.exists():
                 label_file.unlink()
@@ -61,50 +41,110 @@ class JuniperLabelRepository(ILabelRepository):
         label_file.parent.mkdir(parents=True, exist_ok=True)
         with open(label_file, "w+", newline='') as file:
             instance_dicts = [self._instance_to_dict(instance) for instance in instances]
-            data = {"version": "1.0.0", "instances": instance_dicts}
+            data = {"version": "2.0.0", "instances": instance_dicts}
             json.dump(data, file)
 
-    def _instance_to_dict(self, instance: IInstance) -> dict:
-        if instance.box.box is None:
-            box = None
-        else:
-            (min_x, min_y), (max_x, max_y) = instance.box.box
-            min_x = min(min_x, max_x)
-            min_y = min(min_y, max_y)
-            max_x = max(min_x, max_x)
-            max_y = max(min_y, max_y)
-
-            box = [min_x, min_y, max_x, max_y]
-
-        points = []
-        for point in instance.keypoints:
-            x, y = point.p if point.p is not None else (0., 0.)
-            v = point.visibility
-            points.append([x, y, v])
-
+    def _keypoint_to_dict(self, member: IKeypoint) -> dict:
         return {
-            "id": instance.id,
-            "type": instance.type.name,
-            "name": instance.name,
-            "box": box,
-            "points": points
+            "type": "keypoint",
+            "name": member.name,
+            "point": member.p,
+            "visibility": member.visibility
         }
 
-    def instance_from_dict(self, instance_dict: dict) -> Instance:
-        instance_id = str(instance_dict["id"])
-        instance_type = self._instance_types[str(instance_dict["type"])]
-        name = str(instance_dict["name"])
+    def _bounding_box_to_dict(self, member: IBoundingBox) -> dict:
+        return {
+            "type": "bounding_box",
+            "name": member.name,
+            "box": member.box
+        }
 
-        if instance_dict["box"] is None:
-            box = None
+    def _polygon_to_dict(self, member: IPolygon) -> dict:
+        return {
+            "type": "polygon",
+            "name": member.name,
+            "points": [p.p for p in member.points]
+        }
+
+    def _polyline_to_dict(self, member: IPolyline) -> dict:
+        return {
+            "type": "polyline",
+            "name": member.name,
+            "points": [p.p for p in member.points]
+        }
+
+    def _member_to_dict(self, member: ILabellerObject) -> dict:
+        if member.type == LabellerObjectType.KEYPOINT:
+            return self._keypoint_to_dict(cast(IKeypoint, member))
+        elif member.type == LabellerObjectType.BOUNDING_BOX:
+            return self._bounding_box_to_dict(cast(IBoundingBox, member))
+        elif member.type == LabellerObjectType.POLYGON:
+            return self._polygon_to_dict(cast(IPolygon, member))
+        elif member.type == LabellerObjectType.POLYLINE:
+            return self._polyline_to_dict(cast(IPolyline, member))
         else:
-            min_x, min_y, max_x, max_y = instance_dict["box"]
-            min_x = min(min_x, max_x)
-            min_y = min(min_y, max_y)
-            max_x = max(min_x, max_x)
-            max_y = max(min_y, max_y)
-            box = BoundingBox(((float(min_x), float(min_y)), (float(max_x), float(max_y))))
+            raise ValueError(f"Unsupported member type: {member.type}")
 
-        points = [Keypoint((float(x), float(y)), float(v)) for x,y,v in instance_dict["points"]]
+    def _instance_to_dict(self, instance: IInstance) -> dict:
+        return {
+            "instance_id": instance.instance_id,
+            "type": instance.instance_type.name,
+            "name": instance.name,
+            "members": [self._member_to_dict(member) for member in instance.members]
+        }
 
-        return Instance(instance_id, name, instance_type, box, points)
+    def _keypoint_from_dict(self, member: IKeypoint, keypoint_dict: dict) -> IKeypoint:
+        p = keypoint_dict["point"]
+        visibility = keypoint_dict["visibility"]
+        return member.with_p(p).with_visibility(visibility)
+
+    def _bounding_box_from_dict(self, member: IBoundingBox, bounding_box_dict: dict) -> IBoundingBox:
+        box = bounding_box_dict["box"]
+        return member.with_box(box)
+
+    def _polygon_from_dict(self, member: IPolygon, polygon_dict: dict) -> IPolygon:
+        points = [(float(x), float(y)) for x, y in polygon_dict["points"]]
+        return member.with_points(points)
+
+    def _polyline_from_dict(self, member: IPolyline, polyline_dict: dict) -> IPolyline:
+        points = [(float(x), float(y)) for x, y in polyline_dict["points"]]
+        return member.with_points(points)
+
+    def _instance_from_dict(self, instance_dict: dict) -> IInstance:
+        instance_type = self._instance_types[instance_dict["type"]]
+        instance_id = instance_dict["instance_id"]
+        name = instance_dict["name"]
+        instance = instance_type.new_instance(instance_id, name)
+
+        if len(instance.members) != len(instance_dict["members"]):
+            raise ValueError(
+                f"Instance {instance_id} has {len(instance.members)} members, but {len(instance_dict['members'])} members in the JSON file")
+
+        for i, member_dict in enumerate(instance_dict["members"]):
+            member = instance.members[i]
+            if member.type == LabellerObjectType.KEYPOINT:
+                member = self._keypoint_from_dict(cast(IKeypoint, member), member_dict)
+            elif member.type == LabellerObjectType.BOUNDING_BOX:
+                member = self._bounding_box_from_dict(cast(IBoundingBox, member), member_dict)
+            elif member.type == LabellerObjectType.POLYGON:
+                member = self._polygon_from_dict(cast(IPolygon, member), member_dict)
+            elif member.type == LabellerObjectType.POLYLINE:
+                member = self._polyline_from_dict(cast(IPolyline, member), member_dict)
+            else:
+                raise ValueError(f"Unsupported member type: {member.type}")
+            instance = instance.replace_member(i, member)
+        return instance
+
+
+class JuniperLabelRepository(ILabelRepository):
+    def __init__(self, instance_types: List[IInstanceType], label_files: List[Path]):
+        self._label_files = label_files
+        self._label_loader = JuniperLabelLoader(instance_types)
+
+    def get_instances(self, image_index: int) -> List[IInstance]:
+        label_file = self._label_files[image_index]
+        return self._label_loader.load_instances(label_file)
+
+    def set_instances(self, image_index: int, instances: List[IInstance]):
+        label_file = self._label_files[image_index]
+        self._label_loader.write_instances(label_file, instances)

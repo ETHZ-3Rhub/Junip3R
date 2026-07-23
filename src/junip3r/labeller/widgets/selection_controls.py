@@ -1,80 +1,28 @@
-from typing import Optional, List, Tuple
+from typing import Optional, Dict, Sequence, cast, Hashable
 
-from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QPointF
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QPolygonF
-from PySide6.QtWidgets import QStyledItemDelegate, QStyleOptionViewItem, QWidget, QVBoxLayout, QSplitter, QLabel, \
-    QListView, QComboBox
+from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QPointF, Signal
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QPolygonF, QPen, QFontMetricsF
+from PySide6.QtWidgets import QStyleOptionViewItem, QWidget, QVBoxLayout, QSplitter, QLabel, \
+    QListView, QComboBox, QStyledItemDelegate, QApplication, QSizePolicy
 
-from junip3r.labeller.model.delegate_model import DelegateModel
-from junip3r.labeller.data.types.delegates import InstanceDelegate, IMemberDelegate, InstanceMemberType, \
-    InstanceTypeDelegate
+from junip3r.labeller.data.types.abc import IInstance, ILabellerObject, LabellerObjectType, IInstanceType, \
+    Color, IBoundingBox, IKeypoint, IPolygon, IPolyline
+from junip3r.labeller.model.pose_image_model import ImageState, ImageStateChangeFlags
 
 
 class InstanceListModel(QAbstractListModel):
+    instance_renamed = Signal(object, object)  # instance_id, new_name
+
     InstanceIDRole = Qt.ItemDataRole.UserRole + 1
 
     def __init__(self):
         super().__init__()
-        self._model: Optional[DelegateModel] = None
+        self._instances: Sequence[IInstance] = ()
 
-        self._instances: List[InstanceDelegate] = []
-        self._new_instance: Optional[InstanceDelegate] = None
-
-    def set_model(self, model: Optional[DelegateModel]):
-        if self._model is not None:
-            self._model.reset.disconnect(self.refresh)
-            self._model.instance_added.disconnect(self._instance_added)
-            self._model.instance_deleted.disconnect(self._instance_deleted)
-            self._model.instance_updated.disconnect(self._instance_updated)
-
-        self._model = model
-
-        if self._model is not None:
-            self._model.reset.connect(self.refresh)
-            self._model.instance_added.connect(self._instance_added)
-            self._model.instance_deleted.connect(self._instance_deleted)
-            self._model.instance_updated.connect(self._instance_updated)
-
-        self.refresh()
-
-    def refresh(self):
+    def set_instances(self, instances: Sequence[IInstance]):
         self.beginResetModel()
-        if self._model is not None:
-            self._instances = self._model.get_instances()
-            self._new_instance = self._model.get_new_instance()
-        else:
-            self._instances = []
-            self._new_instance = None
+        self._instances = instances
         self.endResetModel()
-
-    def find_row_by_id(self, instance_id: Optional[str]) -> int:
-        if instance_id is None:
-            return len(self._instances)  # New instance row
-        for i, instance in enumerate(self._instances):
-            if instance.instance_id == instance_id:
-                return i
-        raise ValueError(f"Instance {instance_id} not found")
-
-    def _instance_added(self, instance: InstanceDelegate):
-        index = len(self._instances)
-        self.beginInsertRows(QModelIndex(), index, index)
-        self._instances.append(instance)
-        self.endInsertRows()
-
-    def _instance_deleted(self, instance_id: str):
-        row = self.find_row_by_id(instance_id)
-        self.beginRemoveRows(QModelIndex(), row, row)
-        self._instances.pop(row)
-        self.endRemoveRows()
-
-    def _instance_updated(self, instance: InstanceDelegate):
-        row = self.find_row_by_id(instance.instance_id)
-        index = self.index(row)
-        if instance.instance_id is None:
-            self._new_instance = instance
-        else:
-            self._instances[row] = instance
-        self.dataChanged.emit(index, index, [Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.FontRole])
 
     def flags(self, index):
         if index.row() == len(self._instances):
@@ -82,10 +30,10 @@ class InstanceListModel(QAbstractListModel):
         return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
 
     def rowCount(self, parent=None):
-        return len(self._instances) + (1 if self._new_instance is not None else 0)
+        return len(self._instances)
 
     def data(self, index, role=None):
-        instance = self._new_instance if index.row() == len(self._instances) else self._instances[index.row()]
+        instance = self._instances[index.row()]
         if instance is None:
             return None
 
@@ -102,15 +50,15 @@ class InstanceListModel(QAbstractListModel):
 
     def setData(self, index, value, role=None):
         if role == Qt.ItemDataRole.EditRole:
-            if self._model is None:
-                return False
             if value is None or value == "":
                 return False
             row = index.row()
             if row == len(self._instances):
                 return False
             instance = self._instances[row]
-            self._model.rename_instance(instance.instance_id, value)
+            if instance.instance_id is None:
+                return False
+            self.instance_renamed.emit(instance.instance_id, value)
             return True
         return False
 
@@ -142,56 +90,110 @@ def _make_box_icon(color: tuple, size: int = 16) -> QIcon:
     return QIcon(pixmap)
 
 
-def _make_polygon_icon(color: tuple, size: int = 16) -> QIcon:
+def _make_polygon_icon(
+    color: Color,
+    size: int = 16,
+    num_points: Optional[int] = None,
+) -> QIcon:
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
+
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setBrush(Qt.BrushStyle.NoBrush)
-    pen = painter.pen()
-    pen.setColor(QColor(*color))
-    pen.setWidth(2)
-    painter.setPen(pen)
 
-    # Regular pentagon centered in the icon.
+    pen = QPen(QColor(*color), 2)
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+
     cx = size / 2.0
     cy = size / 2.0
     radius = (size - 4) / 2.0
+
+    # regular pentagon
     points = [
-        QPointF(cx + radius * 0.0, cy - radius * 1.0),
+        QPointF(cx,                   cy - radius),
         QPointF(cx + radius * 0.9511, cy - radius * 0.3090),
         QPointF(cx + radius * 0.5878, cy + radius * 0.8090),
         QPointF(cx - radius * 0.5878, cy + radius * 0.8090),
         QPointF(cx - radius * 0.9511, cy - radius * 0.3090),
     ]
     painter.drawPolygon(QPolygonF(points))
+
+    if num_points is not None:
+        text = str(num_points)
+
+        font = painter.font()
+        font.setPixelSize(7)
+        font.setBold(True)
+        painter.setFont(font)
+
+        metrics = QFontMetricsF(font)
+        badge_rect = metrics.tightBoundingRect(text).adjusted(-1.5, -0.5, 1.5, 0.5)
+        badge_rect.moveBottomRight(QPointF(size - 0.5, size - 0.5))
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(Qt.GlobalColor.white)
+        painter.drawRoundedRect(badge_rect, 1.5, 1.5)
+
+        painter.setPen(Qt.GlobalColor.black)
+        painter.drawText(
+            badge_rect,
+            Qt.AlignmentFlag.AlignCenter,
+            text,
+        )
+
     painter.end()
     return QIcon(pixmap)
 
 
-def _make_polyline_icon(color: tuple, size: int = 16) -> QIcon:
+def _make_polyline_icon(color: tuple, size: int = 16, num_points: Optional[int] = None) -> QIcon:
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
+
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = painter.pen()
-    pen.setColor(QColor(*color))
-    pen.setWidth(2)
-    painter.setPen(pen)
 
-    # 4-point zigzag polyline.
-    points = QPolygonF([
+    pen = QPen(QColor(*color), 2)
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+
+    # 4-point zigzag polyline
+    points =[
         QPointF(2, size - 3),
         QPointF(size * 0.33, 3),
         QPointF(size * 0.66, size - 5),
         QPointF(size - 2, 5),
-    ])
-    painter.drawPolyline(points)
+    ]
+    painter.drawPolyline(QPolygonF(points))
+
+    if num_points is not None:
+        text = str(num_points)
+
+        font = painter.font()
+        font.setPixelSize(7)
+        font.setBold(True)
+        painter.setFont(font)
+
+        metrics = QFontMetricsF(font)
+        badge_rect = metrics.tightBoundingRect(text).adjusted(-1.5, -0.5, 1.5, 0.5)
+        badge_rect.moveBottomRight(QPointF(size - 0.5, size - 0.5))
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(Qt.GlobalColor.white)
+        painter.drawRoundedRect(badge_rect, 1.5, 1.5)
+
+        painter.setPen(Qt.GlobalColor.black)
+        painter.drawText(
+            badge_rect,
+            Qt.AlignmentFlag.AlignCenter,
+            text,
+        )
+
     painter.end()
     return QIcon(pixmap)
 
 
-class ColorIconDelegate(QStyledItemDelegate):
+class ColorIcon(QStyledItemDelegate):
     def initStyleOption(self, option: QStyleOptionViewItem, index):
         super().initStyleOption(option, index)
         option.icon = QIcon()  # prevent Qt from drawing (and tinting) the icon itself
@@ -206,80 +208,59 @@ class ColorIconDelegate(QStyledItemDelegate):
             icon.paint(painter, x, y, size.width(), size.height())
 
 
-class PointListModel(QAbstractListModel):
+class MemberListModel(QAbstractListModel):
     def __init__(self):
         super().__init__()
-        self._model: Optional[DelegateModel] = None
-        self._instance: Optional[InstanceDelegate] = None
-        self._icon_cache: dict[tuple, QIcon] = {}
+        self._members: Sequence[ILabellerObject] = ()
+        self._icon_cache: Dict[Hashable, QIcon] = {}
 
-    def set_model(self, model: Optional[DelegateModel]):
-        if self._model is not None:
-            self._model.reset.disconnect(self.refresh)
-            self._model.selection_changed.disconnect(self._selection_changed)
-            self._model.instance_updated.disconnect(self._instance_updated)
-        self._model = model
-        if self._model is not None:
-            self._model.reset.connect(self.refresh)
-            self._model.selection_changed.connect(self._selection_changed)
-            self._model.instance_updated.connect(self._instance_updated)
-        self.refresh()
-
-    def refresh(self):
+    def set_members(self, members: Sequence[ILabellerObject]):
         self.beginResetModel()
-        if self._model is not None:
-            self._instance = self._model.get_selected_instance()
-        else:
-            self._instance = None
+        self._members = members
         self.endResetModel()
 
-    def _selection_changed(self, selection: Optional[Tuple[InstanceDelegate, IMemberDelegate]]):
-        assert selection is not None, "Selection not set"
-        instance, _ = selection
-
-        if self._instance is None or self._instance.instance_id != instance.instance_id:
-            self.beginResetModel()
-            self._instance = instance
-            self.endResetModel()
-
-    def _instance_updated(self, instance: InstanceDelegate):
-        if self._instance is not None and self._instance.instance_id == instance.instance_id:
-            if self._instance.type != instance.type:
-                self.beginResetModel()
-                self._instance = instance
-                self.endResetModel()
-            self._instance = instance
-
     def rowCount(self, parent=None):
-        if self._instance is None:
-            return 0
-        return len(self._instance.members)
+        return len(self._members)
+
+    def _get_icon(self, member: ILabellerObject):
+        if member.type == LabellerObjectType.BOUNDING_BOX:
+            member = cast(IBoundingBox, member)
+            cache_key = (member.type, member.color)
+            if cache_key not in self._icon_cache:
+                self._icon_cache[cache_key] = _make_box_icon(member.color)
+            return self._icon_cache[cache_key]
+        elif member.type == LabellerObjectType.KEYPOINT:
+            member = cast(IKeypoint, member)
+            cache_key = (member.type, member.color)
+            if cache_key not in self._icon_cache:
+                self._icon_cache[cache_key] = _make_keypoint_icon(member.color)
+            return self._icon_cache[cache_key]
+        elif member.type == LabellerObjectType.POLYGON:
+            member = cast(IPolygon, member)
+            cache_key = (member.type, member.color, member.num_points)
+            if cache_key not in self._icon_cache:
+                self._icon_cache[cache_key] = _make_polygon_icon(member.color, 16, member.num_points)
+            return self._icon_cache[cache_key]
+        elif member.type == LabellerObjectType.POLYLINE:
+            member = cast(IPolyline, member)
+            cache_key = (member.type, member.color, member.num_points)
+            if cache_key not in self._icon_cache:
+                self._icon_cache[cache_key] = _make_polyline_icon(member.color, 16, member.num_points)
+            return self._icon_cache[cache_key]
+        else:
+            if "default" not in self._icon_cache:
+                self._icon_cache["default"] = QIcon()
+            return self._icon_cache["default"]
 
     def data(self, index, role=None):
-        if self._instance is None:
-            return None
-
-        member = self._instance.members[index.row()]
+        member = self._members[index.row()]
 
         if role == Qt.ItemDataRole.DisplayRole:
             return member.name
         elif role == Qt.ItemDataRole.FontRole:
             return QFont("Segoe UI", 12, italic=False)
         elif role == Qt.ItemDataRole.DecorationRole:
-            color = member.color
-            cache_key = (type(member), color)
-            if cache_key not in self._icon_cache:
-                if member.type == InstanceMemberType.BOX:
-                    self._icon_cache[cache_key] = _make_box_icon(color)
-                elif member.type == InstanceMemberType.KEYPOINT:
-                    self._icon_cache[cache_key] = _make_keypoint_icon(color)
-                elif member.type == InstanceMemberType.POLYGON:
-                    self._icon_cache[cache_key] = _make_polygon_icon(color)
-                elif member.type == InstanceMemberType.POLYLINE:
-                    self._icon_cache[cache_key] = _make_polyline_icon(color)
-                else:
-                    self._icon_cache[cache_key] = QIcon()
-            return self._icon_cache[cache_key]
+            return self._get_icon(member)
         return None
 
 
@@ -288,19 +269,11 @@ class TypeListModel(QAbstractListModel):
 
     def __init__(self):
         super().__init__()
-        self._model: Optional[DelegateModel] = None
-        self._instance_types: List[InstanceTypeDelegate] = []
+        self._instance_types: Sequence[IInstanceType] = ()
 
-    def set_model(self, model: Optional[DelegateModel]):
-        self._model = model
-        self.refresh()
-
-    def refresh(self):
+    def set_instance_types(self, instance_types: Sequence[IInstanceType]):
         self.beginResetModel()
-        if self._model is not None:
-            self._instance_types = self._model.get_instance_types()
-        else:
-            self._instance_types = []
+        self._instance_types = instance_types
         self.endResetModel()
 
     def rowCount(self, parent=None):
@@ -315,10 +288,14 @@ class TypeListModel(QAbstractListModel):
 
 
 class SelectionControls(QWidget):
+    instance_selected = Signal(object)
+    member_selected = Signal(object)
+    instance_type_selected = Signal(object)
+
+    instance_renamed = Signal(object, object)  # instance_id, new_name
+
     def __init__(self, parent=None):
         super().__init__(parent)
-
-        self.model: Optional[DelegateModel] = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -341,6 +318,7 @@ class SelectionControls(QWidget):
         splitter.addWidget(frm_instances)
 
         frm_instance_type = QWidget(splitter)
+        frm_instance_type.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed))
         frm_instance_type_layout = QVBoxLayout(frm_instance_type)
         frm_instance_type_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -352,119 +330,100 @@ class SelectionControls(QWidget):
         self.dpd_instance_type.setFont(QFont("Segoe UI", 12, italic=False))
         frm_instance_type_layout.addWidget(self.dpd_instance_type)
 
-        frm_points = QWidget(splitter)
-        frm_points_layout = QVBoxLayout(frm_points)
-        frm_points_layout.setContentsMargins(0, 0, 0, 0)
+        frm_members = QWidget(splitter)
+        frm_members_layout = QVBoxLayout(frm_members)
+        frm_members_layout.setContentsMargins(0, 0, 0, 0)
 
-        lbl_points = QLabel("Points", frm_points)
-        lbl_points.setFont(QFont("Segoe UI", 14, italic=False))
-        frm_points_layout.addWidget(lbl_points)
+        lbl_members = QLabel("Members", frm_members)
+        lbl_members.setFont(QFont("Segoe UI", 14, italic=False))
+        frm_members_layout.addWidget(lbl_members)
 
-        self.lst_points = QListView(frm_points)
-        frm_points_layout.addWidget(self.lst_points)
+        self.lst_members = QListView(frm_members)
+        frm_members_layout.addWidget(self.lst_members)
 
-        splitter.addWidget(frm_points)
+        splitter.addWidget(frm_members)
 
         layout.addWidget(splitter)
 
         self.instance_list_model: InstanceListModel = InstanceListModel()
-        self.point_list_model: PointListModel = PointListModel()
+        self.member_list_model: MemberListModel = MemberListModel()
         self.type_list_model: TypeListModel = TypeListModel()
 
-        #self.frm_tag_list.setVisible(False)
-
         self.lst_instances.setModel(self.instance_list_model)
-        self.lst_points.setModel(self.point_list_model)
-        self.lst_points.setItemDelegate(ColorIconDelegate(self.lst_points))
+        self.lst_members.setModel(self.member_list_model)
+        self.lst_members.setItemDelegate(ColorIcon(self.lst_members))
         self.dpd_instance_type.setModel(self.type_list_model)
 
         self.dpd_instance_type.installEventFilter(self)
 
         # Only react to user interactions (not programmatic selection changes).
         self.lst_instances.clicked.connect(self._select_instance)
-        self.lst_instances.activated.connect(self._select_instance)
-        self.lst_points.clicked.connect(self._select_point)
-        self.lst_points.activated.connect(self._select_point)
+        self.lst_members.clicked.connect(self._select_member)
         self.dpd_instance_type.activated.connect(self._select_instance_type)
 
-        self.instance_list_model.modelReset.connect(self._instance_list_model_reset)
-        self.point_list_model.modelReset.connect(self._point_list_model_reset)
+        self.instance_list_model.instance_renamed.connect(self.instance_renamed)
 
-    def set_model(self, model: Optional[DelegateModel]):
-        if self.model is not None:
-            self.model.selection_changed.disconnect(self._selection_changed)
-            self.model.instance_updated.disconnect(self._instance_updated)
-            self.instance_list_model.set_model(None)
-            self.point_list_model.set_model(None)
-            self.type_list_model.set_model(None)
+        self._instance_type: Optional[IInstanceType] = None
 
-        self.model = model
+    def _has_instance_type_changed(self, image_state: ImageState, flags: ImageStateChangeFlags) -> bool:
+        if flags & ImageStateChangeFlags.INSTANCES or flags & ImageStateChangeFlags.SELECTION:
+            selected_instance = image_state.selected_instance
+            instance_type = selected_instance.instance_type if selected_instance is not None else None
+            if instance_type != self._instance_type:
+                return True
+        return False
 
-        self.instance_list_model.set_model(model)
-        self.point_list_model.set_model(model)
-        self.type_list_model.set_model(model)
+    def _get_members(self, image_state: ImageState):
+        selected_instance = image_state.selected_instance
+        return selected_instance.members if selected_instance is not None else ()
 
-        if self.model is not None:
-            self.model.selection_changed.connect(self._selection_changed)
-            self.model.instance_updated.connect(self._instance_updated)
+    def set_image_state(self, image_state: ImageState, flags: ImageStateChangeFlags):
+        if flags & ImageStateChangeFlags.INSTANCES:
+            self.instance_list_model.set_instances(image_state.instances)
 
-            self._selection_changed(self.model.get_selection())
+        if flags & ImageStateChangeFlags.INSTANCE_TYPES:
+            self.type_list_model.set_instance_types(image_state.instance_types)
 
-    def _selection_changed(self, selection: Optional[Tuple[InstanceDelegate, IMemberDelegate]]):
-        assert selection is not None, "Selection not set"
-        instance, member = selection
+        selected_instance = image_state.selected_instance
+        instance_type = selected_instance.instance_type if selected_instance is not None else None
 
-        instance_row = self.instance_list_model.find_row_by_id(instance.instance_id)
+        if flags & ImageStateChangeFlags.ALL or instance_type != self._instance_type:
+            self._instance_type = instance_type
+            self.dpd_instance_type.setCurrentText(instance_type.name if instance_type is not None else "")
+            self.member_list_model.set_members(self._get_members(image_state))
 
-        self.lst_instances.setCurrentIndex(self.instance_list_model.index(instance_row))
-        self.lst_points.setCurrentIndex(self.point_list_model.index(member.member_index))
-        self.dpd_instance_type.setCurrentText(instance.type.name)
+        if flags & ImageStateChangeFlags.INSTANCES or flags & ImageStateChangeFlags.SELECTION:
+            selection = image_state.selection
+            if selection is None:
+                self.lst_instances.setCurrentIndex(QModelIndex())
+                self.lst_members.setCurrentIndex(QModelIndex())
+                return
+            else:
+                instance_id, member_index = selection
 
-    def _instance_updated(self, instance: InstanceDelegate):
-        assert self.model is not None, "Model not set"
+                instance_index = next((i for i, inst in enumerate(image_state.instances) if inst.instance_id == instance_id), None)
+                assert instance_index is not None, f"Instance {instance_id} not found"
 
-        selected_instance = self.model.get_selected_instance()
-        if instance.instance_id == selected_instance.instance_id:
-            self.dpd_instance_type.setCurrentText(instance.type.name)
+                self.lst_instances.setCurrentIndex(QModelIndex(self.instance_list_model.index(instance_index, 0)))
+                self.lst_members.setCurrentIndex(QModelIndex(self.member_list_model.index(member_index, 0)))
 
-    def _select_instance(self, *_):
-        if self.model is None:
-            return
+    def _set_instances(self, instances: Sequence[IInstance]):
+        self.instance_list_model.set_instances(instances)
+        self._instance_ids = [inst.instance_id for inst in instances]
 
-        instance_id = self.lst_instances.currentIndex().data(InstanceListModel.InstanceIDRole)
-        self.model.set_instance_selection(instance_id)
+    def _select_instance(self, index: QModelIndex):
+        if index.isValid():
+            instance_id = index.data(InstanceListModel.InstanceIDRole)
+            self.instance_selected.emit(instance_id)
 
-    def _select_point(self, *_):
-        if self.model is None:
-            return
-
-        instance_id = self.lst_instances.currentIndex().data(InstanceListModel.InstanceIDRole)
-        member_index = self.lst_points.currentIndex().row()
-        self.model.set_selection(instance_id, member_index)
+    def _select_member(self, index: QModelIndex):
+        if index.isValid():
+            member_index = index.row()
+            self.member_selected.emit(member_index)
 
     def _select_instance_type(self, *_):
-        if self.model is None:
-            return
-
         instance_type = self.dpd_instance_type.currentData(TypeListModel.InstanceTypeRole)
-        instance_id = self.lst_instances.currentIndex().data(InstanceListModel.InstanceIDRole)
-
-        self.model.set_instance_type(instance_id, instance_type.name)
-
-    def _instance_list_model_reset(self):
-        if self.model is None:
-            return
-
-        instance = self.model.get_selected_instance()
-        row = self.instance_list_model.find_row_by_id(instance.instance_id)
-        self.lst_instances.setCurrentIndex(self.instance_list_model.index(row))
-
-    def _point_list_model_reset(self):
-        if self.model is None:
-            return
-
-        member = self.model.get_selected_member()
-        self.lst_points.setCurrentIndex(self.point_list_model.index(member.member_index))
+        self.instance_type_selected.emit(instance_type)
 
     def eventFilter(self, obj, event):
         # Prevent the instance type dropdown from changing the selected type when the user scrolls
@@ -473,3 +432,14 @@ class SelectionControls(QWidget):
                 event.ignore()
                 return True
         return False
+
+
+if __name__ == "__main__":
+
+    app = QApplication([])
+    icon = _make_polygon_icon((255, 0, 0), size=16, num_points=5)
+    image = QLabel()
+    image.setPixmap(icon.pixmap(320, 320))
+    image.show()
+
+    app.exec_()

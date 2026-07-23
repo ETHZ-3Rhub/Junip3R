@@ -1,15 +1,12 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Sequence
 
 import numpy as np
 from PySide6 import QtGui
-from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QLineF
+from PySide6.QtCore import QPointF, QRect, QRectF, Qt, QLineF
 from PySide6.QtGui import QImage, QColor, QFont, QPen, QBrush
 
 from junip3r.labeller.model.camera_model import CameraState
-
-POINT_RADIUS = 6
-
 
 
 @dataclass(frozen=True)
@@ -45,6 +42,13 @@ class ImageFrame:
 
 
 class Renderer:
+    KEYPOINT_LINE_WIDTH = 2
+    KEYPOINT_RADIUS = 6
+    KEYPOINT_RADIUS_HIGHLIGHTED = 7
+    BOUNDING_BOX_CORNER_RADIUS_HIGHLIGHTED = 7
+    POLYGON_POINT_RADIUS = 4
+    POLYGON_POINT_RADIUS_HIGHLIGHTED = 7
+
     def __init__(self, camera_state: CameraState, frame: ImageFrame, painter: QtGui.QPainter):
         self.camera_state = camera_state
         self.frame = frame
@@ -118,18 +122,21 @@ class Renderer:
         return frame
 
     # ---- Overlay methods (ported from your original renderer) ----
-    def draw_point(self, p_image01, color: QColor, visible=True, opacity=1.0):
+    def draw_keypoint(self, p_image01, color: QColor, visible: bool = True, highlighted: bool = False, opacity: float=1.0):
         x, y = self._image01_to_view_px(p_image01)
+
+        radius = self.KEYPOINT_RADIUS_HIGHLIGHTED if highlighted else self.KEYPOINT_RADIUS
 
         self.painter.setOpacity(opacity)
         if visible:
             self.painter.setPen(QPen(Qt.PenStyle.NoPen))
             self.painter.setBrush(QBrush(color))
+            self.painter.drawEllipse(QPointF(x, y), radius, radius)
         else:
-            self.painter.setPen(QPen(color, 2))
+            self.painter.setPen(QPen(color, self.KEYPOINT_LINE_WIDTH))
             self.painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
-
-        self.painter.drawEllipse(QPointF(x, y), POINT_RADIUS, POINT_RADIUS)
+            inner_radius = radius - self.KEYPOINT_LINE_WIDTH / 2
+            self.painter.drawEllipse(QPointF(x, y), inner_radius, inner_radius)
 
     def draw_skeleton_line(self, p1_image01, p2_image01, color: QColor, opacity=1.0):
         x1, y1 = self._image01_to_view_px(p1_image01)
@@ -154,7 +161,7 @@ class Renderer:
         self.painter.fillRect(background_rect, QColor(255, 255, 255))
         self.painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, name)
 
-    def draw_box_label(self, p1_image01, p2_image01, name: str):
+    def draw_box_label(self, p1_image01, name: str):
         x1, y1 = self._image01_to_view_px(p1_image01)
 
         self.painter.setOpacity(1.0)
@@ -244,7 +251,16 @@ class Renderer:
         h = abs(y2 - y1)
         self.painter.drawRect(left, top, w, h)
 
-    def draw_polygon(self, points: List[Tuple[float, float]], color: QColor, opacity=1.0, fill_opacity=0.):
+    def draw_bounding_box_corner(self, p_image01, color: QColor, opacity=1.0):
+        x, y = self._image01_to_view_px(p_image01)
+        radius = self.BOUNDING_BOX_CORNER_RADIUS_HIGHLIGHTED
+
+        self.painter.setOpacity(opacity)
+        self.painter.setPen(QPen(color, self.KEYPOINT_LINE_WIDTH))
+        self.painter.setBrush(QBrush(color))
+        self.painter.drawEllipse(QPointF(x, y), radius, radius)
+
+    def draw_polygon(self, points: Sequence[Tuple[float, float]], color: QColor, opacity=1.0, fill_opacity=0.):
         view_points = [QPointF(*self._image01_to_view_px(p)) for p in points]
 
         if len(view_points) >= 2:
@@ -259,11 +275,14 @@ class Renderer:
                 self.painter.setBrush(QBrush(color, Qt.BrushStyle.SolidPattern))
                 self.painter.drawPolygon(polygon)
 
+    def draw_polygon_point(self, p_image01, color: QColor, highlighted=False, opacity=1.0):
+        x, y = self._image01_to_view_px(p_image01)
+        radius = self.POLYGON_POINT_RADIUS_HIGHLIGHTED if highlighted else self.POLYGON_POINT_RADIUS
+
         self.painter.setOpacity(opacity)
-        self.painter.setPen(QPen(color, 2))
-        self.painter.setBrush(QBrush(color, Qt.BrushStyle.SolidPattern))
-        for p in view_points:
-            self.painter.drawEllipse(p, POINT_RADIUS, POINT_RADIUS)
+        self.painter.setPen(QPen(Qt.PenStyle.NoPen))
+        self.painter.setBrush(QBrush(color))
+        self.painter.drawEllipse(QPointF(x, y), radius, radius)
 
     def draw_polyline(self, points: List[Tuple[float, float]], color: QColor, opacity=1.0, width=2):
         view_points = [QPointF(*self._image01_to_view_px(p)) for p in points]
@@ -275,9 +294,3 @@ class Renderer:
 
             polygon = QtGui.QPolygonF(view_points)
             self.painter.drawPolyline(polygon)
-
-        self.painter.setOpacity(opacity)
-        self.painter.setPen(QPen(color, 2))
-        self.painter.setBrush(QBrush(color, Qt.BrushStyle.SolidPattern))
-        for p in view_points:
-            self.painter.drawEllipse(p, POINT_RADIUS, POINT_RADIUS)
