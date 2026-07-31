@@ -18,7 +18,7 @@ from junip3r.frame_extractor.widgets.frame_extractor import FrameExtractor
 logger = logging.getLogger(__name__)
 
 
-def from_config_file(config_file: Path, show_labeller: bool = False, parent=None) -> FrameExtractor:
+def from_config_file(config_file: Path, integrated: bool = False, parent=None) -> FrameExtractor:
     project_folder = config_file.parent
 
     video_repository = VideoRepository(project_folder / "_frame_extractor" / "videos.csv")
@@ -27,7 +27,7 @@ def from_config_file(config_file: Path, show_labeller: bool = False, parent=None
 
     model = FrameExtractorModel(video_repository, frame_repository, tag_repository)
 
-    frame_extractor = FrameExtractor(show_labeller=show_labeller, parent=parent)
+    frame_extractor = FrameExtractor(show_labeller=integrated, parent=parent)
     frame_extractor.set_model(model)
     frame_extractor.set_project_folder(project_folder)
 

@@ -1,25 +1,25 @@
 from dataclasses import dataclass
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Sequence
 
-from junip3r.labeller.data.types.abc import Color, InstanceID, ILabellerObject, IInstance
+from junip3r.labeller.data.types.abc import Color, InstanceID, ILabellerObject, IInstance, LabellerObjectType
 from junip3r.labeller.data.types.delegates import Keypoint, BoundingBox, Polygon, Polyline, Skeleton, Instance
 
 
 @dataclass(frozen=True)
 class MemberSpecs:
     name: str
-    type: str
+    type: LabellerObjectType
     color: Color
     size: Optional[int] = None
 
     def new_instance(self, instance_id: InstanceID, member_index: int, name: str) -> ILabellerObject:
-        if self.type == "keypoint":
+        if self.type == LabellerObjectType.KEYPOINT:
             return Keypoint(instance_id, member_index, name, self.color, None, 2.0)
-        elif self.type == "bounding_box":
+        elif self.type == LabellerObjectType.BOUNDING_BOX:
             return BoundingBox(instance_id, member_index, name, self.color, None)
-        elif self.type == "polygon":
+        elif self.type == LabellerObjectType.POLYGON:
             return Polygon(instance_id, member_index, name, self.color, self.size, [])
-        elif self.type == "polyline":
+        elif self.type == LabellerObjectType.POLYLINE:
             return Polyline(instance_id, member_index, name, self.color, self.size, [])
         else:
             raise ValueError(f"Invalid member type: {self.type}")
@@ -37,7 +37,7 @@ class SkeletonSpecs:
 @dataclass(frozen=True)
 class InstanceType:
     name: str
-    members: List[MemberSpecs]
+    members: Sequence[MemberSpecs]
     skeleton: SkeletonSpecs
 
     def new_instance(self, instance_id: InstanceID, name: str) -> IInstance:

@@ -75,7 +75,7 @@ def from_config_file(config_file: Path, integrated: bool = False) -> EditorMainW
     project_folder = config_file.parent
     config = yaml.safe_load(open(config_file, 'r'))
 
-    instance_types, expected_instance_types, tags = parse_config(config)
+    mode, instance_types, expected_instance_types, tags = parse_config(config)
     config_repository = ConfigRepository(instance_types, expected_instance_types)
 
     image_file_endings = [".png", ".jpg", ".jpeg"]

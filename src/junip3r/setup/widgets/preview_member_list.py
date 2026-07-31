@@ -2,65 +2,11 @@ from typing import Optional, Dict, Sequence, cast, Hashable
 
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QPointF, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QPolygonF, QPen, QFontMetricsF
-from PySide6.QtWidgets import QStyleOptionViewItem, QWidget, QVBoxLayout, QSplitter, QLabel, \
-    QListView, QComboBox, QStyledItemDelegate, QApplication, QSizePolicy
+from PySide6.QtWidgets import QStyleOptionViewItem, QWidget, QVBoxLayout, QLabel, QListView, QStyledItemDelegate
 
-from junip3r.labeller.data.types.abc import IInstance, ILabellerObject, LabellerObjectType, IInstanceType, \
+from junip3r.labeller.data.types.abc import ILabellerObject, LabellerObjectType, IInstanceType, \
     Color, IBoundingBox, IKeypoint, IPolygon, IPolyline
 from junip3r.labeller.model.pose_image_model import ImageState, ImageStateChangeFlags
-
-
-class InstanceListModel(QAbstractListModel):
-    instance_renamed = Signal(object, object)  # instance_id, new_name
-
-    InstanceIDRole = Qt.ItemDataRole.UserRole + 1
-
-    def __init__(self):
-        super().__init__()
-        self._instances: Sequence[IInstance] = ()
-
-    def set_instances(self, instances: Sequence[IInstance]):
-        self.beginResetModel()
-        self._instances = instances
-        self.endResetModel()
-
-    def flags(self, index):
-        if index.row() == len(self._instances):
-            return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
-        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
-
-    def rowCount(self, parent=None):
-        return len(self._instances)
-
-    def data(self, index, role=None):
-        instance = self._instances[index.row()]
-        if instance is None:
-            return None
-
-        if role == Qt.ItemDataRole.DisplayRole:
-            return instance.name
-        elif role == InstanceListModel.InstanceIDRole:
-            return instance.instance_id
-        elif role == Qt.ItemDataRole.FontRole:
-            if instance.instance_id is None:
-                return QFont("Segoe UI", 12, italic=True)
-            else:
-                return QFont("Segoe UI", 12, italic=False)
-        return None
-
-    def setData(self, index, value, role=None):
-        if role == Qt.ItemDataRole.EditRole:
-            if value is None or value == "":
-                return False
-            row = index.row()
-            if row == len(self._instances):
-                return False
-            instance = self._instances[row]
-            if instance.instance_id is None:
-                return False
-            self.instance_renamed.emit(instance.instance_id, value)
-            return True
-        return False
 
 
 def _make_keypoint_icon(color: tuple, size: int = 16) -> QIcon:
@@ -264,35 +210,8 @@ class MemberListModel(QAbstractListModel):
         return None
 
 
-class TypeListModel(QAbstractListModel):
-    InstanceTypeRole = Qt.ItemDataRole.UserRole + 1
-
-    def __init__(self):
-        super().__init__()
-        self._instance_types: Sequence[IInstanceType] = ()
-
-    def set_instance_types(self, instance_types: Sequence[IInstanceType]):
-        self.beginResetModel()
-        self._instance_types = instance_types
-        self.endResetModel()
-
-    def rowCount(self, parent=None):
-        return len(self._instance_types)
-
-    def data(self, index, role=None):
-        if role == Qt.ItemDataRole.DisplayRole:
-            return self._instance_types[index.row()].name
-        elif role == TypeListModel.InstanceTypeRole:
-            return self._instance_types[index.row()]
-        return None
-
-
-class SelectionControls(QWidget):
-    instance_selected = Signal(object)
-    member_selected = Signal(object)
-    instance_type_selected = Signal(object)
-
-    instance_renamed = Signal(object, object)  # instance_id, new_name
+class PreviewMemberList(QWidget):
+    member_selected = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -300,68 +219,20 @@ class SelectionControls(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        splitter = QSplitter(self)
-        splitter.setOrientation(Qt.Orientation.Vertical)
-        splitter.setChildrenCollapsible(False)
+        lbl_members = QLabel("Members", self)
+        #lbl_members.setFont(QFont("Segoe UI", 14, italic=False))
+        layout.addWidget(lbl_members)
 
-        frm_instances = QWidget(splitter)
-        frm_instances_layout = QVBoxLayout(frm_instances)
-        frm_instances_layout.setContentsMargins(0, 0, 0, 0)
+        self.lst_members = QListView(self)
+        layout.addWidget(self.lst_members)
 
-        lbl_instances = QLabel("Instances", frm_instances)
-        lbl_instances.setFont(QFont("Segoe UI", 14, italic=False))
-        frm_instances_layout.addWidget(lbl_instances)
-
-        self.lst_instances = QListView(frm_instances)
-        frm_instances_layout.addWidget(self.lst_instances)
-
-        splitter.addWidget(frm_instances)
-
-        frm_instance_type = QWidget(splitter)
-        frm_instance_type.setSizePolicy(QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed))
-        frm_instance_type_layout = QVBoxLayout(frm_instance_type)
-        frm_instance_type_layout.setContentsMargins(0, 0, 0, 0)
-
-        lbl_instance_type = QLabel("Instance Type", frm_instance_type)
-        lbl_instance_type.setFont(QFont("Segoe UI", 14, italic=False))
-        frm_instance_type_layout.addWidget(lbl_instance_type)
-
-        self.dpd_instance_type = QComboBox(frm_instance_type)
-        self.dpd_instance_type.setFont(QFont("Segoe UI", 12, italic=False))
-        frm_instance_type_layout.addWidget(self.dpd_instance_type)
-
-        frm_members = QWidget(splitter)
-        frm_members_layout = QVBoxLayout(frm_members)
-        frm_members_layout.setContentsMargins(0, 0, 0, 0)
-
-        lbl_members = QLabel("Members", frm_members)
-        lbl_members.setFont(QFont("Segoe UI", 14, italic=False))
-        frm_members_layout.addWidget(lbl_members)
-
-        self.lst_members = QListView(frm_members)
-        frm_members_layout.addWidget(self.lst_members)
-
-        splitter.addWidget(frm_members)
-
-        layout.addWidget(splitter)
-
-        self.instance_list_model: InstanceListModel = InstanceListModel()
         self.member_list_model: MemberListModel = MemberListModel()
-        self.type_list_model: TypeListModel = TypeListModel()
 
-        self.lst_instances.setModel(self.instance_list_model)
         self.lst_members.setModel(self.member_list_model)
         self.lst_members.setItemDelegate(ColorIcon(self.lst_members))
-        self.dpd_instance_type.setModel(self.type_list_model)
-
-        self.dpd_instance_type.installEventFilter(self)
 
         # Only react to user interactions (not programmatic selection changes).
-        self.lst_instances.clicked.connect(self._select_instance)
         self.lst_members.clicked.connect(self._select_member)
-        self.dpd_instance_type.activated.connect(self._select_instance_type)
-
-        self.instance_list_model.instance_renamed.connect(self.instance_renamed)
 
         self._instance_type: Optional[IInstanceType] = None
 
@@ -373,75 +244,26 @@ class SelectionControls(QWidget):
                 return True
         return False
 
-    def _get_members(self, image_state: ImageState):
-        selected_instance = image_state.selected_instance
-        return selected_instance.members if selected_instance is not None else ()
-
     def set_image_state(self, image_state: ImageState, flags: ImageStateChangeFlags):
-        if flags & ImageStateChangeFlags.INSTANCES:
-            self.instance_list_model.set_instances(image_state.instances)
-
-        if flags & ImageStateChangeFlags.INSTANCE_TYPES:
-            self.type_list_model.set_instance_types(image_state.instance_types)
-
         selected_instance = image_state.selected_instance
         instance_type = selected_instance.instance_type if selected_instance is not None else None
 
         if flags & ImageStateChangeFlags.ALL or instance_type != self._instance_type:
             self._instance_type = instance_type
-            self.dpd_instance_type.setCurrentText(instance_type.name if instance_type is not None else "")
-            self.member_list_model.set_members(self._get_members(image_state))
+            if selected_instance is None:
+                self.member_list_model.set_members(())
+            else:
+                self.member_list_model.set_members(selected_instance.members)
 
         if flags & ImageStateChangeFlags.INSTANCES or flags & ImageStateChangeFlags.SELECTION:
             selection = image_state.selection
             if selection is None:
-                self.lst_instances.setCurrentIndex(QModelIndex())
                 self.lst_members.setCurrentIndex(QModelIndex())
-                return
             else:
                 instance_id, member_index = selection
-
-                instance_index = next((i for i, inst in enumerate(image_state.instances) if inst.instance_id == instance_id), None)
-                if instance_index is not None:
-                    self.lst_instances.setCurrentIndex(QModelIndex(self.instance_list_model.index(instance_index, 0)))
-                    self.lst_members.setCurrentIndex(QModelIndex(self.member_list_model.index(member_index, 0)))
-                else:
-                    self.lst_instances.setCurrentIndex(QModelIndex())
-                    self.lst_members.setCurrentIndex(QModelIndex())
-
-    def _set_instances(self, instances: Sequence[IInstance]):
-        self.instance_list_model.set_instances(instances)
-        self._instance_ids = [inst.instance_id for inst in instances]
-
-    def _select_instance(self, index: QModelIndex):
-        if index.isValid():
-            instance_id = index.data(InstanceListModel.InstanceIDRole)
-            self.instance_selected.emit(instance_id)
+                self.lst_members.setCurrentIndex(QModelIndex(self.member_list_model.index(member_index, 0)))
 
     def _select_member(self, index: QModelIndex):
         if index.isValid():
             member_index = index.row()
             self.member_selected.emit(member_index)
-
-    def _select_instance_type(self, *_):
-        instance_type = self.dpd_instance_type.currentData(TypeListModel.InstanceTypeRole)
-        self.instance_type_selected.emit(instance_type)
-
-    def eventFilter(self, obj, event):
-        # Prevent the instance type dropdown from changing the selected type when the user scrolls
-        if obj == self.dpd_instance_type:
-            if event.type() == 31:
-                event.ignore()
-                return True
-        return False
-
-
-if __name__ == "__main__":
-
-    app = QApplication([])
-    icon = _make_polygon_icon((255, 0, 0), size=16, num_points=5)
-    image = QLabel()
-    image.setPixmap(icon.pixmap(320, 320))
-    image.show()
-
-    app.exec_()

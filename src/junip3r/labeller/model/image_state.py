@@ -30,7 +30,6 @@ class ImageState:
             return None
         instance_id = self.selection[0]
         instance = next((instance for instance in self.instances if instance.instance_id == instance_id), None)
-        assert instance is not None
         return instance
 
     @property
@@ -38,10 +37,12 @@ class ImageState:
         if self.selection is None:
             return None
         instance = self.selected_instance
-        assert instance is not None
+        if instance is None:
+            return None
         member_index = self.selection[1]
-        member = instance.members[member_index]
-        return member
+        if member_index >= len(instance.members):
+            return None
+        return instance.members[member_index]
 
     def get_instance(self, instance_id: Optional[str]) -> Optional[IInstance]:
         if instance_id is None:

@@ -154,3 +154,6 @@ class CameraModel(QObject):
 
     def world_rect_visible(self) -> Tuple[float, float, float, float]:
         return self._state.world_rect_visible()
+
+    def refresh(self):
+        self.changed.emit(self._state)

@@ -90,13 +90,6 @@ class Ui_FrameExtractor(object):
 
         self.gridLayout_4.addWidget(self.dpd_num_frames_mode, 1, 1, 1, 1)
 
-        self.spb_num_frames = QSpinBox(self.frame_7)
-        self.spb_num_frames.setObjectName(u"spb_num_frames")
-        self.spb_num_frames.setMaximum(1000)
-        self.spb_num_frames.setValue(10)
-
-        self.gridLayout_4.addWidget(self.spb_num_frames, 1, 0, 1, 1)
-
         self.dpd_target_videos_mode = QComboBox(self.frame_7)
         self.dpd_target_videos_mode.addItem("")
         self.dpd_target_videos_mode.addItem("")
@@ -117,8 +110,20 @@ class Ui_FrameExtractor(object):
 
         self.gridLayout_4.addWidget(self.dpd_selection_mode, 0, 0, 1, 2)
 
+        self.spb_num_frames = QSpinBox(self.frame_7)
+        self.spb_num_frames.setObjectName(u"spb_num_frames")
+        self.spb_num_frames.setMaximum(1000)
+        self.spb_num_frames.setValue(10)
+
+        self.gridLayout_4.addWidget(self.spb_num_frames, 1, 0, 1, 1)
+
 
         self.verticalLayout_2.addWidget(self.frame_7)
+
+        self.btn_open_setup = QPushButton(self.frame)
+        self.btn_open_setup.setObjectName(u"btn_open_setup")
+
+        self.verticalLayout_2.addWidget(self.btn_open_setup)
 
         self.splitter.addWidget(self.frame)
         self.frame_2 = QFrame(self.splitter)
@@ -375,6 +380,7 @@ class Ui_FrameExtractor(object):
         self.dpd_selection_mode.setItemText(0, QCoreApplication.translate("FrameExtractor", u"Random", None))
         self.dpd_selection_mode.setItemText(1, QCoreApplication.translate("FrameExtractor", u"K-Means", None))
 
+        self.btn_open_setup.setText(QCoreApplication.translate("FrameExtractor", u"\u2b05 Return to Setup", None))
         self.lbl_video.setText(QCoreApplication.translate("FrameExtractor", u"No Video Selected", None))
         self.lbl_frame_number.setText(QCoreApplication.translate("FrameExtractor", u"0/0", None))
         self.btn_frame_backward.setText("")

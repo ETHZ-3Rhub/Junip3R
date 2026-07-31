@@ -1,10 +1,12 @@
+import time
 from dataclasses import dataclass, field, replace
 from typing import Optional, List, Tuple, cast, Iterator, Mapping, Sequence
 
+import cv2
 import numpy as np
 from PySide6 import QtGui, QtCore
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QMouseEvent, QImage
 from PySide6.QtWidgets import QLabel
 
 from junip3r.labeller.data.types.abc import IInstance, IKeypoint, ILabellerObject, LabellerObjectType, IBoundingBox, \
@@ -19,32 +21,22 @@ from junip3r.labeller.model.operations import Operation, DragPoint, DrawBox, Dra
 from junip3r.labeller.widgets.renderer import ImageFrame, Renderer
 
 
-def _adjust_brightness_contrast(image: np.ndarray, brightness: float, contrast: float) -> np.ndarray:
-    """
-    Adjust brightness and contrast of a uint8 image.
-
-    brightness: -1 = black, 0 = original, +1 = white
-    contrast:   -1 = flat gray, 0 = original, +1 = high contrast
-    """
-
+def _adjust_brightness_contrast(
+    image: np.ndarray,
+    brightness: float,
+    contrast: float,
+) -> np.ndarray:
     if image.dtype != np.uint8:
         raise ValueError("Image must be uint8")
 
-    # Contrast scale (alpha)
     alpha = 1.0 + contrast
-
-    # Brightness offset (beta)
     beta = brightness * 255.0
 
-    img = image.astype(np.float32)
+    values = np.arange(256, dtype=np.float32)
+    lut = alpha * (values - 128.0) + 128.0 + beta
+    lut = np.clip(lut, 0, 255).astype(np.uint8)
 
-    # Apply contrast around midpoint (128)
-    img = alpha * (img - 128.0) + 128.0
-
-    # Apply brightness
-    img = img + beta
-
-    return np.clip(img, 0, 255).astype(np.uint8)
+    return cv2.LUT(image, lut)
 
 
 @dataclass(frozen=True)
@@ -163,9 +155,6 @@ class PoseImage(QLabel):
 
         self._camera_state = CameraState((self.width(), self.height()))
 
-        self._brightness = 0.0
-        self._contrast = 0.0
-
         self._mouse_pos_view: Point = (0, 0)
 
         self._state = ImageState()
@@ -185,20 +174,26 @@ class PoseImage(QLabel):
 
         self._update_pending = False
 
+        # caching
+        self._adjusted_image: Optional[np.ndarray] = None
+
     def set_image_state(self, state: ImageState, flags: ImageStateChangeFlags):
         self._state = state
         hovered_members = self.find_members(self._mouse_pos_view)
         self._new_hovered_members = [member for member in hovered_members if member not in self._hovered_members]
         self._hovered_members = hovered_members
         self._hovered_member = self.find_member(self._mouse_pos_view)
+        self._adjusted_image = None
         self._update_pending = True
 
     def set_context_state(self, state: ContextState):
         self._context_state = state
+        self._adjusted_image = None
         self._update_pending = True
 
     def set_image_settings_state(self, state: ImageSettingsState):
         self._image_settings_state = state
+        self._adjusted_image = None
         self._update_pending = True
         
     def set_operation_state(self, operation_state: OperationState):
@@ -210,6 +205,21 @@ class PoseImage(QLabel):
         self.update()
 
     # --- Event handlers ---
+
+    @property
+    def image(self) -> Optional[np.ndarray]:
+        if self._context_state.enabled and self._context_state.context:
+            return self._context_state.image
+        else:
+            return self._state.image
+
+    @property
+    def adjusted_image(self) -> Optional[np.ndarray]:
+        if self._adjusted_image is None:
+            image = self.image
+            if image is not None:
+                self._adjusted_image = _adjust_brightness_contrast(image, self._image_settings_state.brightness, self._image_settings_state.contrast)
+        return self._adjusted_image
 
     @property
     def _image_frame(self) -> Optional[ImageFrame]:
@@ -260,8 +270,8 @@ class PoseImage(QLabel):
         self.wheel_moved.emit(wheel_event)
 
     def resizeEvent(self, event):
-        super().resizeEvent(event)
         self.resized.emit(self.width(), self.height())
+        super().resizeEvent(event)
 
     # --- Rendering ---
 
@@ -444,18 +454,37 @@ class PoseImage(QLabel):
                     for point in points:
                         rc.renderer.draw_polygon_point(point, color, opacity=1)
 
+    def _numpy_to_qimage_owned(self, img: np.ndarray) -> QImage:
+        """
+        Build a QImage and deep-copy it so Qt owns the memory safely.
+        Supports uint8 grayscale (H,W) and uint8 RGB (H,W,3).
+        """
+        if img.dtype != np.uint8:
+            img = img.astype(np.uint8, copy=False)
+
+        if img.ndim == 2:
+            h, w = img.shape
+            q = QImage(img.data, w, h, img.strides[0], QImage.Format.Format_Grayscale8)
+            return q.copy()
+
+        if img.ndim == 3 and img.shape[2] == 3:
+            h, w, _ = img.shape
+
+            # If coming from OpenCV (BGR), uncomment this:
+            # img = img[:, :, ::-1].copy()
+
+            q = QImage(img.data, w, h, img.strides[0], QImage.Format.Format_RGB888)
+            return q.copy()
+
+        raise ValueError(f"Unsupported image shape: {img.shape}")
+
     def paintEvent(self, event):
         super().paintEvent(event)
 
-        if self._context_state.enabled and self._context_state.context:
-            image = self._context_state.image
-        else:
-            image = self._state.image
+        image = self.adjusted_image
 
         if image is None:
             return
-
-        image = _adjust_brightness_contrast(image, self._image_settings_state.brightness, self._image_settings_state.contrast)
 
         image_frame = ImageFrame(image.shape[1], image.shape[0])
 
@@ -471,9 +500,8 @@ class PoseImage(QLabel):
 
         rc = RenderingContext(renderer, self._camera_state, image_frame, overrides, painter)
 
-        image = _adjust_brightness_contrast(image, self._brightness, self._contrast)
-
-        renderer.draw_image(image)
+        img = self._numpy_to_qimage_owned(image)
+        renderer.draw_image(img)
 
         if self._context_state.enabled:
             opacity = 0.5
@@ -488,7 +516,6 @@ class PoseImage(QLabel):
             self._draw_hovered_label(rc)
 
         painter.end()
-
     def _update_if_needed(self):
         if self._update_pending:
             self.update()

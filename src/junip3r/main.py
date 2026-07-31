@@ -6,17 +6,19 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Optional, Literal, Any, cast
 
-from PySide6 import QtWidgets
 from PySide6.QtCore import QObject, QCoreApplication
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMainWindow
 
 from junip3r.logging_setup import LoggingManager, create_logging_manager
+from junip3r.setup.main import from_config_file as setup_from_config_file
 from junip3r.labeller.main import from_config_file as labeller_from_config_file
 from junip3r.frame_extractor.main import from_config_file as frame_extractor_from_config_file
+from junip3r.setup.widgets.new_project_window import NewProjectWindow
+from junip3r.setup.widgets.setup_window import SetupMainWindow
+from junip3r.setup.widgets.start_window import StartWindow
 
-
-AppId = Literal["labeller", "frame_extractor"]
+AppId = Literal["setup", "labeller", "frame_extractor"]
 logger = logging.getLogger(__name__)
 
 
@@ -28,18 +30,70 @@ class AppController(QObject):
     controller through signals.
     """
 
-    def __init__(self, *, config_file: Path, log_manager: Optional[LoggingManager] = None):
+    def __init__(self, *, log_manager: Optional[LoggingManager] = None):
         super().__init__()
 
-        self.config_file = config_file
         self._log_manager = log_manager
+
+        self._config_file: Optional[Path] = None
+
+        self._start_window: Optional[StartWindow] = None
+        self._new_project_window: Optional[NewProjectWindow] = None
+
         self._current_window: Optional[QMainWindow] = None
         self._current_app: Optional[AppId] = None
         self._switching = False
 
-    def start(self, initial_app: AppId = "labeller") -> None:
-        logger.info("starting controller", extra={"event_category": "lifecycle", "event_name": "controller_start", "app_name": initial_app})
-        self.switch_to(initial_app)
+    def start(self) -> None:
+        logger.info("starting controller", extra={"event_category": "lifecycle", "event_name": "controller_start"})
+        start_window = StartWindow()
+        start_window.new_project_requested.connect(self._new_project)
+        start_window.open_project_requested.connect(self._open_project)
+        self._start_window = start_window
+
+        start_window.show()
+
+    def _open_project(self, config_file: str) -> None:
+        QApplication.instance().setQuitOnLastWindowClosed(False)
+        self.config_file = Path(config_file)
+        self.switch_to("labeller")
+
+        if self._start_window is not None:
+            self._start_window.close()
+            self._start_window = None
+
+    def _new_project(self) -> None:
+        new_project_window = NewProjectWindow()
+        new_project_window.setWindowTitle("Junip3r - New Project")
+        new_project_window.resize(1400, 800)
+
+        new_project_window.setup_requested.connect(self._new_project_setup)
+        new_project_window.open_project_requested.connect(self._new_project_open)
+        self._new_project_window = new_project_window
+
+        new_project_window.show()
+
+        if self._start_window is not None:
+            self._start_window.close()
+            self._start_window = None
+
+    def _new_project_setup(self, config_file: str) -> None:
+        QApplication.instance().setQuitOnLastWindowClosed(False)
+        self.config_file = Path(config_file)
+        self.switch_to("setup")
+
+        if self._new_project_window is not None:
+            self._new_project_window.close()
+            self._new_project_window = None
+
+    def _new_project_open(self, config_file: str) -> None:
+        QApplication.instance().setQuitOnLastWindowClosed(False)
+        self.config_file = Path(config_file)
+        self.switch_to("frame_extractor")
+
+        if self._new_project_window is not None:
+            self._new_project_window.close()
+            self._new_project_window = None
 
     def switch_to(self, app_id: AppId) -> None:
         logger.info("switching app", extra={"event_category": "lifecycle", "event_name": "app_switch_requested", "app_name": app_id})
@@ -67,7 +121,7 @@ class AppController(QObject):
             if current_context is None or current_context.app_name != app_id:
                 self._log_manager.start_app_run(app_id)
 
-        new_window = cast(Any, self._create_window(app_id))
+        new_window = self._create_window(app_id)
 
         new_window.switch_to.connect(self.switch_to)
         new_window.closed.connect(lambda w=new_window: self._on_window_closed(w))
@@ -89,11 +143,15 @@ class AppController(QObject):
 
     def _create_window(self, app_id: AppId) -> Any:
         logger.debug("creating window", extra={"event_category": "ui", "event_name": "create_window", "app_name": app_id})
+        assert self.config_file is not None
+        if app_id == "setup":
+            return setup_from_config_file(self.config_file, integrated=True)
+
         if app_id == "labeller":
             return labeller_from_config_file(self.config_file, integrated=True)
 
         if app_id == "frame_extractor":
-            return frame_extractor_from_config_file(self.config_file, show_labeller=True)
+            return frame_extractor_from_config_file(self.config_file, integrated=True)
 
         raise ValueError(f"Unknown app id: {app_id!r}")
 
@@ -107,6 +165,11 @@ class AppController(QObject):
             self._current_app = None
             QCoreApplication.quit()
 
+    def _quit(self) -> None:
+        logger.info("quitting application", extra={"event_category": "lifecycle", "event_name": "application_quit"})
+        QCoreApplication.quit()
+        sys.exit(0)
+
 
 def main() -> int:
     log_manager = create_logging_manager(run_mode="integrated")
@@ -117,41 +180,15 @@ def main() -> int:
     app_icon = QIcon(str(res_folder / "junip3r_logo.png"))
     app.setWindowIcon(app_icon)
 
-    dialog = QtWidgets.QFileDialog()
-    dialog.setFileMode(QtWidgets.QFileDialog.FileMode.ExistingFile)  # type: ignore[arg-type]
-    dialog.setNameFilter("Junip3R Config File (*.yaml)")
-    dialog.setWindowTitle("Select Config File")
-    dialog.setAcceptMode(QtWidgets.QFileDialog.AcceptMode.AcceptOpen)
-
-    if dialog.exec():
-        file_path = dialog.selectedFiles()[0]
-        config_file = Path(file_path)
-    else:
-        exit(1)
-
-    project_folder = config_file.parent
-
-    image_file_endings = [".png", ".jpg", ".jpeg"]
-    image_folder = project_folder / "images"
-    image_files = [f for f in image_folder.glob("*") if f.suffix.lower() in image_file_endings]
-
-    if len(image_files) == 0:
-        start_app = "frame_extractor"
-    else:
-        start_app = "labeller"
-
-    log_manager.start_app_run(start_app)
-
     # Important: during switching we briefly close the old top-level window
     # before showing the new one. Without this, Qt may quit automatically when
     # the last visible top-level window closes.
-    app.setQuitOnLastWindowClosed(False)
 
-    controller = AppController(config_file=config_file, log_manager=log_manager)
-    controller.start(start_app)
+    controller = AppController(log_manager=log_manager)
+    controller.start()
 
     try:
-        return app.exec()
+        app.exec()
     finally:
         log_manager.close()
 

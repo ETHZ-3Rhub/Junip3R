@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Tuple, Optional
 
 from PySide6.QtGui import QColor
 
-from junip3r.labeller.data.types.abc import Color
+from junip3r.labeller.data.types.abc import Color, LabellerObjectType
 from junip3r.labeller.config.data import MemberSpecs, SkeletonSpecs, InstanceType
 
 
@@ -39,7 +39,7 @@ def parse_skeleton(members: List[MemberSpecs], skeleton_specs: Dict[str, Any] | 
 
     member_names = [member.name for member in members]
     lines = [(member_names.index(name_1), member_names.index(name_2)) for name_1, name_2 in skeleton_specs["lines"]]
-    if not all(members[i1].type == "keypoint" and members[i2].type == "keypoint" for i1, i2 in lines):
+    if not all(members[i1].type == LabellerObjectType.KEYPOINT and members[i2].type == LabellerObjectType.KEYPOINT for i1, i2 in lines):
         raise ValueError("Skeleton lines can only connect keypoints")
     skeleton_specs["lines"] = lines
 
@@ -77,8 +77,21 @@ def parse_member_junip3r(num_members: int, member_index: int, member_dict: Dict[
 
     if "name" not in member_dict:
         member_dict["name"] = f"Member {member_index + 1}"
+
     if "type" not in member_dict:
-        member_dict["type"] = "keypoint"
+        member_dict["type"] = LabellerObjectType.KEYPOINT
+    else:
+        if member_dict["type"] == "keypoint":
+            member_dict["type"] = LabellerObjectType.KEYPOINT
+        elif member_dict["type"] == "bounding_box":
+            member_dict["type"] = LabellerObjectType.BOUNDING_BOX
+        elif member_dict["type"] == "polygon":
+            member_dict["type"] = LabellerObjectType.POLYGON
+        elif member_dict["type"] == "polyline":
+            member_dict["type"] = LabellerObjectType.POLYLINE
+        else:
+            raise ValueError(f"Invalid member type for member {member_index}: {member_dict['type']}")
+
     if "color" not in member_dict:
         member_dict["color"] = color_from_hue(member_index / num_members)
     elif isinstance(member_dict["color"], str):
@@ -155,7 +168,7 @@ def parse_instance_type_yolo_detect(num_instance_types: int, instance_type_index
     else:
         raise ValueError(f"Invalid color format for instance type: {instance_type_dict['color']}")
 
-    members = [MemberSpecs(name, "bounding_box", color)]
+    members = [MemberSpecs(name, LabellerObjectType.BOUNDING_BOX, color)]
     return InstanceType(name, members, SkeletonSpecs([], (0, 0, 0)))
 
 
@@ -197,14 +210,14 @@ def parse_bounding_box_yolo_pose(num_instance_types: int, instance_type_index: i
     if bounding_box_specs["mode"] != "manual":
         return None
 
-    return MemberSpecs("Bounding Box", "bounding_box", color)
+    return MemberSpecs("Bounding Box", LabellerObjectType.BOUNDING_BOX, color)
 
 
 def parse_keypoint_yolo_pose(num_keypoints: int, keypoint_index: int, member_dict: Dict[str, Any] | str) -> MemberSpecs:
     if isinstance(member_dict, str):
         member_dict = {"name": member_dict}
 
-    member_dict["type"] = "keypoint"
+    member_dict["type"] = LabellerObjectType.KEYPOINT
 
     if "name" not in member_dict:
         member_dict["name"] = f"Keypoint {keypoint_index + 1}"
@@ -293,9 +306,9 @@ def parse_instance_legacy(instance_type_dict: Dict[str, Any]) -> InstanceType:
 
     bounding_box = None
     if bounding_box_type == "manual":
-        bounding_box = MemberSpecs("Bounding Box", "bounding_box", bounding_box_color)
+        bounding_box = MemberSpecs("Bounding Box", LabellerObjectType.BOUNDING_BOX, bounding_box_color)
 
-    keypoints = [MemberSpecs(point_name, "keypoint", color) for point_name, color in zip(point_names, colors)]
+    keypoints = [MemberSpecs(point_name, LabellerObjectType.KEYPOINT, color) for point_name, color in zip(point_names, colors)]
     if bounding_box is not None:
         members = [bounding_box, *keypoints]
     else:
@@ -344,4 +357,4 @@ def parse_config(config: Dict[str, Any]):
 
     tags = config.get("tags") or []
 
-    return instance_types, expected_instance_types, tags
+    return mode, instance_types, expected_instance_types, tags

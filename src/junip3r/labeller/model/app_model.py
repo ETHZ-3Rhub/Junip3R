@@ -16,6 +16,7 @@ class AppModel(IUndoModel):
             config_repository: IConfigRepository,
             label_repository: ILabelRepository,
             selection_repository: ISelectionRepository,
+            cache: bool = True,
             parent=None
     ):
         super().__init__(parent)
@@ -24,6 +25,8 @@ class AppModel(IUndoModel):
         self._config_repository = config_repository
         self._label_repository = label_repository
         self._selection_repository = selection_repository
+
+        self._cache = cache
 
         self._num_images = self._image_repository.get_num_images()
 
@@ -35,37 +38,37 @@ class AppModel(IUndoModel):
         self._new_instance_type: Optional[Tuple[int, Optional[IInstanceType]]] = None
 
     def _get_image(self, image_index: int) -> np.ndarray:
-        if self._image is None or self._image[0] != image_index:
+        if not self._cache or self._image is None or self._image[0] != image_index:
             self._image = (image_index, self._image_repository.get_image(image_index))
         _, image = self._image
         return image
 
     def _get_instance_types(self, image_index: int) -> Sequence[IInstanceType]:
-        if self._instance_types is None or self._instance_types[0] != image_index:
+        if not self._cache or self._instance_types is None or self._instance_types[0] != image_index:
             self._instance_types = (image_index, self._config_repository.get_instance_types(image_index))
         _, instance_types = self._instance_types
         return instance_types
 
     def _get_expected_instances(self, image_index: int) -> Sequence[IInstanceType]:
-        if self._expected_instances is None or self._expected_instances[0] != image_index:
+        if not self._cache or self._expected_instances is None or self._expected_instances[0] != image_index:
             self._expected_instances = (image_index, self._config_repository.get_expected_instances(image_index))
         _, expected_instances = self._expected_instances
         return expected_instances
 
     def _get_instances(self, image_index: int) -> Sequence[IInstance]:
-        if self._instances is None or self._instances[0] != image_index:
+        if not self._cache or self._instances is None or self._instances[0] != image_index:
             self._instances = (image_index, self._label_repository.get_instances(image_index))
         _, instances = self._instances
         return instances
 
     def _get_selection(self, image_index: int) -> Selection:
-        if self._selection is None or self._selection[0] != image_index:
+        if not self._cache or self._selection is None or self._selection[0] != image_index:
             self._selection = (image_index, self._selection_repository.get_selection(image_index))
         _, selection = self._selection
         return selection
 
     def _get_new_instance_type(self, image_index: int) -> IInstanceType | None:
-        if self._new_instance_type is None or self._new_instance_type[0] != image_index:
+        if not self._cache or self._new_instance_type is None or self._new_instance_type[0] != image_index:
             self._new_instance_type = (image_index, self._selection_repository.get_new_instance_type(image_index))
         _, new_instance_type = self._new_instance_type
         return new_instance_type
@@ -118,6 +121,7 @@ class AppModel(IUndoModel):
         instance = self.get_instance(image_index, instance_id)
         if instance is None:
             return
+        # TODO: Gneerate correct name
         new_instance = instance_type.new_instance(instance_id=instance.instance_id, name=instance_type.name)
 
         for member_index, (old_member, new_member) in enumerate(zip(instance.members, new_instance.members)):

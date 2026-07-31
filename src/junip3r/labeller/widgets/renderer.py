@@ -64,62 +64,36 @@ class Renderer:
         vx, vy = self.camera_state.world_to_view(wx, wy)
         return int(vx), int(vy)
 
-    def _numpy_to_qimage_owned(self, img: np.ndarray) -> QImage:
-        """
-        Build a QImage and deep-copy it so Qt owns the memory safely.
-        Supports uint8 grayscale (H,W) and uint8 RGB (H,W,3).
-        """
-        if img.dtype != np.uint8:
-            img = img.astype(np.uint8, copy=False)
-
-        if img.ndim == 2:
-            h, w = img.shape
-            q = QImage(img.data, w, h, img.strides[0], QImage.Format.Format_Grayscale8)
-            return q.copy()
-
-        if img.ndim == 3 and img.shape[2] == 3:
-            h, w, _ = img.shape
-
-            # If coming from OpenCV (BGR), uncomment this:
-            # img = img[:, :, ::-1].copy()
-
-            q = QImage(img.data, w, h, img.strides[0], QImage.Format.Format_RGB888)
-            return q.copy()
-
-        raise ValueError(f"Unsupported image shape: {img.shape}")
-
     # ---- Main image draw ----
-    def draw_image(self, img: np.ndarray) -> ImageFrame:
+    def draw_image(self, img: QImage) -> ImageFrame:
         """Draw image and return updated frame with image size."""
-        frame = self.frame.with_size(img.shape[1], img.shape[0])
-        qimg = self._numpy_to_qimage_owned(img)
 
         # visible rect in world coords
         wl, wt, wr, wb = self.camera_state.world_rect_visible()
 
         # convert to image pixel coords
-        il, it = frame.world_to_imagepx(wl, wt)
-        ir, ib = frame.world_to_imagepx(wr, wb)
+        il, it = self.frame.world_to_imagepx(wl, wt)
+        ir, ib = self.frame.world_to_imagepx(wr, wb)
 
         # clamp to image bounds
-        clamped = frame.clamp_image_rect(il, it, ir, ib)
+        clamped = self.frame.clamp_image_rect(il, it, ir, ib)
         if clamped is None:
-            return frame
+            return self.frame
         il, it, ir, ib = clamped
 
         # source rect in image pixels
         src = QRectF(il, it, ir - il, ib - it)
 
         # destination rect in view pixels, matching the same region
-        wcl, wct = frame.imagepx_to_world(il, it)
-        wcr, wcb = frame.imagepx_to_world(ir, ib)
+        wcl, wct = self.frame.imagepx_to_world(il, it)
+        wcr, wcb = self.frame.imagepx_to_world(ir, ib)
         vtl = QPointF(*self.camera_state.world_to_view(wcl, wct))
         vbr = QPointF(*self.camera_state.world_to_view(wcr, wcb))
         dst = QRectF(vtl, vbr).normalized()
 
-        self.painter.drawImage(dst, qimg, src)
+        self.painter.drawImage(dst, img, src)
 
-        return frame
+        return self.frame
 
     # ---- Overlay methods (ported from your original renderer) ----
     def draw_keypoint(self, p_image01, color: QColor, visible: bool = True, highlighted: bool = False, opacity: float=1.0):
@@ -256,7 +230,7 @@ class Renderer:
         radius = self.BOUNDING_BOX_CORNER_RADIUS_HIGHLIGHTED
 
         self.painter.setOpacity(opacity)
-        self.painter.setPen(QPen(color, self.KEYPOINT_LINE_WIDTH))
+        self.painter.setPen(QPen(Qt.PenStyle.NoPen))
         self.painter.setBrush(QBrush(color))
         self.painter.drawEllipse(QPointF(x, y), radius, radius)
 

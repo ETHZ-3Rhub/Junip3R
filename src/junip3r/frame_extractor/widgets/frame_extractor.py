@@ -475,6 +475,9 @@ class FrameExtractor(Ui_FrameExtractor, QMainWindow):
         self.action_open_labeller.setVisible(show_labeller)
         self.action_open_labeller.triggered.connect(self.open_labeller)
 
+        self.btn_open_setup.setVisible(show_labeller)
+        self.btn_open_setup.clicked.connect(self.open_setup)
+
         self.btn_open_labeller.setVisible(show_labeller)
         self.btn_open_labeller.clicked.connect(self.open_labeller)
 
@@ -572,6 +575,9 @@ class FrameExtractor(Ui_FrameExtractor, QMainWindow):
 
     def open_labeller(self):
         self.switch_to.emit("labeller")
+
+    def open_setup(self):
+        self.switch_to.emit("setup")
 
     def dragEnterEvent(self, event):
         # Accept video files

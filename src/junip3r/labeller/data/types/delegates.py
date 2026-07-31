@@ -269,8 +269,11 @@ class Polyline:
 
 @dataclass
 class Skeleton:
-    lines: List[Tuple[int, int]] = field(default_factory=list)
+    lines: Sequence[Tuple[int, int]] = field(default_factory=list)
     color: Color = (0, 0, 0)
+
+    def with_lines(self, lines: Sequence[Tuple[int, int]]) -> Self:
+        return replace(self, lines=tuple(lines))
 
 
 @dataclass
