@@ -5,7 +5,7 @@ from typing import Sequence, Tuple, Self, Optional
 from junip3r.common.config.data import InstanceTypeConfig, MemberConfig, SkeletonConfig, Config
 from junip3r.labeller.config.data import MemberSpecs, SkeletonSpecs
 from junip3r.labeller.data.types.abc import LabellerObjectType, Color
-from junip3r.common.config.abc import ConfigMode, IMemberConfig, ISkeletonConfig, IInstanceTypeConfig, IConfig
+from junip3r.common.config.abc import ConfigMode
 from junip3r.setup.data.types.abc import ISetupInstanceType, ISetupMember, ISetupSkeleton, \
     ISetupConfig
 
@@ -21,7 +21,7 @@ class SetupMember:
     immortal: bool = False
 
     @classmethod
-    def from_config(cls, config: IMemberConfig) -> Self:
+    def from_config(cls, config: MemberConfig) -> Self:
         return cls(type=config.type, name=config.name, size=config.size, color=config.color)
 
     @classmethod
@@ -54,7 +54,7 @@ class SetupSkeleton:
     color: Optional[Color] = None
 
     @classmethod
-    def from_config(cls, config: ISkeletonConfig, members: Sequence[ISetupMember]) -> Self:
+    def from_config(cls, config: SkeletonConfig, members: Sequence[ISetupMember]) -> Self:
         lines = [(members[i1].id, members[i2].id) for i1, i2 in config.lines]
         return cls(lines=lines, color=config.color)
 
@@ -96,7 +96,7 @@ class SetupInstanceType:
     skeleton: SetupSkeleton = SetupSkeleton()
 
     @classmethod
-    def from_config(cls, config: IInstanceTypeConfig) -> Self:
+    def from_config(cls, config: InstanceTypeConfig) -> Self:
         members = [SetupMember.from_config(m) for m in config.members]
         skeleton = SetupSkeleton.from_config(config.skeleton, members)
         return cls(name=config.name, members=members, skeleton=skeleton)
@@ -146,7 +146,7 @@ class SetupConfig:
     expected_instance_types: Sequence[Tuple[str, SetupInstanceType]] = ()
 
     @classmethod
-    def from_config(cls, config: IConfig) -> Self:
+    def from_config(cls, config: Config) -> Self:
         instance_types = [SetupInstanceType.from_config(it) for it in config.instance_types]
         instance_types_by_name = {it.name: it for it in instance_types}
         expected_instance_types = [(str(uuid.uuid4()), instance_types_by_name[it.name]) for it in

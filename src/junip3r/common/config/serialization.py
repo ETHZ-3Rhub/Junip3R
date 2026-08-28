@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional, Tuple, List, Sequence
 
 from PySide6.QtGui import QColor
 
-from junip3r.common.config.abc import IInstanceTypeConfig, IMemberConfig, ConfigMode, IConfig, ISkeletonConfig
+from junip3r.common.config.abc import ConfigMode
 from junip3r.common.config.data import MemberConfig, InstanceTypeConfig, Config, SkeletonConfig
 from junip3r.labeller.data.types.abc import Color, LabellerObjectType
 
@@ -24,7 +24,7 @@ def _string_to_color(color_string: str) -> Optional[Color]:
             return color.red(), color.green(), color.blue()
 
 
-def _serialize_skeleton(skeleton: ISkeletonConfig, members: Sequence[IMemberConfig]) -> Dict[str, Any] | List[Tuple[str, str]]:
+def _serialize_skeleton(skeleton: SkeletonConfig, members: Sequence[MemberConfig]) -> Dict[str, Any] | List[Tuple[str, str]]:
     member_names = [s.name for s in members]
     lines = [(member_names[i1], member_names[i2]) for i1, i2 in skeleton.lines]
     color = skeleton.color
@@ -34,7 +34,7 @@ def _serialize_skeleton(skeleton: ISkeletonConfig, members: Sequence[IMemberConf
         return lines
 
 
-def _deserialize_skeleton(data: Dict[str, Any] | List[Tuple[str, str]], members: Sequence[IMemberConfig]) -> SkeletonConfig:
+def _deserialize_skeleton(data: Dict[str, Any] | List[Tuple[str, str]], members: Sequence[MemberConfig]) -> SkeletonConfig:
     color_string: Optional[str] = None
     color: Optional[Color] = None
 
@@ -55,7 +55,7 @@ def _deserialize_skeleton(data: Dict[str, Any] | List[Tuple[str, str]], members:
 
 class YoloDetectInstanceTypeSerializer:
     @classmethod
-    def serialize(cls, instance_type: IInstanceTypeConfig) -> Dict[str, Any] | str:
+    def serialize(cls, instance_type: InstanceTypeConfig) -> Dict[str, Any] | str:
         bounding_box = instance_type.members[0]
         color = bounding_box.color
         if color is not None:
@@ -83,7 +83,7 @@ class YoloDetectInstanceTypeSerializer:
 
 class YoloPoseInstanceTypeSerializer:
     @classmethod
-    def serialize(cls, instance_type: IInstanceTypeConfig) -> Dict[str, Any]:
+    def serialize(cls, instance_type: InstanceTypeConfig) -> Dict[str, Any]:
         instance_dict: Dict[str, Any] = {"name": instance_type.name}
         if len(instance_type.members) > 0 and instance_type.members[0].type == LabellerObjectType.BOUNDING_BOX:
             color = instance_type.members[0].color
@@ -156,7 +156,7 @@ class YoloPoseInstanceTypeSerializer:
 
 class JuniperInstanceTypeSerializer:
     @classmethod
-    def serialize(cls, instance_type: IInstanceTypeConfig) -> Dict[str, Any]:
+    def serialize(cls, instance_type: InstanceTypeConfig) -> Dict[str, Any]:
         instance_dict: Dict[str, Any] = {"name": instance_type.name}
 
         members_data = [cls.serialize_member(member) for member in instance_type.members]
@@ -174,7 +174,7 @@ class JuniperInstanceTypeSerializer:
         return InstanceTypeConfig(name=name, members=members, skeleton=skeleton)
 
     @classmethod
-    def serialize_member(cls, member: IMemberConfig) -> Dict[str, Any]:
+    def serialize_member(cls, member: MemberConfig) -> Dict[str, Any]:
         member_type = "keypoint"
         match member.type:
             case LabellerObjectType.KEYPOINT:
@@ -236,7 +236,7 @@ class JuniperInstanceTypeSerializer:
 
 
 class ConfigSerializer:
-    def serialize(self, config: IConfig) -> Dict[str, Any]:
+    def serialize(self, config: Config) -> Dict[str, Any]:
         mode = config.mode
         config_dict: Dict[str, Any] = {"mode": self._serialize_mode(config.mode)}
 
@@ -318,13 +318,17 @@ class ConfigSerializer:
         data["bounding_box"] = {"mode": bounding_box_mode, "color": bounding_box_color}
 
         keypoint_names = data.pop("points", [])
-        keypoint_colors = data.get("colors")
+        keypoint_colors = data.pop("colors", None)
 
         if keypoint_colors is None:
             keypoint_colors = [None] * len(keypoint_names)
 
         keypoints = [{"name": name, "color": color} for name, color in zip(keypoint_names, keypoint_colors)]
         data["keypoints"] = keypoints
+
+        skeleton_color = data.pop("skeleton_color", None)
+        if skeleton_color is not None and "skeleton" in data:
+            data["skeleton"] = {"lines": data["skeleton"], "color": skeleton_color}
 
         return data
 

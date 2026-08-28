@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QVBoxLayout, QFormLayout, QLineEdit, QToolButton, 
     QSizePolicy, QHBoxLayout, QListView, QLabel, QFrame, QDialogButtonBox, QComboBox, \
     QStackedWidget, QWidget, QMessageBox, QPushButton
 
+from junip3r.common.config.abc import ConfigMode
 from junip3r.common.labels.serialization import LabelSerializer
 from junip3r.labeller.config.parser import parse_config
 from junip3r.labeller.data.repository.label import InstanceMapper
@@ -19,6 +20,13 @@ from junip3r.labeller.model.camera_model import CameraModel
 from junip3r.labeller.widgets.pose_image import PoseImage
 from junip3r.setup.widgets.preview_pose_image_controller import PreviewPoseImageController
 from junip3r.setup.model.preview_pose_image_model import PreviewPoseImageModel
+
+# Matches the QComboBox item data set up in NewProjectWindow's mode dropdown below.
+_MODE_NAMES = {
+    ConfigMode.JUNIPER: "junip3r",
+    ConfigMode.YOLO_DETECT: "yolo_detect",
+    ConfigMode.YOLO_POSE: "yolo_pose",
+}
 
 
 @dataclass
@@ -45,10 +53,10 @@ def load_preset(preset_folder: Path) -> Preset:
     name = preset_folder.name
 
     config_dict = yaml.safe_load(open(config_file, 'r'))
-    mode, instance_types, *_ = parse_config(config_dict)
+    labeller_config = parse_config(config_dict)
+    instance_types = labeller_config.instance_types
 
-    if len(instance_types) == 0:
-        mode = None
+    mode = _MODE_NAMES[labeller_config.mode] if len(instance_types) > 0 else None
 
     image = cv2.imread(str(image_file))
     if image is None:

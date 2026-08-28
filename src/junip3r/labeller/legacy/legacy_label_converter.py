@@ -1,13 +1,13 @@
 from pathlib import Path
-from typing import List
+from typing import Sequence
 
 from junip3r.common.labels.legacy import LegacyLabelLoader, InstanceType as LegacyInstanceType
 from junip3r.common.labels.serialization import LabelSerializer
-from junip3r.labeller.data.types.abc import IInstanceType, IInstance, LabellerObjectType, IBoundingBox, IKeypoint
+from junip3r.labeller.data.types.abc import IInstanceType, LabellerObjectType
 
 
 class LegacyLabelConverter:
-    def __init__(self, instance_types: List[IInstanceType]):
+    def __init__(self, instance_types: Sequence[IInstanceType]):
         legacy_instance_types = []
         for instance_type in instance_types:
             instance = instance_type.new_instance(None, "")

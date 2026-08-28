@@ -1,6 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, List, Tuple, Sequence
 
+from junip3r.common.config.abc import ConfigMode
 from junip3r.labeller.data.types.abc import Color, InstanceID, ILabellerObject, IInstance, LabellerObjectType
 from junip3r.labeller.data.types.delegates import Keypoint, BoundingBox, Polygon, Polyline, Skeleton, Instance
 
@@ -47,3 +48,11 @@ class InstanceType:
         ]
         skeleton = self.skeleton.new_instance()
         return Instance(instance_id, name, self, tuple(members), skeleton)
+
+
+@dataclass(frozen=True)
+class LabellerConfig:
+    mode: ConfigMode
+    instance_types: Sequence[InstanceType] = field(default_factory=tuple)
+    expected_instance_types: Sequence[InstanceType] = field(default_factory=tuple)
+    tags: Sequence[str] = field(default_factory=tuple)

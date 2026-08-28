@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, cast
+from typing import List, cast, Sequence, Iterable
 
 from junip3r.common.labels.data import Instance as DataInstance, Keypoint as DataKeypoint, \
     BoundingBox as DataBoundingBox, Polygon as DataPolygon, Polyline as DataPolyline, IMember as IDataMember
@@ -10,13 +10,13 @@ from junip3r.labeller.data.types.abc import IInstance, IKeypoint, IBoundingBox, 
 
 
 class InstanceMapper:
-    def __init__(self, instance_types: List[IInstanceType]):
+    def __init__(self, instance_types: Iterable[IInstanceType]):
         self._instance_types = {it.name: it for it in instance_types}
 
-    def from_data(self, instances: List[DataInstance]) -> List[IInstance]:
+    def from_data(self, instances: Iterable[DataInstance]) -> List[IInstance]:
         return [self._instance_from_data(instance) for instance in instances]
 
-    def to_data(self, instances: List[IInstance]):
+    def to_data(self, instances: Iterable[IInstance]) -> List[DataInstance]:
         return [self._instance_to_data(instance) for instance in instances]
 
     def _keypoint_to_data(self, member: IKeypoint) -> DataKeypoint:
@@ -102,17 +102,17 @@ class InstanceMapper:
 
 
 class JuniperLabelRepository(ILabelRepository):
-    def __init__(self, instance_types: List[IInstanceType], label_files: List[Path]):
+    def __init__(self, instance_types: Iterable[IInstanceType], label_files: Sequence[Path]):
         self._label_files = label_files
         self._loader = LabelSerializer()
         self._mapper = InstanceMapper(instance_types)
 
-    def get_instances(self, image_index: int) -> List[IInstance]:
+    def get_instances(self, image_index: int) -> Sequence[IInstance]:
         label_file = self._label_files[image_index]
         data = self._loader.load_instances(label_file)
         return self._mapper.from_data(data)
 
-    def set_instances(self, image_index: int, instances: List[IInstance]):
+    def set_instances(self, image_index: int, instances: Iterable[IInstance]):
         label_file = self._label_files[image_index]
         data = self._mapper.to_data(instances)
         self._loader.write_instances(label_file, data)
