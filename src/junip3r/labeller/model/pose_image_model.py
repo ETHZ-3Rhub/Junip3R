@@ -147,7 +147,10 @@ class PoseImageModel(QObject):
         self._flush()
 
     def move_keypoint(self, instance_id: InstanceID, member_index: int, p: Point):
-        self._set_keypoint(instance_id, member_index, p)
+        assert instance_id is not None, "Instance ID should not be None"
+        member = cast(IKeypoint, self.get_member(instance_id, member_index))
+        visibility = member.visibility
+        self._set_keypoint(instance_id, member_index, p, visibility)
         self._flush()
 
     def set_keypoint_visibility(self, instance_id: InstanceID, member_index: int, visibility: float):

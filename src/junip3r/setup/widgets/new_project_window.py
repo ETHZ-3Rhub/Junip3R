@@ -11,8 +11,9 @@ from PySide6.QtWidgets import QVBoxLayout, QFormLayout, QLineEdit, QToolButton, 
     QSizePolicy, QHBoxLayout, QListView, QLabel, QFrame, QDialogButtonBox, QComboBox, \
     QStackedWidget, QWidget, QMessageBox, QPushButton
 
+from junip3r.common.labels.serialization import LabelSerializer
 from junip3r.labeller.config.parser import parse_config
-from junip3r.labeller.data.repository.label import JuniperLabelLoader
+from junip3r.labeller.data.repository.label import InstanceMapper
 from junip3r.labeller.data.types.abc import IInstanceType, IInstance
 from junip3r.labeller.model.camera_model import CameraModel
 from junip3r.labeller.widgets.pose_image import PoseImage
@@ -53,7 +54,8 @@ def load_preset(preset_folder: Path) -> Preset:
     if image is None:
         raise ValueError("Failed to load image")
 
-    instances = JuniperLabelLoader(instance_types).load_instances(labels_file)
+    data = LabelSerializer().load_instances(labels_file)
+    instances = InstanceMapper(instance_types).from_data(data)
 
     return Preset(name, mode, image, instance_types, instances, config_file)
 

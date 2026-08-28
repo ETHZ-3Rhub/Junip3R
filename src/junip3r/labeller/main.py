@@ -15,11 +15,11 @@ from junip3r.labeller.data.repository.context import ContextRepository
 from junip3r.labeller.data.repository.image import ImageRepository
 from junip3r.labeller.data.repository.label import JuniperLabelRepository
 from junip3r.labeller.data.types.abc import IInstanceType, Selection
+from junip3r.labeller.export.yolo.set_split import SetSplitRepository
 from junip3r.labeller.legacy.legacy_label_converter import LegacyLabelConverter
 from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.model.context_model import ContextModel
 from junip3r.labeller.model.image_settings_model import ImageSettingsModel
-from junip3r.labeller.model.pose_image_model import PoseImageModel
 from junip3r.labeller.widgets.main_window import EditorMainWindow
 from junip3r.logging_setup import create_logging_manager
 
@@ -123,14 +123,13 @@ def from_config_file(config_file: Path, integrated: bool = False) -> EditorMainW
     label_files = [lf for lf in (find_label_file(f) for f in image_files)]
     label_repository = JuniperLabelRepository(instance_types, label_files)
 
-    app_model = AppModel(image_repository, config_repository, label_repository, SelectionRepository())
-    pose_image_model = PoseImageModel(app_model)
+    set_split_repository = SetSplitRepository(project_folder / "_labeller" / "set_split.yaml")
 
-    if context_model is not None:
-        pose_image_model.image_navigation_state_changed.connect(context_model.set_image_navigation_state)
+    app_model = AppModel(image_repository, config_repository, label_repository, SelectionRepository())
 
     editor = EditorMainWindow(show_frame_extractor=integrated)
-    editor.set_model(pose_image_model, context_model, image_settings_model)
+    editor.set_model(app_model, context_model, image_settings_model)
+    editor.set_set_split_repository(set_split_repository)
 
     return editor
 

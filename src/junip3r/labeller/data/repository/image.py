@@ -18,7 +18,11 @@ class ImageRepository(IImageRepository):
         image_file = self._image_files[image_index]
         image = cv2.imread(str(image_file))
         assert image is not None, f"Failed to read image from {image_file}"
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         return image
 
     def get_image_name(self, image_index: int) -> str:
         return self._image_files[image_index].stem
+
+    def get_image_file(self, image_index: int) -> Path:
+        return self._image_files[image_index]
