@@ -10,7 +10,7 @@ authors = [
 ]
 description = "A GUI application for labelling pose estimation data including bounding boxes and keypoints"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = { text = "AGPL-3.0-or-later" }
 dependencies = [
   "PySide6>=6.7,<7",
