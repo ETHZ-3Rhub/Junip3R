@@ -1,3 +1,5 @@
+import random
+
 from junip3r.labeller.export.yolo.set_split import (
     SetSplit,
     SetSplitConfig,
@@ -125,6 +127,15 @@ def test_auto_split_assigns_all_unassigned_groups_matching_target_counts():
     assert split.num_train == 2
     assert split.num_val == 2
     assert split.num_unassigned == 0
+
+
+def test_auto_split_is_deterministic_given_an_rng():
+    images = [FakeTaggedImage(f"a{i}") for i in range(4)]
+    split = SetSplit(images, SetSplitConfig(auto_split_ratio=0.5))
+
+    split.auto_split(rng=random.Random(1234))
+
+    assert {g["name"]: g["set"] for g in split.groups} == {"a0": "val", "a1": "train", "a2": "train", "a3": "val"}
 
 
 def test_auto_split_leaves_already_assigned_groups_untouched():

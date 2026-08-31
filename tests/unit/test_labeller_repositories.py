@@ -103,10 +103,8 @@ def test_label_repository_round_trips_instances_through_real_instance_types(tmp_
     assert len(loaded) == 1
     assert loaded[0].instance_id == "i1"
     assert loaded[0].instance_type is instance_type
-    # box/point come back from the JSON round trip as lists, not tuples - see the same
-    # finding documented against common/labels/serialization.py in TESTING.md.
-    assert [tuple(c) for c in loaded[0].members[0].box] == [(0.0, 0.0), (1.0, 1.0)]
-    assert tuple(loaded[0].members[1].p) == (0.5, 0.5)
+    assert loaded[0].members[0].box == ((0.0, 0.0), (1.0, 1.0))
+    assert loaded[0].members[1].p == (0.5, 0.5)
 
 
 def test_label_repository_get_instances_on_missing_file_returns_empty(tmp_path: Path):

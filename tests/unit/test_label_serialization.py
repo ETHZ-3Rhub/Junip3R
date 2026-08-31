@@ -6,12 +6,6 @@ from junip3r.common.labels.data import BoundingBox, Instance, Keypoint, Polygon,
 from junip3r.common.labels.serialization import LabelSerializer
 
 
-def _to_tuples(value):
-    if isinstance(value, list):
-        return tuple(_to_tuples(v) for v in value)
-    return value
-
-
 def test_round_trip_preserves_all_member_types(tmp_path: Path):
     instances = [
         Instance(
@@ -36,10 +30,8 @@ def test_round_trip_preserves_all_member_types(tmp_path: Path):
     assert (loaded_instance.id, loaded_instance.type, loaded_instance.name) == ("abc", "mouse", "Mouse 1")
 
     nose, box, poly, line = loaded_instance.members
-    # Keypoint.p / BoundingBox.box round-trip as plain lists (json has no tuple type and
-    # the loader doesn't convert them back), unlike Polygon/Polyline.points below, which do.
-    assert _to_tuples(nose.p) == (1.0, 2.0)
-    assert _to_tuples(box.box) == ((0.0, 0.0), (1.0, 1.0))
+    assert nose.p == (1.0, 2.0)
+    assert box.box == ((0.0, 0.0), (1.0, 1.0))
     assert poly.points == [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]
     assert line.points == [(0.0, 0.0), (1.0, 1.0)]
 
