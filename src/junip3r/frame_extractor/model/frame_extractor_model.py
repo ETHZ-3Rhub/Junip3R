@@ -1,8 +1,6 @@
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple
 
-import cv2
-import numpy as np
 from PySide6.QtCore import QObject, Signal
 
 from junip3r.frame_extractor.data.repository.abc import IVideoRepository, IFrameRepository, ITagRepository
@@ -27,7 +25,6 @@ def _generate_video_id(video_file: Path, videos: List[Video]):
 class FrameExtractorModel(QObject):
     videos_changed = Signal(list)
     current_video_changed = Signal(object, object)  # video_id: int, video: Video
-    current_frame_changed = Signal(object, object)  # frame_index: int, frame: np.ndarray
 
     frame_indices_changed = Signal(object, object)  # video_id: str, selected_frames: List[int]
     current_video_frame_indices_changed = Signal(set)  # selected_frames: List[int]
@@ -44,10 +41,6 @@ class FrameExtractorModel(QObject):
         self._frames: Dict[Tuple[str, int], Frame] = {(f.video_id, f.frame_index): f for f in self._frame_repository.get_frames()}
 
         self._current_video_id: Optional[str] = None
-        self._current_frame_index: int = 0
-
-        self._current_video_vc: Optional[cv2.VideoCapture] = None
-        self._current_frame: Optional[np.ndarray] = None
 
     def get_videos(self) -> List[Video]:
         return list(self._videos.values())
@@ -64,44 +57,15 @@ class FrameExtractorModel(QObject):
     def get_current_video(self) -> Optional[Video]:
         return self.get_video(self._current_video_id) if self._current_video_id is not None else None
 
-    def _try_open_vc(self):
-        video = self.get_current_video()
-        assert video is not None
-        vc = cv2.VideoCapture(str(video.path))
-        if not vc.isOpened():
-            vc.release()
-            return None
-        return vc
-
-    def _try_read_frame(self, frame_index: int = None):
-        vc = self._current_video_vc
-        if vc is None:
-            return None
-        if frame_index is not None:
-            vc.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-        ret, frame = vc.read()
-        if not ret:
-            return None
-        return frame
-
     def set_current_video_id(self, video_id: Optional[str]):
         self._current_video_id = video_id
-        if self._current_video_vc is not None:
-            self._current_video_vc.release()
-            self._current_video_vc = None
-
-        self._current_frame = None
-        self._current_frame_index = 0
 
         video = None
         if video_id is not None:
             video = self.get_video(video_id)
             assert video is not None
-            self._current_video_vc = self._try_open_vc()
-            self._current_frame = self._try_read_frame()
 
         self.current_video_changed.emit(video_id, video)
-        self.current_frame_changed.emit(self._current_frame_index, self._current_frame)
 
         frame_indices = self.get_frame_indices(video_id) if video_id is not None else []
         self.current_video_frame_indices_changed.emit(frame_indices)
@@ -156,11 +120,6 @@ class FrameExtractorModel(QObject):
         if video_id == self._current_video_id:
             self.current_video_frame_indices_changed.emit(video_frames)
 
-    def get_num_frames(self) -> int:
-        if self._current_video_vc is None or self._current_video_vc.isOpened() is False:
-            return 0
-        return int(self._current_video_vc.get(cv2.CAP_PROP_FRAME_COUNT))
-
     def get_frame_indices(self, video_id: str) -> List[int]:
         return list(f.frame_index for f in self._frames.values() if f.video_id == video_id)
 
@@ -206,24 +165,3 @@ class FrameExtractorModel(QObject):
         kw_tags["video_name"] = video_id
         self._tag_repository.set_tags(frame.image_name, kw_tags, tags)
 
-    def get_current_frame_index(self) -> Optional[int]:
-        return self._current_frame_index
-
-    def get_current_frame(self) -> Optional[np.ndarray]:
-        return self._current_frame
-
-    def has_next_frame(self) -> bool:
-        return self._current_frame_index + 1 < self.get_num_frames()
-
-    def set_current_frame_index(self, frame_index: int):
-        if frame_index < 0 or frame_index >= self.get_num_frames():
-            return
-        self._current_frame_index = frame_index
-        self._current_frame = self._try_read_frame(frame_index)
-        self.current_frame_changed.emit(frame_index, self._current_frame)
-
-    def previous_frame(self):
-        self.set_current_frame_index(self._current_frame_index - 1)
-
-    def next_frame(self):
-        self.set_current_frame_index(self._current_frame_index + 1)
