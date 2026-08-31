@@ -6,7 +6,7 @@ from junip3r.common.config.abc import ConfigMode
 from junip3r.labeller.config.parser import parse_config
 from junip3r.labeller.data.types.abc import LabellerObjectType
 
-EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "docs" / "Examples"
+EXAMPLES_DIR = Path(__file__).resolve().parents[3] / "docs" / "Examples"
 
 
 def test_yolo_detect_single_instance_type_defaults_to_blue():

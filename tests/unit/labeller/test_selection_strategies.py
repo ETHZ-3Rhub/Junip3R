@@ -1,6 +1,5 @@
 from junip3r.labeller.model.instance_type_selection_strategy import EditorInstanceTypeWorkflow
 from junip3r.labeller.model.member_selection_strategy import EditorMemberSelectionStrategy
-from junip3r.setup.model.preview_member_selection_strategy import PreviewMemberSelectionStrategy
 
 
 class FakeInstanceType:
@@ -179,32 +178,3 @@ def test_editor_invalid_selection_returns_new_instance_slot_or_none():
 
     assert strategy.invalid_selection([new_instance], ("anything", 0)) == (None, 0)
     assert strategy.invalid_selection([FakeInstance("i1", 1)], None) is None
-
-
-# --- PreviewMemberSelectionStrategy (no "new instance" concept, no wraparound) ------
-
-def test_preview_next_member_manual_stays_put_at_the_very_end():
-    strategy = PreviewMemberSelectionStrategy()
-    i1, i2 = FakeInstance("i1", 1), FakeInstance("i2", 1)
-
-    assert strategy.next_member_manual([i1, i2], ("i2", 0)) == ("i2", 0)
-
-
-def test_preview_prev_member_manual_stays_put_at_the_very_start():
-    strategy = PreviewMemberSelectionStrategy()
-    i1, i2 = FakeInstance("i1", 1), FakeInstance("i2", 1)
-
-    assert strategy.prev_member_manual([i1, i2], ("i1", 0)) == ("i1", 0)
-
-
-def test_preview_next_instance_stays_put_when_no_next_instance():
-    strategy = PreviewMemberSelectionStrategy()
-    i1 = FakeInstance("i1", 1)
-
-    assert strategy.next_instance([i1], ("i1", 0)) == ("i1", 0)
-
-
-def test_preview_invalid_selection_always_returns_none():
-    strategy = PreviewMemberSelectionStrategy()
-
-    assert strategy.invalid_selection([FakeInstance("i1", 1)], ("i1", 0)) is None
