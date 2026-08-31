@@ -19,7 +19,6 @@ instance_types:
   - headcentre
   - neck
   - earl
-  ...
 ```
 
 ## Optional fields

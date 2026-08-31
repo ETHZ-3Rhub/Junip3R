@@ -96,13 +96,15 @@ class LabelSerializer:
 
     def _keypoint_from_dict(self, data: dict) -> Keypoint:
         name = data.get("name", "Keypoint")
-        p = data.get("point", None)
+        point = data.get("point", None)
+        p = (float(point[0]), float(point[1])) if point is not None else None
         visibility = data.get("visibility", 2.0)
         return Keypoint(name, p, visibility)
 
     def _bounding_box_from_dict(self, data: dict) -> BoundingBox:
         name = data.get("name", "BoundingBox")
-        box = data.get("box", None)
+        box_data = data.get("box", None)
+        box = tuple((float(x), float(y)) for x, y in box_data) if box_data is not None else None
         return BoundingBox(name, box)
 
     def _polygon_from_dict(self, data: dict) -> Polygon:

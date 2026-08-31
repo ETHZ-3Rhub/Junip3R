@@ -237,7 +237,7 @@ class ExpectedInstanceList(QWidget):
 
         for instance_type in self._state.instance_types:
             action = menu.addAction(instance_type.name)
-            action.triggered.connect(lambda checked, id=instance_type.id: self._add_instance(id))
+            action.triggered.connect(lambda checked, id_=instance_type.id: self._add_instance(id_))
 
     def _add_instance(self, instance_type_id: str):
         self.instance_added.emit(instance_type_id)

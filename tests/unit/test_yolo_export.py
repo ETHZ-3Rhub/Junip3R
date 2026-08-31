@@ -1,0 +1,123 @@
+import pytest
+
+from junip3r.labeller.data.types.delegates import BoundingBox, Instance, Keypoint
+from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import (
+    MappingYoloPoseInstanceConverter,
+    _box_to_xywh,
+)
+from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstance, YoloPoseInstanceTypeConfig
+from junip3r.labeller.export.yolo.serialization.yolo_label_writer import YOLOPoseLabelWriter
+
+
+class FakeInstanceType:
+    def __init__(self, name):
+        self.name = name
+
+
+def _instance(instance_type_name, members):
+    return Instance(instance_id="i1", name="inst", instance_type=FakeInstanceType(instance_type_name), members=tuple(members))
+
+
+# --- _box_to_xywh ---------------------------------------------------------------------
+
+def test_box_to_xywh_converts_corners_to_center_size():
+    assert _box_to_xywh(((0.0, 0.0), (4.0, 2.0))) == (2.0, 1.0, 4.0, 2.0)
+
+
+# --- MappingYoloPoseInstanceConverter ---------------------------------------------------
+
+def _config(bounding_box="box", keypoints=None):
+    keypoints = keypoints or {"nose": 0, "tail": 1}
+    return YoloDatasetConfig(
+        class_names=["mouse"],
+        instance_types={"mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box=bounding_box, keypoints=keypoints)},
+    )
+
+
+def test_convert_maps_box_and_keypoints():
+    instance = _instance("mouse", [
+        BoundingBox(name="box", box=((0.0, 0.0), (4.0, 2.0))),
+        Keypoint(name="nose", p=(1.0, 1.0), visibility=1.0),
+        Keypoint(name="tail", p=(3.0, 1.0), visibility=0.9),
+    ])
+
+    result = MappingYoloPoseInstanceConverter(_config()).convert([instance])
+
+    assert len(result) == 1
+    assert result[0].class_index == 0
+    assert result[0].box == (2.0, 1.0, 4.0, 2.0)
+    assert result[0].keypoints == [(1.0, 1.0, 1.0), (3.0, 1.0, 0.9)]
+
+
+def test_convert_raises_when_required_bounding_box_member_is_missing():
+    instance = _instance("mouse", [Keypoint(name="nose", p=(1.0, 1.0), visibility=1.0), Keypoint(name="tail", p=(3.0, 1.0), visibility=1.0)])
+
+    with pytest.raises(ValueError, match="missing required bounding box member"):
+        MappingYoloPoseInstanceConverter(_config()).convert([instance])
+
+
+def test_convert_raises_when_bounding_box_member_is_unset():
+    instance = _instance("mouse", [
+        BoundingBox(name="box", box=None),
+        Keypoint(name="nose", p=(1.0, 1.0), visibility=1.0),
+        Keypoint(name="tail", p=(3.0, 1.0), visibility=1.0),
+    ])
+
+    with pytest.raises(ValueError, match="missing required bounding box member"):
+        MappingYoloPoseInstanceConverter(_config()).convert([instance])
+
+
+def test_convert_defaults_box_to_zero_when_mapping_has_no_bounding_box():
+    instance = _instance("mouse", [Keypoint(name="nose", p=(1.0, 1.0), visibility=1.0), Keypoint(name="tail", p=(3.0, 1.0), visibility=1.0)])
+
+    result = MappingYoloPoseInstanceConverter(_config(bounding_box=None)).convert([instance])
+
+    assert result[0].box == (0.0, 0.0, 0.0, 0.0)
+
+
+def test_convert_drops_keypoints_not_present_in_the_mapping():
+    instance = _instance("mouse", [
+        BoundingBox(name="box", box=((0.0, 0.0), (2.0, 2.0))),
+        Keypoint(name="nose", p=(1.0, 1.0), visibility=1.0),
+        Keypoint(name="unmapped", p=(5.0, 5.0), visibility=1.0),
+        Keypoint(name="tail", p=(3.0, 1.0), visibility=1.0),
+    ])
+
+    result = MappingYoloPoseInstanceConverter(_config()).convert([instance])
+
+    # "unmapped" contributes nothing; the two output slots come only from nose/tail
+    assert result[0].keypoints == [(1.0, 1.0, 1.0), (3.0, 1.0, 1.0)]
+
+
+def test_convert_zeroes_coordinates_but_keeps_raw_visibility_below_threshold():
+    instance = _instance("mouse", [
+        BoundingBox(name="box", box=((0.0, 0.0), (2.0, 2.0))),
+        Keypoint(name="nose", p=(1.0, 1.0), visibility=0.3),
+        Keypoint(name="tail", p=(3.0, 1.0), visibility=1.0),
+    ])
+
+    result = MappingYoloPoseInstanceConverter(_config()).convert([instance])
+
+    # coordinates are zeroed for a sub-threshold keypoint, but the raw visibility value
+    # is passed through as-is (only YOLOPoseLabelWriter zeroes it fully on write, below).
+    assert result[0].keypoints[0] == (0.0, 0.0, 0.3)
+
+
+# --- YOLOPoseLabelWriter -----------------------------------------------------------
+
+def test_label_writer_fully_zeroes_low_visibility_keypoints_on_write(tmp_path):
+    instance = YoloPoseInstance(class_index=0, box=(0.5, 0.5, 1.0, 1.0), keypoints=[(1.0, 1.0, 0.3), (2.0, 2.0, 0.9)])
+    label_file = tmp_path / "a.txt"
+
+    YOLOPoseLabelWriter.write_instances(label_file, [instance])
+
+    line = label_file.read_text().strip()
+    assert line == "0 0.5 0.5 1.0 1.0 0.0 0.0 0.0 2.0 2.0 0.9"
+
+
+def test_label_writer_asserts_all_instances_share_keypoint_count(tmp_path):
+    a = YoloPoseInstance(0, (0, 0, 1, 1), [(0, 0, 1)])
+    b = YoloPoseInstance(0, (0, 0, 1, 1), [(0, 0, 1), (0, 0, 1)])
+
+    with pytest.raises(AssertionError):
+        YOLOPoseLabelWriter.write_instances(tmp_path / "a.txt", [a, b])
