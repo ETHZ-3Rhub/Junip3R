@@ -197,7 +197,7 @@ class SetSplit:
     def set_auto_split_ratio(self, auto_split_ratio: float) -> None:
         self._config.auto_split_ratio = auto_split_ratio
 
-    def auto_split(self) -> None:
+    def auto_split(self, rng: Optional[random.Random] = None) -> None:
         groups = self.groups
         unassigned_groups = [group for group in groups if group["set"] is None]
 
@@ -206,7 +206,7 @@ class SetSplit:
 
         delta_train = self.target_train - self.num_train
 
-        random.shuffle(unassigned_groups)
+        (rng or random).shuffle(unassigned_groups)
         new_train_groups = unassigned_groups[:delta_train]
         new_val_groups = unassigned_groups[delta_train:]
 

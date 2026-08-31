@@ -6,7 +6,7 @@ from junip3r.labeller.data.repository.abc import ILabelRepository, IImageReposit
     ISelectionRepository
 from junip3r.labeller.data.types.abc import InstanceID, Selection, Point, Box, IKeypoint, IInstance, IInstanceType, \
     ILabellerObject, IBoundingBox, IPolygon, IPolyline, LabellerObjectType
-from junip3r.labeller.model.undo_commands import IUndoModel
+from junip3r.labeller.model.abc import IUndoModel
 
 
 class AppModel(IUndoModel):

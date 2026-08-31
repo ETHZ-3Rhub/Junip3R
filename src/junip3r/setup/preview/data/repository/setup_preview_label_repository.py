@@ -4,7 +4,7 @@ from typing import List, cast, Sequence, Tuple
 from junip3r.labeller.data.repository.abc import ILabelRepository, IConfigRepository
 from junip3r.labeller.data.types.abc import IInstance, LabellerObjectType, Color, IInstanceType
 from junip3r.setup.data.types.abc import ISetupInstanceType
-from junip3r.setup.model.config_model import ConfigState, ConfigStateChangeFlags
+from junip3r.setup.model.config_state import ConfigState, ConfigStateChangeFlags
 from junip3r.setup.preview.data.abc import ISetupPreviewLabellerObject, ISetupPreviewKeypoint, ISetupPreviewBoundingBox, \
     ISetupPreviewPolygon, ISetupPreviewPolyline
 from junip3r.setup.preview.data.delegates import SetupPreviewInstance
