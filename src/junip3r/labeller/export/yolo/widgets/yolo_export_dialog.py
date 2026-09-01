@@ -407,7 +407,7 @@ class YoloExportDialog(QDialog):
     def _show_export_progress(self):
         worker = self._export_worker
 
-        progress_dialog = QProgressDialog("Preparing export...", "Cancel", 0, 0, self)
+        progress_dialog = QProgressDialog("Exporting...", "Cancel", 0, 0, self)
         progress_dialog.setWindowTitle("Exporting YOLO Dataset")
         progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
         progress_dialog.setMinimumDuration(0)
