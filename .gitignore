@@ -3,3 +3,8 @@
 _testdata/
 build/
 dist/
+
+# Local dev environment / scratch, not project source
+*.spec
+uv.lock
+/*.py
