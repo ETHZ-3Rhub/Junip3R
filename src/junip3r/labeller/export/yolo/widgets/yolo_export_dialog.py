@@ -300,6 +300,45 @@ class YoloExportDialog(QDialog):
         else:
             self.lbl_images_unassigned.setStyleSheet("")
 
+    def _confirm_target_folder(self, target_folder: Path) -> bool:
+        """Refuse a folder that looks like a Junip3R project outright; warn on any other non-empty folder.
+
+        Picking the current project folder by mistake is an easy slip when prompted for a
+        target folder, and it's a destructive one: the writer removes and recreates
+        `<target>/images/<set>` and `<target>/labels/<set>` for every configured set, which
+        collide with a project's own images/labels folders. There's no legitimate reason to
+        export a dataset into the project it was labelled in, so this case is a hard block
+        rather than a dismissable confirmation - export elsewhere and copy files over manually
+        if you actually need them inside the project folder.
+        """
+        if not target_folder.exists() or not any(target_folder.iterdir()):
+            return True
+
+        if (target_folder / "config.yaml").exists():
+            QMessageBox.critical(
+                self,
+                "Cannot Export Into a Junip3R Project",
+                f"'{target_folder}' looks like a Junip3R project - it contains a config.yaml file.\n\n"
+                "Exporting a YOLO dataset here would overwrite or delete files in its images/ and "
+                "labels/ folders, permanently destroying your labelled data, so this isn't allowed.\n\n"
+                "Choose a different target folder. If you need the dataset inside this project, "
+                "export it elsewhere first and copy the files over manually.",
+            )
+            return False
+
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("Target Folder Is Not Empty")
+        box.setText(
+            f"'{target_folder}' is not empty.\n\n"
+            "Exporting the YOLO dataset here may overwrite or delete existing files in it."
+        )
+        export_button = box.addButton("Export Anyway", QMessageBox.ButtonRole.DestructiveRole)
+        cancel_button = box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(cancel_button)
+        box.exec_()
+        return box.clickedButton() is export_button
+
     def _run_export(self):
         target_folder = Path(self.txt_location.text())
 
@@ -341,6 +380,9 @@ class YoloExportDialog(QDialog):
                 "Nothing to Export",
                 "No images are assigned to a set. Configure the set split before exporting.",
             )
+            return
+
+        if not self._confirm_target_folder(target_folder):
             return
 
         selected_names = self._selected_instance_type_names()
