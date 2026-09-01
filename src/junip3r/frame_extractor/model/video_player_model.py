@@ -56,6 +56,13 @@ class VideoPlayerModel(QObject):
             return 0
         return int(self._video_vc.get(cv2.CAP_PROP_FRAME_COUNT))
 
+    def get_fps(self) -> float:
+        """The video's native frame rate, or a sane fallback if the container/codec doesn't report one."""
+        if self._video_vc is None:
+            return 0.0
+        fps = self._video_vc.get(cv2.CAP_PROP_FPS)
+        return fps if fps > 0 else 30.0
+
     def get_current_frame_index(self) -> Optional[int]:
         return self._current_frame_index
 
@@ -66,14 +73,30 @@ class VideoPlayerModel(QObject):
         return self._current_frame_index + 1 < self.get_num_frames()
 
     def set_current_frame_index(self, frame_index: int):
+        """Seek to an arbitrary frame. Prefer advance_one_frame() for sequential playback -
+        seeking forces most codecs to decode from the nearest keyframe, which is much slower."""
         if frame_index < 0 or frame_index >= self.get_num_frames():
             return
         self._current_frame_index = frame_index
         self._current_frame = self._try_read_frame(frame_index)
         self.current_frame_changed.emit(frame_index, self._current_frame)
 
+    def advance_one_frame(self) -> bool:
+        """Read the next frame off the capture's own cursor, without seeking. Returns False (no-op)
+        if there is no next frame."""
+        next_index = self._current_frame_index + 1
+        if self._video_vc is None or next_index >= self.get_num_frames():
+            return False
+        frame = self._try_read_frame()
+        if frame is None:
+            return False
+        self._current_frame_index = next_index
+        self._current_frame = frame
+        self.current_frame_changed.emit(self._current_frame_index, self._current_frame)
+        return True
+
     def previous_frame(self):
         self.set_current_frame_index(self._current_frame_index - 1)
 
     def next_frame(self):
-        self.set_current_frame_index(self._current_frame_index + 1)
+        self.advance_one_frame()

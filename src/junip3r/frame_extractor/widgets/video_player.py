@@ -1,6 +1,6 @@
+import time
 from typing import Optional
 
-import cv2
 from PySide6 import QtCore, QtGui
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QIcon
@@ -62,8 +62,15 @@ class VideoPlayer(QWidget):
 
         self._model.current_frame_changed.connect(self._current_frame_changed)
 
+        self._playback_speed = 1.0
+        self._frame_accumulator = 0.0
+        self._last_tick_time: Optional[float] = None
+
+        # A fixed, tight "check" cadence - actual playback pacing is driven by real elapsed
+        # time in playback_frame(), not by this interval, so it doesn't need to change with speed.
         self.playback_timer = QtCore.QTimer(self)
-        self.playback_timer.setInterval(1000 // 30)
+        self.playback_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self.playback_timer.setInterval(1000 // 120)
         self.playback_timer.start()
         self.playback_timer.timeout.connect(self.playback_frame)
 
@@ -163,6 +170,8 @@ class VideoPlayer(QWidget):
     def _start_playback(self):
         self.playing = True
         self.btn_play.setIcon(self.pause_icon)
+        self._last_tick_time = time.monotonic()
+        self._frame_accumulator = 0.0
 
     def stop_playback(self):
         self.playing = False
@@ -183,11 +192,30 @@ class VideoPlayer(QWidget):
         if not self.playing:
             return
 
-        if not self._model.has_next_frame():
+        now = time.monotonic()
+        elapsed = now - self._last_tick_time
+        self._last_tick_time = now
+
+        self._frame_accumulator += elapsed * self._model.get_fps() * self._playback_speed
+        steps = int(self._frame_accumulator)
+        if steps <= 0:
+            return
+        self._frame_accumulator -= steps
+
+        num_frames = self._model.get_num_frames()
+        target_frame_index = self._model.get_current_frame_index() + steps
+
+        if target_frame_index >= num_frames - 1:
+            self._model.set_current_frame_index(num_frames - 1)
             self.stop_playback()
             return
 
-        self._model.next_frame()
+        if steps == 1:
+            self._model.advance_one_frame()
+        else:
+            # Fell behind real time (slow decode, system load, ...) - jump straight to where
+            # playback should be now rather than crawling through every skipped frame.
+            self._model.set_current_frame_index(target_frame_index)
 
     @Slot()
     def select_frame(self):
@@ -214,9 +242,7 @@ class VideoPlayer(QWidget):
 
     @Slot(str)
     def playback_speed_changed(self):
-        playback_speed = float(self.dpd_playback_speed.currentText()[:-1])
-        fps = 30.0  # TODO: get actual fps
-        self.playback_timer.setInterval(round(1000 / (fps * playback_speed)))
+        self._playback_speed = float(self.dpd_playback_speed.currentText()[:-1])
 
     def show_frame(self, frame):
         self._current_frame = frame
@@ -225,8 +251,9 @@ class VideoPlayer(QWidget):
             self.lbl_video.setText("No Video Selected")
             return
 
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame_pixmap = QtGui.QPixmap.fromImage(QtGui.QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0], QtGui.QImage.Format.Format_RGB888))
+        frame_pixmap = QtGui.QPixmap.fromImage(
+            QtGui.QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0], QtGui.QImage.Format.Format_BGR888)
+        )
 
         player_width = self.lbl_video.width()
         player_height = self.lbl_video.height()
