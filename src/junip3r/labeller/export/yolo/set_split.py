@@ -40,6 +40,16 @@ class SetSplitConfigSerializer:
             auto_split_ratio=data.get("auto_split_ratio", 0.9),
         )
 
+    @classmethod
+    def load(cls, path: Path) -> SetSplitConfig:
+        with path.open("r") as f:
+            data = yaml.safe_load(f)
+
+        if not data:
+            return SetSplitConfig()
+
+        return cls.deserialize(data)
+
 
 class ISetSplitRepository(Protocol):
     def get(self) -> SetSplitConfig: ...
@@ -54,13 +64,7 @@ class SetSplitRepository:
         if not self._set_split_file.exists():
             return SetSplitConfig()
 
-        with self._set_split_file.open("r") as f:
-            data = yaml.safe_load(f)
-
-        if not data:
-            return SetSplitConfig()
-
-        return SetSplitConfigSerializer.deserialize(data)
+        return SetSplitConfigSerializer.load(self._set_split_file)
 
     def set(self, config: SetSplitConfig) -> None:
         self._set_split_file.parent.mkdir(parents=True, exist_ok=True)
@@ -188,6 +192,10 @@ class SetSplit:
     @property
     def target_val(self) -> float:
         return self.num_groups - self.target_train
+
+    def set_config(self, config: SetSplitConfig) -> None:
+        self._config = config
+        self._groups = None
 
     def set_grouping(self, grouping: Optional[str]) -> None:
         self._config.grouping = grouping

@@ -1,12 +1,14 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, List, Mapping
 
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QTimer, Signal, QObject
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QDialog, QFormLayout, QVBoxLayout, QComboBox, QLabel, QGroupBox, \
     QHBoxLayout, QSlider, QPushButton, QStyledItemDelegate, QHeaderView, QAbstractItemView, \
-    QStyleOptionComboBox, QStyle, QTableView, QDialogButtonBox, QMessageBox
+    QStyleOptionComboBox, QStyle, QTableView, QDialogButtonBox, QMessageBox, QFileDialog
 
-from junip3r.labeller.export.yolo.set_split import ITaggedImage, SetSplitConfig, SetSplit
+from junip3r.labeller.export.yolo.set_split import ITaggedImage, SetSplitConfig, SetSplit, SetSplitConfigSerializer
 
 SET_LABELS = {
     None: "Unassigned",
@@ -293,6 +295,10 @@ class SetSplitModel(QObject):
     def target_val(self) -> float:
         return self._set_split.target_val
 
+    def set_config(self, config: SetSplitConfig):
+        self._set_split.set_config(config)
+        self.groups_changed.emit()
+
     def set_grouping(self, grouping: Optional[str]):
         self._set_split.set_grouping(grouping)
         self.groups_changed.emit()
@@ -326,6 +332,11 @@ class SetSplitDialog(QDialog):
         self._model.groups_changed.connect(self._groups_changed)
 
         layout = QVBoxLayout(self)
+
+        self.btn_import_set_split = QPushButton("Import Set Split from File...", self)
+        self.btn_import_set_split.setIcon(QIcon.fromTheme("document-open"))
+        self.btn_import_set_split.clicked.connect(self._import_set_split)
+        layout.addWidget(self.btn_import_set_split)
 
         grouping_layout = QFormLayout()
         self.dpd_grouping = QComboBox()
@@ -496,13 +507,13 @@ class SetSplitDialog(QDialog):
         if index.column() == SetAssignmentTableModel.SET_COLUMN:
             self.tbl_groups.edit(index)
 
-    def _confirm_unassign_all(self, text: str):
+    def _confirm_replace_assignments(self, title: str, text: str):
         if self._model.num_train_images == 0 and self._model.num_val_images == 0:
             return True
 
         confirmation_dialog = QMessageBox()
         confirmation_dialog.setIcon(QMessageBox.Icon.Question)
-        confirmation_dialog.setWindowTitle("Confirm unassign all")
+        confirmation_dialog.setWindowTitle(title)
         confirmation_dialog.setText(text)
         confirmation_dialog.setStandardButtons(QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Ok)
 
@@ -511,7 +522,10 @@ class SetSplitDialog(QDialog):
         return res == QMessageBox.StandardButton.Ok
 
     def _grouping_changed(self):
-        if not self._confirm_unassign_all("Changing the grouping will remove all set assignments. Do you want to continue?"):
+        if not self._confirm_replace_assignments(
+            "Confirm Grouping Change",
+            "Changing the grouping will remove all set assignments. Do you want to continue?",
+        ):
             self.dpd_grouping.setCurrentIndex(self.dpd_grouping.findData(self._model.grouping))
             return
 
@@ -533,11 +547,39 @@ class SetSplitDialog(QDialog):
         self._model.auto_split()
 
     def _unassign_all(self):
-        if not self._confirm_unassign_all("Are you sure you want to remove all set assignments?"):
+        if not self._confirm_replace_assignments(
+            "Confirm Unassign All",
+            "Are you sure you want to remove all set assignments?",
+        ):
             self.dpd_grouping.setCurrentIndex(self.dpd_grouping.findData(self._model.grouping))
             return
 
         self._model.unassign_all()
+
+    def _import_set_split(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Set Split",
+            "",
+            "Set Split Files (*.yaml *.yml);;All Files (*)",
+        )
+        if not file_path:
+            return
+
+        try:
+            config = SetSplitConfigSerializer.load(Path(file_path))
+        except Exception as e:
+            QMessageBox.critical(self, "Import Failed", f"Could not read set split file:\n\n{e}")
+            return
+
+        if not self._confirm_replace_assignments(
+            "Confirm Import",
+            "Importing a set split will replace all current set assignments. Do you want to continue?",
+        ):
+            return
+
+        self._model.set_config(config)
+        self.dpd_grouping.setCurrentIndex(self.dpd_grouping.findData(self._model.grouping))
 
 
 if __name__ == "__main__":

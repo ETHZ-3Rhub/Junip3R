@@ -1,5 +1,7 @@
 import random
 
+import yaml
+
 from junip3r.labeller.export.yolo.set_split import (
     SetSplit,
     SetSplitConfig,
@@ -29,6 +31,21 @@ def test_config_serializer_deserialize_fills_defaults():
     restored = SetSplitConfigSerializer.deserialize({})
 
     assert restored == SetSplitConfig()
+
+
+def test_config_serializer_load_reads_a_yaml_file(tmp_path):
+    config = SetSplitConfig(grouping="video", group_sets={"a": "train"}, individual_sets={"b": "val"}, auto_split_ratio=0.8)
+    path = tmp_path / "set_split.yaml"
+    path.write_text(yaml.dump(SetSplitConfigSerializer.serialize(config)))
+
+    assert SetSplitConfigSerializer.load(path) == config
+
+
+def test_config_serializer_load_returns_default_for_an_empty_file(tmp_path):
+    path = tmp_path / "set_split.yaml"
+    path.write_text("")
+
+    assert SetSplitConfigSerializer.load(path) == SetSplitConfig()
 
 
 # --- SetSplit grouping ----------------------------------------------------------------
@@ -163,6 +180,16 @@ def test_unassign_all_clears_group_assignments():
     split.unassign_all()
 
     assert split.groups[0]["set"] is None
+
+
+def test_set_config_replaces_the_config_and_invalidates_the_cache():
+    images = [FakeTaggedImage("a0")]
+    split = SetSplit(images, SetSplitConfig(group_sets={"a0": "train"}))
+    assert split.groups[0]["set"] == "train"  # populate the cache with the old config
+
+    split.set_config(SetSplitConfig(group_sets={"a0": "val"}))
+
+    assert split.groups[0]["set"] == "val"
 
 
 def test_set_grouping_clears_group_sets_and_cache():
