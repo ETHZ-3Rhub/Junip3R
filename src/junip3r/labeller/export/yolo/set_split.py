@@ -5,12 +5,14 @@ from typing import Optional, List, Mapping, Protocol, Dict, Iterable, Any
 
 import yaml
 
+from junip3r.common.tags.data import TagValue
+
 
 class ITaggedImage(Protocol):
     @property
     def name(self) -> str: ...
     @property
-    def tags(self) -> Mapping[str, str]: ...
+    def tags(self) -> Mapping[str, TagValue]: ...
 
 
 @dataclass

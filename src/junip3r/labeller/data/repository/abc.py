@@ -3,6 +3,7 @@ from typing import Protocol, Tuple, Optional, Sequence
 
 import numpy as np
 
+from junip3r.common.tags.data import Tags
 from junip3r.labeller.data.types.abc import IInstanceType, IInstance, TemporalContext, Selection
 
 
@@ -32,8 +33,10 @@ class IMetadataRepository(Protocol):
     def get_notes(self, image_index: int) -> str: ...
     def set_notes(self, image_index: int, notes: str): ...
 
-    def get_tags(self, image_index: int) -> Sequence[str]: ...
-    def set_tags(self, image_index: int, tags: Sequence[str]): ...
+
+class ITagRepository(Protocol):
+    def get_tags(self, image_index: int) -> Tags: ...
+    def set_tags(self, image_index: int, tags: Tags): ...
 
 
 class ISettingsRepository(Protocol):

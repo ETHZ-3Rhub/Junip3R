@@ -7,6 +7,7 @@ from junip3r.labeller.config.data import InstanceType, MemberSpecs, SkeletonSpec
 from junip3r.labeller.data.repository.context import ContextRepository
 from junip3r.labeller.data.repository.image import ImageRepository
 from junip3r.labeller.data.repository.label import JuniperLabelRepository
+from junip3r.labeller.data.repository.tag import TagRepository
 from junip3r.labeller.data.types.abc import LabellerObjectType
 
 
@@ -111,3 +112,24 @@ def test_label_repository_get_instances_on_missing_file_returns_empty(tmp_path: 
     repository = JuniperLabelRepository([], [tmp_path / "missing.json"])
 
     assert repository.get_instances(0) == []
+
+
+# --- TagRepository --------------------------------------------------------------------
+
+def test_tag_repository_round_trips_by_image_index(tmp_path: Path):
+    repository = TagRepository(tmp_path / "tags", ["a", "b"])
+
+    repository.set_tags(1, {"video_name": "v1", "reviewed": True})
+
+    assert repository.get_tags(1) == {"video_name": "v1", "reviewed": True}
+    assert repository.get_tags(0) == {}
+
+
+def test_tag_repository_writes_to_the_file_named_after_the_image(tmp_path: Path):
+    tag_folder = tmp_path / "tags"
+    repository = TagRepository(tag_folder, ["a", "b"])
+
+    repository.set_tags(1, {"video_name": "v1"})
+
+    assert (tag_folder / "b.json").exists()
+    assert not (tag_folder / "a.json").exists()

@@ -15,6 +15,7 @@ from junip3r.labeller.data.repository.context import ContextRepository
 from junip3r.labeller.data.repository.image import ImageRepository
 from junip3r.labeller.data.repository.label import JuniperLabelRepository
 from junip3r.labeller.data.repository.selection import SelectionRepository
+from junip3r.labeller.data.repository.tag import TagRepository
 from junip3r.labeller.export.yolo.set_split import SetSplitRepository
 from junip3r.labeller.legacy.legacy_label_converter import LegacyLabelConverter
 from junip3r.labeller.model.app_model import AppModel
@@ -52,10 +53,11 @@ def from_config_file(config_file: Path, integrated: bool = False) -> EditorMainW
             legacy_converter.convert_legacy_labels(legacy_label_file, i.label)
 
     label_repository = JuniperLabelRepository(labeller_config.instance_types, [i.label for i in images])
+    tag_repository = TagRepository(project_folder / "meta" / "tags", [i.image.stem for i in images])
 
     set_split_repository = SetSplitRepository(project_folder / "_labeller" / "set_split.yaml")
 
-    app_model = AppModel(image_repository, config_repository, label_repository, SelectionRepository())
+    app_model = AppModel(image_repository, config_repository, label_repository, SelectionRepository(), tag_repository=tag_repository)
 
     editor = EditorMainWindow(show_frame_extractor=integrated)
     editor.set_model(app_model, context_model, image_settings_model)

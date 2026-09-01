@@ -70,6 +70,17 @@ class FakeSelectionRepository:
         self._new_instance_types[image_index] = instance_type
 
 
+class FakeTagRepository:
+    def __init__(self):
+        self._tags = {}
+
+    def get_tags(self, image_index):
+        return dict(self._tags.get(image_index, {}))
+
+    def set_tags(self, image_index, tags):
+        self._tags[image_index] = dict(tags)
+
+
 def _build_model(**kwargs):
     images = kwargs.pop("images", FakeImageRepository())
     config = kwargs.pop("config", FakeConfigRepository())
@@ -111,6 +122,20 @@ def test_set_instances_does_not_seed_get_instances():
     # AppModel is stateless: every get_instances call re-hits the repository, even right after a write
     assert labels.get_instances_calls == [0, 0]
     assert labels.set_instances_calls == [(0, [instance])]
+
+
+def test_set_and_get_tags_round_trip():
+    model, *_ = _build_model(tag_repository=FakeTagRepository())
+
+    model.set_tags(0, {"video_name": "v1", "reviewed": True})
+
+    assert model.get_tags(0) == {"video_name": "v1", "reviewed": True}
+
+
+def test_get_tags_defaults_to_empty_without_a_tag_repository():
+    model, *_ = _build_model()
+
+    assert model.get_tags(0) == {}
 
 
 def test_get_instance_returns_none_for_unknown_id():

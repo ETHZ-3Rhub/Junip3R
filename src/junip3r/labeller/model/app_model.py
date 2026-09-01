@@ -3,11 +3,22 @@ from typing import Optional, Sequence, cast
 
 import numpy as np
 
+from junip3r.common.tags.data import Tags
 from junip3r.labeller.data.repository.abc import ILabelRepository, IImageRepository, IConfigRepository, \
-    ISelectionRepository
+    ISelectionRepository, ITagRepository
 from junip3r.labeller.data.types.abc import InstanceID, Selection, Point, Box, IKeypoint, IInstance, IInstanceType, \
     ILabellerObject, IBoundingBox, IPolygon, IPolyline, LabellerObjectType
 from junip3r.labeller.model.abc import IUndoModel, IReadOnlyAppModel
+
+
+class _NullTagRepository:
+    """Used when a real ITagRepository isn't wired up (e.g. the setup preview app)."""
+
+    def get_tags(self, image_index: int) -> Tags:
+        return {}
+
+    def set_tags(self, image_index: int, tags: Tags) -> None:
+        pass
 
 
 class AppModel(IUndoModel, IReadOnlyAppModel):
@@ -26,6 +37,7 @@ class AppModel(IUndoModel, IReadOnlyAppModel):
             config_repository: IConfigRepository,
             label_repository: ILabelRepository,
             selection_repository: ISelectionRepository,
+            tag_repository: Optional[ITagRepository] = None,
             parent=None
     ):
         super().__init__(parent)
@@ -34,6 +46,7 @@ class AppModel(IUndoModel, IReadOnlyAppModel):
         self._config_repository = config_repository
         self._label_repository = label_repository
         self._selection_repository = selection_repository
+        self._tag_repository = tag_repository or _NullTagRepository()
 
         self._num_images = self._image_repository.get_num_images()
 
@@ -57,6 +70,12 @@ class AppModel(IUndoModel, IReadOnlyAppModel):
 
     def get_instances(self, image_index: int) -> Sequence[IInstance]:
         return self._label_repository.get_instances(image_index)
+
+    def get_tags(self, image_index: int) -> Tags:
+        return self._tag_repository.get_tags(image_index)
+
+    def set_tags(self, image_index: int, tags: Tags) -> None:
+        self._tag_repository.set_tags(image_index, tags)
 
     def get_instance(self, image_index: int, instance_id: InstanceID) -> Optional[IInstance]:
         instances = self.get_instances(image_index)

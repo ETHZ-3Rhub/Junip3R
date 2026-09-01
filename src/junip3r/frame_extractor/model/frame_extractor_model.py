@@ -161,7 +161,7 @@ class FrameExtractorModel(QObject):
 
     def set_video_tag(self, video_id: str, frame_index: int):
         frame = self._frames[(video_id, frame_index)]
-        kw_tags, tags = self._tag_repository.get_tags(frame.image_name)
-        kw_tags["video_name"] = video_id
-        self._tag_repository.set_tags(frame.image_name, kw_tags, tags)
+        tags = self._tag_repository.get_tags(frame.image_name)
+        tags["video_name"] = video_id
+        self._tag_repository.set_tags(frame.image_name, tags)
 

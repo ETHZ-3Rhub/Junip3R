@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QDialog, QFormLayout, QLineEdit, QToolButton, QWid
     QDialogButtonBox, QHBoxLayout, QLabel, QCheckBox, QProgressDialog, QMessageBox, QListWidget, QListWidgetItem, \
     QPushButton
 
+from junip3r.common.tags.data import TagValue
 from junip3r.labeller.data.types.abc import IInstance, IInstanceType, LabellerObjectType
 from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import \
     MappingYoloDatasetMetadataGenerator, MappingYoloDatasetGenerator, MappingYoloPoseInstanceConverter
@@ -60,7 +61,7 @@ class ExportJob:
 @dataclass
 class TaggedImage:
     name: str
-    tags: Mapping[str, str]
+    tags: Mapping[str, TagValue]
 
 
 class ExportWorker(QObject):
@@ -273,7 +274,7 @@ class YoloExportDialog(QDialog):
         images = []
         for image_index in self._included_image_indices():
             image_name = self._model.get_image_name(image_index)
-            images.append(TaggedImage(image_name, {}))
+            images.append(TaggedImage(image_name, self._model.get_tags(image_index)))
         return images
 
     def _configure_set_split(self):

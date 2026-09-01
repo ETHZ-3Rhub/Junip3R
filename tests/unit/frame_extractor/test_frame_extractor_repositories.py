@@ -76,15 +76,15 @@ def test_video_repository_missing_file_returns_empty_list(tmp_path: Path):
 def test_tag_repository_round_trip(tmp_path: Path):
     repository = TagRepository(tmp_path / "tags")
 
-    repository.set_tags("img1", {"video": "v1"}, ["reviewed"])
+    repository.set_tags("img1", {"video": "v1", "reviewed": True})
 
-    assert repository.get_tags("img1") == ({"video": "v1"}, ["reviewed"])
+    assert repository.get_tags("img1") == {"video": "v1", "reviewed": True}
 
 
 def test_tag_repository_missing_file_returns_empty(tmp_path: Path):
     repository = TagRepository(tmp_path / "tags")
 
-    assert repository.get_tags("missing") == ({}, [])
+    assert repository.get_tags("missing") == {}
 
 
 # --- sample_frames_uniform_unique ---------------------------------------------------

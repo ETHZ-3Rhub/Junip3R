@@ -3,6 +3,7 @@ from typing import Optional, Protocol, Sequence
 
 import numpy as np
 
+from junip3r.common.tags.data import Tags
 from junip3r.labeller.data.types.abc import Box, ILabellerObject, IInstance, IInstanceType, InstanceID, Point, Selection
 from junip3r.labeller.model.image_state import ImageStateChangeFlags
 
@@ -19,6 +20,7 @@ class IReadOnlyAppModel(Protocol):
     def get_image_file(self, image_index: int) -> Optional[Path]: ...
     def get_instance_types(self, image_index: int) -> Sequence[IInstanceType]: ...
     def get_instances(self, image_index: int) -> Sequence[IInstance]: ...
+    def get_tags(self, image_index: int) -> Tags: ...
 
 
 class IUndoModel(Protocol):

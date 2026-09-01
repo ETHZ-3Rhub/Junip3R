@@ -1,5 +1,6 @@
-from typing import Protocol, List, Set, Tuple, Dict
+from typing import Protocol, List
 
+from junip3r.common.tags.data import Tags
 from junip3r.frame_extractor.data.types.data import Video, Frame
 
 
@@ -14,8 +15,8 @@ class IFrameRepository(Protocol):
 
 
 class ITagRepository(Protocol):
-    def get_tags(self, image_name: str) -> Tuple[Dict[str, str], List[str]]: ...
-    def set_tags(self, image_name: str, kw_tags: Dict[str, str], tags: List[str]): ...
+    def get_tags(self, image_name: str) -> Tags: ...
+    def set_tags(self, image_name: str, tags: Tags): ...
 
 
 class IFrameExtractorConfigRepository(Protocol):
