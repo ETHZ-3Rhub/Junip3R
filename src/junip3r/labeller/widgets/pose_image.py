@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QMouseEvent, QImage
 from PySide6.QtWidgets import QLabel
 
+from junip3r.labeller.controller.geometry import clamp_to_image01
 from junip3r.labeller.data.types.abc import IInstance, IKeypoint, ILabellerObject, LabellerObjectType, IBoundingBox, \
     IPolygon, IPolyline, IPolygonPoint, Point, IBoundingBoxCorner, Box
 from junip3r.labeller.model.camera_model import CameraState
@@ -299,19 +300,22 @@ class PoseImage(QLabel):
     def _operation_overrides(self, overrides: RenderOverrides, operation: Operation, mouse_pos_image01: Point) -> RenderOverrides:
         match operation:
             case DragPoint(member):
+                pos = clamp_to_image01(mouse_pos_image01)
                 keypoint_highlights = {**overrides.keypoint_highlights, id(member): True}
-                keypoint_positions = {**overrides.keypoint_positions, id(member): mouse_pos_image01}
+                keypoint_positions = {**overrides.keypoint_positions, id(member): pos}
 
                 return replace(overrides, keypoint_highlights=keypoint_highlights, keypoint_positions=keypoint_positions)
             case DragBoundingBoxCorner(bounding_box, member, opposing_corner):
+                pos = clamp_to_image01(mouse_pos_image01)
                 bounding_box_corner_highlights = {**overrides.bounding_box_corner_highlights, id(member): True}
-                bounding_box_corner_positions = {**overrides.bounding_box_corner_positions, id(member): mouse_pos_image01}
-                bounding_box_positions = {**overrides.bounding_box_positions, id(bounding_box): (opposing_corner.p, mouse_pos_image01)}
+                bounding_box_corner_positions = {**overrides.bounding_box_corner_positions, id(member): pos}
+                bounding_box_positions = {**overrides.bounding_box_positions, id(bounding_box): (opposing_corner.p, pos)}
 
                 return replace(overrides, bounding_box_corner_highlights=bounding_box_corner_highlights, bounding_box_corner_positions=bounding_box_corner_positions, bounding_box_positions=bounding_box_positions)
             case DragPolygonPoint(member):
+                pos = clamp_to_image01(mouse_pos_image01)
                 polygon_point_highlights = {**overrides.polygon_point_highlights, id(member): True}
-                polygon_point_positions = {**overrides.polygon_point_positions, id(member): mouse_pos_image01}
+                polygon_point_positions = {**overrides.polygon_point_positions, id(member): pos}
 
                 return replace(overrides, polygon_point_highlights=polygon_point_highlights, polygon_point_positions=polygon_point_positions)
             case _:
@@ -428,7 +432,7 @@ class PoseImage(QLabel):
                     self._draw_crosshair(rc, self._mouse_pos_view)
                 else:
                     color = QtGui.QColor(*member.color)
-                    mouse_pos_image01 = (max(0.0, min(1.0, mouse_pos_image01[0])), max(0.0, min(1.0, mouse_pos_image01[1])))
+                    mouse_pos_image01 = clamp_to_image01(mouse_pos_image01)
                     rc.renderer.draw_bounding_box(p1, mouse_pos_image01, color, opacity=1)
             case DrawPolygon(member, points):
                 color = QtGui.QColor(*member.color)

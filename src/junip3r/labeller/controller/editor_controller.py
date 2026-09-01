@@ -4,6 +4,7 @@ from typing import Optional, cast
 from PySide6.QtCore import Qt, Slot, QObject, Signal
 
 from junip3r.labeller.controller.camera_navigation import CameraNavigation
+from junip3r.labeller.controller.geometry import clamp_to_image01, is_inside_image01
 from junip3r.labeller.data.types.abc import LabellerObjectType, IKeypoint, Point, IBoundingBox, IPolygon, \
     ILabellerObject, IPolygonPoint, IBoundingBoxCorner, IPolyline
 from junip3r.labeller.model.context_model import ContextModel
@@ -209,6 +210,8 @@ class EditorController(QObject):
     # --- Keypoint ---
 
     def _place_keypoint(self, member: IKeypoint, pos_image01: Point, visible=True):
+        if not is_inside_image01(pos_image01):
+            return
         instance_id, member_index = member.path
         self._model.place_keypoint(instance_id, member_index, pos_image01, visibility=2 if visible else 1)
 
@@ -219,7 +222,7 @@ class EditorController(QObject):
     def _finish_drag_keypoint(self, operation: DragPoint, pos_image01: Point):
         self._stop_drag()
         instance_id, member_index = operation.member.path
-        self._model.move_keypoint(instance_id, member_index, pos_image01)
+        self._model.move_keypoint(instance_id, member_index, clamp_to_image01(pos_image01))
 
     def _toggle_keypoint_visibility(self, member: IKeypoint):
         p = member.p
@@ -238,7 +241,7 @@ class EditorController(QObject):
         self._set_operation(DrawBox(member))
 
     def _place_bounding_box_point(self, operation: DrawBox, pos_image01: Point):
-        pos_image01 = (max(0.0, min(1.0, pos_image01[0])), max(0.0, min(1.0, pos_image01[1])))
+        pos_image01 = clamp_to_image01(pos_image01)
         self._set_operation(DrawBox(operation.member, pos_image01))
 
     def _delete_bounding_box_point(self, operation: DrawBox):
@@ -248,7 +251,7 @@ class EditorController(QObject):
         instance_id, member_index = operation.member.path
 
         assert operation.p1 is not None
-        pos_image01 = (max(0.0, min(1.0, pos_image01[0])), max(0.0, min(1.0, pos_image01[1])))
+        pos_image01 = clamp_to_image01(pos_image01)
         box = (operation.p1, pos_image01)
 
         self._set_operation(Inspect())
@@ -270,7 +273,7 @@ class EditorController(QObject):
     def _finish_drag_bounding_box_corner(self, operation: DragBoundingBoxCorner, pos_image01: Point):
         self._stop_drag()
         instance_id, member_index, corner_index = operation.corner.path
-        self._model.move_bounding_box_corner(instance_id, member_index, corner_index, pos_image01)
+        self._model.move_bounding_box_corner(instance_id, member_index, corner_index, clamp_to_image01(pos_image01))
 
     def _delete_bounding_box(self, member: IBoundingBox):
         instance_id, member_index = member.path
@@ -282,6 +285,8 @@ class EditorController(QObject):
         self._set_operation(DrawPolygon(member))
 
     def _place_polygon_point(self, operation: DrawPolygon, pos_image01: Point):
+        if not is_inside_image01(pos_image01):
+            return
         points = list(operation.points) + [pos_image01]
         self._set_operation(DrawPolygon(operation.member, points))
 
@@ -290,6 +295,8 @@ class EditorController(QObject):
         self._set_operation(DrawPolygon(operation.member, points))
 
     def _finish_draw_polygon(self, operation, pos_image01: Point):
+        if not is_inside_image01(pos_image01):
+            return
         instance_id, member_index = operation.member.path
         points = list(operation.points) + [pos_image01]
         self._set_operation(Inspect())
@@ -302,7 +309,7 @@ class EditorController(QObject):
     def _finish_drag_polygon_point(self, operation: DragPolygonPoint, pos_image01: Point):
         self._stop_drag()
         instance_id, member_index, point_index = operation.member.path
-        self._model.move_polygon_point(instance_id, member_index, point_index, pos_image01)
+        self._model.move_polygon_point(instance_id, member_index, point_index, clamp_to_image01(pos_image01))
 
     def _delete_polygon(self, member: IPolygon):
         instance_id, member_index = member.path
@@ -312,6 +319,8 @@ class EditorController(QObject):
         self._set_operation(DrawPolyline(member))
 
     def _place_polyline_point(self, operation: DrawPolyline, pos_image01: Point):
+        if not is_inside_image01(pos_image01):
+            return
         points = list(operation.points) + [pos_image01]
         self._set_operation(DrawPolyline(operation.member, points))
 
@@ -320,6 +329,8 @@ class EditorController(QObject):
         self._set_operation(DrawPolyline(operation.member, points))
 
     def _finish_draw_polyline(self, operation, pos_image01: Point):
+        if not is_inside_image01(pos_image01):
+            return
         instance_id, member_index = operation.member.path
         points = list(operation.points) + [pos_image01]
         self._set_operation(Inspect())
