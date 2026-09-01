@@ -66,6 +66,35 @@ def test_next_and_previous_frame_navigate_and_emit(tmp_path: Path):
     assert model.get_current_frame_index() == 1
 
 
+def test_advance_frames_skips_ahead_and_emits_once(tmp_path: Path):
+    video_file = tmp_path / "a.mp4"
+    _write_video(video_file, num_frames=10)
+    model = VideoPlayerModel()
+    model.set_video(Video("a", video_file))
+
+    changes = []
+    model.current_frame_changed.connect(lambda index, frame: changes.append(index))
+
+    result = model.advance_frames(4)
+
+    assert result is True
+    assert changes == [4]
+    assert model.get_current_frame_index() == 4
+    assert model.get_current_frame() is not None
+
+
+def test_advance_frames_fails_past_the_end_without_moving(tmp_path: Path):
+    video_file = tmp_path / "a.mp4"
+    _write_video(video_file, num_frames=5)
+    model = VideoPlayerModel()
+    model.set_video(Video("a", video_file))
+
+    result = model.advance_frames(10)
+
+    assert result is False
+    assert model.get_current_frame_index() == 0
+
+
 def test_has_next_frame_is_false_on_the_last_frame(tmp_path: Path):
     video_file = tmp_path / "a.mp4"
     _write_video(video_file, num_frames=3)

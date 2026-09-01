@@ -15,6 +15,13 @@ class VideoPlayer(QWidget):
     # Emitted when the user marks the current frame for extraction: (video_id, frame_index).
     frame_selected = Signal(str, int)
 
+    # How many frames playback is willing to read-and-discard sequentially to catch up before
+    # falling back to a seek. Sequential reads are ~ms; a seek can be much slower for videos with
+    # long GOPs, so this threshold is deliberately generous.
+    _MAX_SEQUENTIAL_CATCHUP_FRAMES = 15
+    # Upper bound on how much elapsed real time a single tick will ever try to make up for.
+    _MAX_ELAPSED_SECONDS = 0.5
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -193,7 +200,10 @@ class VideoPlayer(QWidget):
             return
 
         now = time.monotonic()
-        elapsed = now - self._last_tick_time
+        # Cap how much time a single tick can "owe": without this, one slow tick (e.g. a seek
+        # that itself took a while) makes the next tick look even further behind, forcing another
+        # slow catch-up, forever - a classic spiral-of-death in frame-pacing code.
+        elapsed = min(now - self._last_tick_time, self._MAX_ELAPSED_SECONDS)
         self._last_tick_time = now
 
         self._frame_accumulator += elapsed * self._model.get_fps() * self._playback_speed
@@ -210,11 +220,12 @@ class VideoPlayer(QWidget):
             self.stop_playback()
             return
 
-        if steps == 1:
-            self._model.advance_one_frame()
+        if steps <= self._MAX_SEQUENTIAL_CATCHUP_FRAMES:
+            # Reading (and discarding) a handful of frames sequentially is often cheaper than a
+            # single seek, especially for videos with long GOPs / lots of B-frames, where seeking
+            # can cost *more* than just reading straight through.
+            self._model.advance_frames(steps)
         else:
-            # Fell behind real time (slow decode, system load, ...) - jump straight to where
-            # playback should be now rather than crawling through every skipped frame.
             self._model.set_current_frame_index(target_frame_index)
 
     @Slot()
@@ -235,7 +246,11 @@ class VideoPlayer(QWidget):
             self.lbl_frame_number.setText("0/0")
         else:
             self.lbl_frame_number.setText(f"{current_frame_index + 1}/{self._model.get_num_frames()}")
+            # Reflecting model state into the slider, not a user drag - block valueChanged so it
+            # doesn't loop back into slider_value_changed() and re-seek to the frame we're already on.
+            self.sld_seek.blockSignals(True)
             self.sld_seek.setValue(current_frame_index)
+            self.sld_seek.blockSignals(False)
 
         current_frame = self._model.get_current_frame()
         self.show_frame(current_frame)

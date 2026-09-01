@@ -84,13 +84,25 @@ class VideoPlayerModel(QObject):
     def advance_one_frame(self) -> bool:
         """Read the next frame off the capture's own cursor, without seeking. Returns False (no-op)
         if there is no next frame."""
-        next_index = self._current_frame_index + 1
-        if self._video_vc is None or next_index >= self.get_num_frames():
+        return self.advance_frames(1)
+
+    def advance_frames(self, count: int) -> bool:
+        """Read `count` frames sequentially off the capture's own cursor, discarding all but the
+        last, and emit once for the final one. No seeking involved - for videos where seeking is
+        expensive (long GOPs, lots of B-frames), this is often cheaper than a single seek even for
+        a double-digit frame count, and it's what lets playback recover from a momentary stall
+        without needing to seek at all. Returns False (no-op) if the target frame doesn't exist."""
+        if count <= 0:
             return False
-        frame = self._try_read_frame()
-        if frame is None:
+        target_index = self._current_frame_index + count
+        if self._video_vc is None or target_index >= self.get_num_frames():
             return False
-        self._current_frame_index = next_index
+        frame = None
+        for _ in range(count):
+            frame = self._try_read_frame()
+            if frame is None:
+                return False
+        self._current_frame_index = target_index
         self._current_frame = frame
         self.current_frame_changed.emit(self._current_frame_index, self._current_frame)
         return True
