@@ -31,6 +31,7 @@ class PoseImageModel(QObject):
         self._undo_stacks: Dict[int, QUndoStack] = {}
 
         self._image_index: int = 0
+        self._cached_image: Optional[np.ndarray] = None
 
         self._image_state_flags: ImageStateChangeFlags = ImageStateChangeFlags.NONE
 
@@ -83,11 +84,16 @@ class PoseImageModel(QObject):
         selection = self._model.get_selection(self._image_index)
 
         return ImageState(
-            image=self._model.get_image(self._image_index),
+            image=self._get_image(),
             instance_types=self._model.get_instance_types(self._image_index),
             instances=self.get_instances(),
             selection=selection
         )
+
+    def _get_image(self) -> np.ndarray:
+        if self._cached_image is None:
+            self._cached_image = self._model.get_image(self._image_index)
+        return self._cached_image
 
     @property
     def _new_instance(self) -> IInstance | None:
@@ -100,7 +106,7 @@ class PoseImageModel(QObject):
         return self._model.get_num_images()
 
     def get_image(self) -> Optional[np.ndarray]:
-        return self._model.get_image(self._image_index)
+        return self._get_image()
 
     def get_instances(self) -> Sequence[IInstance]:
         instances = self._model.get_instances(self._image_index)
@@ -332,6 +338,7 @@ class PoseImageModel(QObject):
             image_index = num_images - 1
 
         self._image_index = image_index
+        self._cached_image = None
 
         image_name = self._model.get_image_name(self._image_index)
         self.image_navigation_state_changed.emit(ImageNavigationState(num_images, self._image_index, image_name))

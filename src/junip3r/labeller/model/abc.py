@@ -1,7 +1,24 @@
+from pathlib import Path
 from typing import Optional, Protocol, Sequence
+
+import numpy as np
 
 from junip3r.labeller.data.types.abc import Box, ILabellerObject, IInstance, IInstanceType, InstanceID, Point, Selection
 from junip3r.labeller.model.image_state import ImageStateChangeFlags
+
+
+class IReadOnlyAppModel(Protocol):
+    """Read-only image/instance access, satisfied by AppModel.
+
+    For consumers (e.g. dataset export) that only need to read data and don't need the
+    write/undo surface of IUndoModel.
+    """
+    def get_num_images(self) -> int: ...
+    def get_image(self, image_index: int) -> np.ndarray: ...
+    def get_image_name(self, image_index: int) -> str: ...
+    def get_image_file(self, image_index: int) -> Optional[Path]: ...
+    def get_instance_types(self, image_index: int) -> Sequence[IInstanceType]: ...
+    def get_instances(self, image_index: int) -> Sequence[IInstance]: ...
 
 
 class IUndoModel(Protocol):

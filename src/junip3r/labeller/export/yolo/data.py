@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Sequence, Mapping, Tuple, Optional, Protocol, Callable
+from pathlib import Path
+from typing import Sequence, Mapping, Tuple, Optional, Protocol
 
 import numpy as np
 
@@ -17,31 +18,30 @@ class YoloPoseInstance:
 
 
 class IYoloImage(Protocol):
-    """An exported image; pixels may be held in memory or loaded lazily from disk."""
+    """An exported image; pixels may come from a backing file, from memory, or both."""
     @property
     def name(self) -> str: ...
     @property
-    def image(self) -> np.ndarray: ...
-    @property
     def instances(self) -> Sequence[YoloPoseInstance]: ...
+    @property
+    def image(self) -> Optional[np.ndarray]: ...
+    @property
+    def source_file(self) -> Optional[Path]:
+        """The file this image's pixels were loaded from, if any.
+
+        Writers may copy this file directly instead of reading `image` and re-encoding it,
+        which is faster and avoids lossy re-compression. At least one of `source_file` and
+        `image` must be set.
+        """
+        ...
 
 
 @dataclass
 class YoloImage:
     name: str
-    image: np.ndarray
     instances: Sequence[YoloPoseInstance]
-
-
-@dataclass
-class LazyYoloImage:
-    name: str
-    load: Callable[[], np.ndarray]
-    instances: Sequence[YoloPoseInstance]
-
-    @property
-    def image(self) -> np.ndarray:
-        return self.load()
+    image: Optional[np.ndarray] = None
+    source_file: Optional[Path] = None
 
 
 @dataclass

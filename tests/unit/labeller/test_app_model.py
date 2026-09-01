@@ -78,27 +78,8 @@ def _build_model(**kwargs):
     return AppModel(images, config, labels, selection, **kwargs), images, config, labels, selection
 
 
-def test_get_image_is_cached_per_image_index_by_default():
+def test_app_model_hits_repository_on_every_call():
     model, images, *_ = _build_model()
-
-    model.get_image(0)
-    model.get_image(0)
-
-    assert images.get_image_calls == [0]
-
-
-def test_get_image_cache_is_invalidated_when_image_index_changes():
-    model, images, *_ = _build_model()
-
-    model.get_image(0)
-    model.get_image(1)
-    model.get_image(0)
-
-    assert images.get_image_calls == [0, 1, 0]
-
-
-def test_caching_disabled_hits_repository_every_call():
-    model, images, *_ = _build_model(cache=False)
 
     model.get_image(0)
     model.get_image(0)
@@ -118,7 +99,7 @@ def test_insert_and_remove_instance_round_trip():
     assert model.get_instances(0) == []
 
 
-def test_set_instances_updates_cache_without_rereading_repository():
+def test_set_instances_does_not_seed_get_instances():
     model, *_, labels, _ = _build_model()
     instance_type = InstanceType("mouse", [MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0))], SkeletonSpecs([], (0, 0, 0)))
     instance = instance_type.new_instance("i1", "Mouse 1")
@@ -127,8 +108,8 @@ def test_set_instances_updates_cache_without_rereading_repository():
     model.get_instances(0)
     model.get_instances(0)
 
-    # set_instances seeds the cache directly; get_instances should not need to re-hit the repository
-    assert labels.get_instances_calls == []
+    # AppModel is stateless: every get_instances call re-hits the repository, even right after a write
+    assert labels.get_instances_calls == [0, 0]
     assert labels.set_instances_calls == [(0, [instance])]
 
 

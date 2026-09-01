@@ -29,10 +29,17 @@ class YoloDatasetWriter:
 
             for image in images:
                 image_name = image.name
-                image_file = set_images_folder / f"{image_name}.png"
                 label_file = set_labels_folder / f"{image_name}.txt"
 
-                cv2.imwrite(str(image_file), image.image)
+                if image.source_file is not None:
+                    image_file = set_images_folder / f"{image_name}{image.source_file.suffix}"
+                    shutil.copy2(image.source_file, image_file)
+                elif image.image is not None:
+                    image_file = set_images_folder / f"{image_name}.png"
+                    cv2.imwrite(str(image_file), cv2.cvtColor(image.image, cv2.COLOR_RGB2BGR))
+                else:
+                    raise ValueError(f"YoloImage '{image_name}' has neither a source_file nor image data")
+
                 YOLOPoseLabelWriter.write_instances(label_file, image.instances)
 
                 completed += 1

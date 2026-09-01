@@ -1,7 +1,6 @@
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
-from typing import Iterable, Tuple, Sequence, Mapping, Optional, Callable, List, Set
+from typing import Callable, Sequence, Mapping, Optional, List, Set
 
 import numpy as np
 from PySide6.QtCore import Signal, QObject, Slot, QThread
@@ -13,13 +12,34 @@ from PySide6.QtWidgets import QDialog, QFormLayout, QLineEdit, QToolButton, QWid
 from junip3r.labeller.data.types.abc import IInstance, IInstanceType, LabellerObjectType
 from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import \
     MappingYoloDatasetMetadataGenerator, MappingYoloDatasetGenerator, MappingYoloPoseInstanceConverter
-from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig, LazyYoloImage
+from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig, YoloPoseInstance
 from junip3r.labeller.export.yolo.serialization.yolo_dataset_metadata_writer import YoloPoseDatasetMetadataWriter
 from junip3r.labeller.export.yolo.serialization.yolo_dataset_writer import YoloDatasetWriter
 from junip3r.labeller.export.yolo.serialization.set_split_writer import SetSplitWriter
 from junip3r.labeller.export.yolo.set_split import SetSplitConfig, SetSplit, ISetSplitRepository, resolve_set_assignments
 from junip3r.labeller.export.yolo.widgets.set_split_dialog import SetSplitDialog
-from junip3r.labeller.model.app_model import AppModel
+from junip3r.labeller.model.abc import IReadOnlyAppModel
+
+
+@dataclass
+class AppModelYoloImage:
+    """A YoloImage with no backing file, whose pixels are loaded from a model on demand.
+
+    Used when the underlying image repository is (fully or partially) in-memory and
+    `get_image_file` returns `None` for it.
+    """
+    app_model: IReadOnlyAppModel
+    image_index: int
+    name: str
+    instances: Sequence[YoloPoseInstance]
+
+    @property
+    def image(self) -> Optional[np.ndarray]:
+        return self.app_model.get_image(self.image_index)
+
+    @property
+    def source_file(self) -> Optional[Path]:
+        return self.app_model.get_image_file(self.image_index)
 
 
 @dataclass
@@ -27,7 +47,10 @@ class ExportJob:
     target_folder: Path
     config: YoloDatasetConfig
     set_split_config: SetSplitConfig
-    data: Iterable[Tuple[str, str, Callable[[], np.ndarray], Sequence[IInstance]]]
+    model: IReadOnlyAppModel
+    instance_filter: Callable[[IInstance], bool]
+    image_filter: Callable[[Sequence[IInstance]], bool]
+    set_mapper: Callable[[str], Optional[str]]
     canceled: bool = False
 
     def cancel(self):
@@ -54,12 +77,21 @@ class ExportWorker(QObject):
             dataset_generator = MappingYoloDatasetGenerator(job.config)
             metadata_generator = MappingYoloDatasetMetadataGenerator(job.config)
 
-            def to_yolo_images():
-                for set_name, image_name, load_image, instances in job.data:
-                    yolo_instances = instance_converter.convert(instances)
-                    yield set_name, LazyYoloImage(image_name, load_image, yolo_instances)
+            yolo_images = []
+            for image_index in range(job.model.get_num_images()):
+                image_name = job.model.get_image_name(image_index)
+                set_name = job.set_mapper(image_name)
+                if set_name is None:
+                    continue
 
-            dataset = dataset_generator.generate(to_yolo_images())
+                instances = [i for i in job.model.get_instances(image_index) if job.instance_filter(i)]
+                if not job.image_filter(instances):
+                    continue
+
+                yolo_instances = instance_converter.convert(instances)
+                yolo_images.append((set_name, AppModelYoloImage(job.model, image_index, image_name, yolo_instances)))
+
+            dataset = dataset_generator.generate(yolo_images)
             metadata = metadata_generator.generate()
 
             dataset_writer = YoloDatasetWriter()
@@ -87,7 +119,7 @@ class ExportWorker(QObject):
 class YoloExportDialog(QDialog):
     run_export = Signal(object)
 
-    def __init__(self, model: AppModel, set_split_repository: ISetSplitRepository, parent=None):
+    def __init__(self, model: IReadOnlyAppModel, set_split_repository: ISetSplitRepository, parent=None):
         super().__init__(parent)
 
         self._model = model
@@ -312,19 +344,17 @@ class YoloExportDialog(QDialog):
             return
 
         selected_names = self._selected_instance_type_names()
+        include_empty = self.chk_include_empty.isChecked()
 
-        def image_generator():
-            for image_index in self._included_image_indices():
-                image_name = self._model.get_image_name(image_index)
-                set_name = set_assignments.get(image_name)
-                if set_name is None:
-                    continue
-
-                load_image = partial(self._model.get_image, image_index)
-                instances = self._filtered_instances(image_index, selected_names)
-                yield set_name, image_name, load_image, instances
-
-        job = ExportJob(target_folder, dataset_config, self._set_split_config, image_generator())
+        job = ExportJob(
+            target_folder,
+            dataset_config,
+            self._set_split_config,
+            self._model,
+            instance_filter=lambda instance: instance.instance_type.name in selected_names,
+            image_filter=(lambda instances: True) if include_empty else (lambda instances: bool(instances)),
+            set_mapper=set_assignments.get,
+        )
         self._current_job = job
         self._show_export_progress()
         self.run_export.emit(job)

@@ -79,7 +79,7 @@ class SetupMainWindow(QMainWindow):
         self.label_repository = SetupPreviewLabelRepository()
         self.selection_repository = SetupSelectionRepository()
 
-        self.preview_app_model = AppModel(self.image_repository, self.config_repository, self.label_repository, self.selection_repository, cache=False)
+        self.preview_app_model = AppModel(self.image_repository, self.config_repository, self.label_repository, self.selection_repository)
         self.preview_pose_image_model = SetupPoseImageModel(self.preview_app_model)
 
         self.setWindowTitle("Junip3R Project Setup")

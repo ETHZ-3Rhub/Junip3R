@@ -1,4 +1,5 @@
-from typing import Optional, Sequence, cast, Tuple
+from pathlib import Path
+from typing import Optional, Sequence, cast
 
 import numpy as np
 
@@ -6,17 +7,25 @@ from junip3r.labeller.data.repository.abc import ILabelRepository, IImageReposit
     ISelectionRepository
 from junip3r.labeller.data.types.abc import InstanceID, Selection, Point, Box, IKeypoint, IInstance, IInstanceType, \
     ILabellerObject, IBoundingBox, IPolygon, IPolyline, LabellerObjectType
-from junip3r.labeller.model.abc import IUndoModel
+from junip3r.labeller.model.abc import IUndoModel, IReadOnlyAppModel
 
 
-class AppModel(IUndoModel):
+class AppModel(IUndoModel, IReadOnlyAppModel):
+    """Stateless application model: every read goes straight to the repositories.
+
+    Holds no per-image-index state, so it's safe to use from any thread and to construct
+    multiple instances over the same repositories. Callers that repeatedly re-read the same
+    value (e.g. the interactive editor re-displaying the current image after every edit)
+    should cache at their own layer if that turns out to matter - see PoseImageModel's image
+    cache for an example.
+    """
+
     def __init__(
             self,
             image_repository: IImageRepository,
             config_repository: IConfigRepository,
             label_repository: ILabelRepository,
             selection_repository: ISelectionRepository,
-            cache: bool = True,
             parent=None
     ):
         super().__init__(parent)
@@ -26,81 +35,38 @@ class AppModel(IUndoModel):
         self._label_repository = label_repository
         self._selection_repository = selection_repository
 
-        self._cache = cache
-
         self._num_images = self._image_repository.get_num_images()
-
-        self._image: Optional[Tuple[int, np.ndarray]] = None
-        self._instance_types: Optional[Tuple[int, Sequence[IInstanceType]]] = None
-        self._expected_instances: Optional[Tuple[int, Sequence[IInstanceType]]] = None
-        self._instances: Optional[Tuple[int, Sequence[IInstance]]] = None
-        self._selection: Optional[Tuple[int, Optional[Selection]]] = None
-        self._new_instance_type: Optional[Tuple[int, Optional[IInstanceType]]] = None
-
-    def _get_image(self, image_index: int) -> np.ndarray:
-        if not self._cache or self._image is None or self._image[0] != image_index:
-            self._image = (image_index, self._image_repository.get_image(image_index))
-        _, image = self._image
-        return image
-
-    def _get_instance_types(self, image_index: int) -> Sequence[IInstanceType]:
-        if not self._cache or self._instance_types is None or self._instance_types[0] != image_index:
-            self._instance_types = (image_index, self._config_repository.get_instance_types(image_index))
-        _, instance_types = self._instance_types
-        return instance_types
-
-    def _get_expected_instances(self, image_index: int) -> Sequence[IInstanceType]:
-        if not self._cache or self._expected_instances is None or self._expected_instances[0] != image_index:
-            self._expected_instances = (image_index, self._config_repository.get_expected_instances(image_index))
-        _, expected_instances = self._expected_instances
-        return expected_instances
-
-    def _get_instances(self, image_index: int) -> Sequence[IInstance]:
-        if not self._cache or self._instances is None or self._instances[0] != image_index:
-            self._instances = (image_index, self._label_repository.get_instances(image_index))
-        _, instances = self._instances
-        return instances
-
-    def _get_selection(self, image_index: int) -> Selection:
-        if not self._cache or self._selection is None or self._selection[0] != image_index:
-            self._selection = (image_index, self._selection_repository.get_selection(image_index))
-        _, selection = self._selection
-        return selection
-
-    def _get_new_instance_type(self, image_index: int) -> IInstanceType | None:
-        if not self._cache or self._new_instance_type is None or self._new_instance_type[0] != image_index:
-            self._new_instance_type = (image_index, self._selection_repository.get_new_instance_type(image_index))
-        _, new_instance_type = self._new_instance_type
-        return new_instance_type
 
     def get_num_images(self) -> int:
         return self._num_images
 
     def get_image(self, image_index: int) -> np.ndarray:
-        return self._get_image(image_index)
+        return self._image_repository.get_image(image_index)
 
     def get_image_name(self, image_index: int) -> str:
         return self._image_repository.get_image_name(image_index)
 
+    def get_image_file(self, image_index: int) -> Optional[Path]:
+        return self._image_repository.get_image_file(image_index)
+
     def get_instance_types(self, image_index: int) -> Sequence[IInstanceType]:
-        return self._get_instance_types(image_index)
+        return self._config_repository.get_instance_types(image_index)
 
     def get_expected_instances(self, image_index: int) -> Sequence[IInstanceType]:
-        return self._get_expected_instances(image_index)
+        return self._config_repository.get_expected_instances(image_index)
 
     def get_instances(self, image_index: int) -> Sequence[IInstance]:
-        return self._get_instances(image_index)
+        return self._label_repository.get_instances(image_index)
 
     def get_instance(self, image_index: int, instance_id: InstanceID) -> Optional[IInstance]:
-        instances = self._get_instances(image_index)
+        instances = self.get_instances(image_index)
         return next((instance for instance in instances if instance.instance_id == instance_id), None)
 
     def set_instances(self, image_index: int, instances: Sequence[IInstance]) -> None:
-        self._instances = (image_index, list(instances))
         self._label_repository.set_instances(image_index, list(instances))
 
     def insert_instance(self, image_index: int, instance: IInstance, insertion_index: int = None) -> None:
-        instances = list(self._get_instances(image_index))
+        instances = list(self.get_instances(image_index))
         if insertion_index is None:
             instances.append(instance)
         else:
@@ -108,12 +74,12 @@ class AppModel(IUndoModel):
         self.set_instances(image_index, instances)
 
     def remove_instance(self, image_index: int, instance_id: InstanceID) -> None:
-        instances = self._get_instances(image_index)
+        instances = self.get_instances(image_index)
         instances = [instance for instance in instances if instance.instance_id != instance_id]
         self.set_instances(image_index, instances)
 
     def replace_instance(self, image_index: int, instance_id: InstanceID, instance: IInstance) -> None:
-        instances = self._get_instances(image_index)
+        instances = self.get_instances(image_index)
         instances = [instance if inst.instance_id == instance_id else inst for inst in instances]
         self.set_instances(image_index, instances)
 
@@ -140,17 +106,15 @@ class AppModel(IUndoModel):
         self.replace_instance(image_index, instance_id, new_instance)
 
     def get_selection(self, image_index: int) -> Optional[Selection]:
-        return self._get_selection(image_index)
+        return self._selection_repository.get_selection(image_index)
 
     def set_selection(self, image_index: int, selection: Optional[Selection]) -> None:
-        self._selection = (image_index, selection)
         self._selection_repository.set_selection(image_index, selection)
 
     def get_new_instance_type(self, image_index: int) -> IInstanceType | None:
-        return self._get_new_instance_type(image_index)
+        return self._selection_repository.get_new_instance_type(image_index)
 
     def set_new_instance_type(self, image_index: int, instance_type: IInstanceType | None) -> None:
-        self._new_instance_type = (image_index, instance_type)
         self._selection_repository.set_new_instance_type(image_index, instance_type)
 
     def get_member(self, image_index: int, selection: Selection) -> ILabellerObject:
