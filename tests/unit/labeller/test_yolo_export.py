@@ -1,6 +1,6 @@
 import pytest
 
-from junip3r.labeller.data.types.delegates import BoundingBox, Instance, Keypoint
+from junip3r.labeller.data.types.data import BoundingBox, Instance, Keypoint
 from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import (
     MappingYoloPoseInstanceConverter,
     _box_to_xywh,

@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass, field, replace
 from typing import List, Optional, Tuple, Self, Sequence
 
@@ -24,6 +25,10 @@ class Keypoint:
     color: Color = (255, 0, 0)
     p: Optional[Point] = None
     visibility: float = 2.0
+    # Stable per-member-slot identity, used only by the setup preview to track a
+    # member across live config edits (see MemberSpecs); the labeller itself never
+    # reads this.
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     @property
     def path(self):
@@ -86,6 +91,11 @@ class BoundingBox:
     box: Optional[Box] = None
 
     _corners: Optional[Tuple[BoundingBoxCorner, BoundingBoxCorner, BoundingBoxCorner, BoundingBoxCorner]] = None
+
+    # Stable per-member-slot identity, used only by the setup preview to track a
+    # member across live config edits (see MemberSpecs); the labeller itself never
+    # reads this.
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def __post_init__(self):
         if self.box is not None:
@@ -172,6 +182,11 @@ class Polygon:
     num_points: Optional[int] = None
     points: Sequence[IPolygonPoint] = field(default_factory=list)
 
+    # Stable per-member-slot identity, used only by the setup preview to track a
+    # member across live config edits (see MemberSpecs); the labeller itself never
+    # reads this.
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
     @property
     def path(self):
         return self.instance_id, self.member_index
@@ -223,6 +238,11 @@ class Polyline:
     color: Color = (255, 0, 0)
     num_points: Optional[int] = None
     points: Sequence[IPolygonPoint] = field(default_factory=list)
+
+    # Stable per-member-slot identity, used only by the setup preview to track a
+    # member across live config edits (see MemberSpecs); the labeller itself never
+    # reads this.
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     @property
     def path(self):

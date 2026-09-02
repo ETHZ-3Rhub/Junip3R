@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QMainWindow, QSizePolicy, QFrame, QVBoxLayout, QWi
 from junip3r.common.labels.serialization import LabelSerializer
 from junip3r.labeller.controller.editor_controller import EditorController
 from junip3r.labeller.data.repository.abc import IImageRepository, ISelectionRepository
+from junip3r.labeller.data.repository.label import InstanceMapper
 from junip3r.labeller.data.types.abc import Selection
 from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.model.camera_model import CameraModel
@@ -21,7 +22,6 @@ from junip3r.setup.data.repository.abc import ISetupConfigRepository
 from junip3r.setup.model.config_model import ConfigState, ConfigModel, ConfigStateChangeFlags
 from junip3r.setup.model.setup_pose_image_model import SetupPoseImageModel
 from junip3r.setup.preview.data.repository.preview_persistence import PreviewPersistenceRepository
-from junip3r.setup.preview.data.repository.setup_preview_instance_mapper import SetupPreviewInstanceMapper
 from junip3r.setup.preview.data.repository.setup_preview_label_repository import SetupPreviewLabelRepository, \
     SetupConfigRepository, resolve_instance_types
 from junip3r.setup.preview.placeholder_image import load_image_rgb, load_placeholder_image
@@ -238,9 +238,12 @@ class SetupMainWindow(QMainWindow):
         Instance/member IDs are assigned once, when this window's ConfigModel is
         first built from config.yaml, and stay stable for the rest of the session
         (SetupConfig.from_config) - so the persisted labels only need to be mapped
-        onto the current instance types once, right here, via SetupPreviewInstanceMapper.
-        Every edit after that flows through SetupPreviewLabelRepository.set_state's
-        normal ID-based merge, same as any instance placed interactively this session.
+        onto the current instance types once, right here, via InstanceMapper (the
+        same one the real labeller uses - setup's instance/member types are now
+        the labeller's own, just with an added id, so there's nothing preview-
+        specific left for a separate mapper to do). Every edit after that flows
+        through SetupPreviewLabelRepository.set_state's normal ID-based merge,
+        same as any instance placed interactively this session.
         """
         image_file = preview_folder / "image.png"
         if image_file.exists():
@@ -253,7 +256,7 @@ class SetupMainWindow(QMainWindow):
             loaded_instances = LabelSerializer().load_instances(labels_file)
             instance_types = resolve_instance_types(self._model.get_instance_types())
             try:
-                instances = SetupPreviewInstanceMapper(instance_types).from_data(loaded_instances)
+                instances = InstanceMapper(instance_types).from_data(loaded_instances)
             except (KeyError, ValueError) as e:
                 # config.yaml is meant to be hand-editable, so a persisted preview
                 # that no longer matches it (renamed/removed instance type, member
