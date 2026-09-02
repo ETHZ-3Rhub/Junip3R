@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 def from_config_file(config_file: Path, integrated: bool = False, parent=None) -> SetupMainWindow:
     config_repository = SetupConfigRepository(config_file)
     setup = SetupMainWindow(config_repository, integrated=integrated, parent=parent)
+    setup.set_project_folder(config_file.parent)
 
     return setup
 

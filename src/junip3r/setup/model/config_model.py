@@ -95,7 +95,9 @@ class ConfigModel(QObject):
         if instance_type is None:
             raise ValueError(f"Instance type '{instance_type_id}' not found")
         self._instance_types = [it for it in self._instance_types if it.id != instance_type_id]
-        self._expected_instance_types = [(instance_id, instance_type_id) for instance_id, instance_type_id in self._expected_instance_types if instance_type_id != instance_type_id]
+        self._expected_instance_types = [
+            (instance_id, type_id) for instance_id, type_id in self._expected_instance_types if type_id != instance_type_id
+        ]
         self._flags |= ConfigStateChangeFlags.INSTANCE_TYPES | ConfigStateChangeFlags.PREVIEW_INSTANCES
         self._flush()
 

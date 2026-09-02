@@ -1,8 +1,9 @@
+import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-import cv2
 import numpy as np
 import yaml
 from PySide6.QtCore import Qt, QAbstractListModel, Signal
@@ -18,8 +19,12 @@ from junip3r.labeller.data.repository.label import InstanceMapper
 from junip3r.labeller.data.types.abc import IInstanceType, IInstance
 from junip3r.labeller.model.camera_model import CameraModel
 from junip3r.labeller.widgets.pose_image import PoseImage
+from junip3r.setup.preview.data.repository.preview_persistence import PreviewPersistenceRepository
+from junip3r.setup.preview.placeholder_image import load_image_rgb, load_placeholder_image
 from junip3r.setup.widgets.preview_pose_image_controller import PreviewPoseImageController
 from junip3r.setup.model.preview_pose_image_model import PreviewPoseImageModel
+
+logger = logging.getLogger(__name__)
 
 # Matches the QComboBox item data set up in NewProjectWindow's mode dropdown below.
 _MODE_NAMES = {
@@ -27,6 +32,12 @@ _MODE_NAMES = {
     ConfigMode.YOLO_DETECT: "yolo_detect",
     ConfigMode.YOLO_POSE: "yolo_pose",
 }
+
+_LOCAL_APPDATA = os.environ.get("LOCALAPPDATA")
+DEFAULT_TEMPLATES_ROOT = (
+    Path(_LOCAL_APPDATA) / "ETH3RHub" / "Junip3R" / "templates"
+    if _LOCAL_APPDATA is not None else Path.home() / ".junip3r" / "templates"
+)
 
 
 @dataclass
@@ -43,14 +54,16 @@ class Preset:
 EMPTY_PRESET = Preset("Empty")
 
 
-def load_preset(preset_folder: Path) -> Preset:
-    config_file = preset_folder / "config.yaml"
-    image_file = preset_folder / "image.png"
-    labels_file = preset_folder / "labels.json"
-    if not all(f.exists() for f in (config_file, image_file, labels_file)):
-        raise ValueError("Preset is missing required files")
+def load_preset(name: str, config_file: Path, image_file: Path, labels_file: Path) -> Preset:
+    """Build a Preset from a config file plus an optional image/labels pair.
 
-    name = preset_folder.name
+    Only config_file is required. image_file and labels_file may not exist -
+    a project may have no preview image yet, or instance types but no example
+    instances drawn (LabelSerializer.write_instances deletes labels.json when
+    there are no instances to write) - both are valid, partial preview states.
+    """
+    if not config_file.exists():
+        raise ValueError("Preset is missing its config file")
 
     config_dict = yaml.safe_load(open(config_file, 'r'))
     labeller_config = parse_config(config_dict)
@@ -58,14 +71,48 @@ def load_preset(preset_folder: Path) -> Preset:
 
     mode = _MODE_NAMES[labeller_config.mode] if len(instance_types) > 0 else None
 
-    image = cv2.imread(str(image_file))
-    if image is None:
-        raise ValueError("Failed to load image")
+    image = load_image_rgb(image_file) if image_file.exists() else None
 
-    data = LabelSerializer().load_instances(labels_file)
-    instances = InstanceMapper(instance_types).from_data(data)
+    instances = []
+    if labels_file.exists():
+        data = LabelSerializer().load_instances(labels_file)
+        instances = InstanceMapper(instance_types).from_data(data)
 
     return Preset(name, mode, image, instance_types, instances, config_file)
+
+
+def load_saved_preset(preset_folder: Path) -> Preset:
+    return load_preset(
+        preset_folder.name,
+        preset_folder / "config.yaml",
+        preset_folder / "image.png",
+        preset_folder / "labels.json",
+    )
+
+
+def load_project_as_preset(project_folder: Path) -> Preset:
+    preview_folder = project_folder / "_labeller" / "preview"
+    return load_preset(
+        project_folder.name,
+        project_folder / "config.yaml",
+        preview_folder / "image.png",
+        preview_folder / "labels.json",
+    )
+
+
+def discover_saved_presets(templates_root: Path = DEFAULT_TEMPLATES_ROOT) -> List[Preset]:
+    if not templates_root.exists():
+        return []
+
+    presets = []
+    for preset_folder in sorted(templates_root.iterdir()):
+        if not preset_folder.is_dir():
+            continue
+        try:
+            presets.append(load_saved_preset(preset_folder))
+        except (ValueError, OSError, yaml.YAMLError) as e:
+            logger.warning(f"Skipping invalid template '{preset_folder.name}': {e}")
+    return presets
 
 
 class PresetModel(QAbstractListModel):
@@ -126,7 +173,7 @@ class NewProjectWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        presets = [EMPTY_PRESET] + [load_preset(Path(r"C:\Users\Me\PycharmProjects\Junip3R\_testdata\presets\3RHub EPM"))]
+        presets = [EMPTY_PRESET] + discover_saved_presets()
 
         self.preset_model = PresetModel()
         self.preset_model.set_presets(presets)
@@ -152,6 +199,11 @@ class NewProjectWindow(QWidget):
         self.lst_presets.setModel(self.preset_model)
         self.lst_presets.selectionModel().currentChanged.connect(self._set_preset)
         presets_layout.addWidget(self.lst_presets)
+
+        self.btn_load_project = QPushButton("Load Existing Project...")
+        self.btn_load_project.clicked.connect(self._load_project_as_template)
+        presets_layout.addWidget(self.btn_load_project)
+
         content_layout.addWidget(frm_presets)
 
         frm_config = QFrame()
@@ -205,7 +257,7 @@ class NewProjectWindow(QWidget):
 
         instance_types_layout = QVBoxLayout(frm_instance_types)
 
-        lbl_instance_types = QLabel("Instance Types in Preset")
+        lbl_instance_types = QLabel("Instance Types in Preset:")
         instance_types_layout.addWidget(lbl_instance_types)
 
         self.lst_instance_types = QListView()
@@ -278,10 +330,38 @@ class NewProjectWindow(QWidget):
         else:
             self.dpd_mode.setEnabled(True)
         self.instance_type_model.set_instance_types(preset.instance_types)
-        self.preview_pose_image_model._image = preset.image
+        # Fall back to the generic placeholder so the instance layout is still viewable
+        # for a preset/project with instance types but no preview image of its own.
+        image = preset.image
+        if image is None and len(preset.instance_types) > 0:
+            image = load_placeholder_image()
+        self.preview_pose_image_model._image = image
         self.preview_pose_image_model._instance_types = preset.instance_types
         self.preview_pose_image_model._instances = preset.instances
         self.preview_pose_image_model.refresh()
+
+    def _load_project_as_template(self):
+        from PySide6.QtWidgets import QFileDialog
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Project Config File",
+            "",
+            "Junip3R Config File (*.yaml)",
+        )
+        if not file_path:
+            return
+
+        project_folder = Path(file_path).parent
+        try:
+            preset = load_project_as_preset(project_folder)
+        except ValueError as e:
+            QMessageBox.critical(self, "Could Not Load Project", str(e))
+            return
+
+        presets = self.preset_model.presets + [preset]
+        self.preset_model.set_presets(presets)
+        self.lst_presets.setCurrentIndex(self.preset_model.index(len(presets) - 1, 0))
 
     def _select_folder(self):
         from PySide6.QtWidgets import QFileDialog
@@ -337,6 +417,9 @@ class NewProjectWindow(QWidget):
             assert preset.config_file is not None
             import shutil
             shutil.copy(preset.config_file, Path(location) / "config.yaml")
+
+            if preset.image is not None or preset.instances:
+                PreviewPersistenceRepository(location / "_labeller" / "preview").save(preset.image, preset.instances)
 
             message_box = QMessageBox()
             message_box.setIcon(QMessageBox.Icon.Question)
