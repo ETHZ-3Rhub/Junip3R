@@ -136,7 +136,9 @@ class SetupInstanceType:
 
     def remove_member(self, member_id: str) -> Self:
         members = [m for m in self.members if m.id != member_id]
-        return self.with_members(members)
+        lines = [l for l in self.skeleton.lines if member_id not in l]
+        skeleton = self.skeleton.with_lines(lines)
+        return replace(self, members=tuple(members), skeleton=skeleton)
 
 
 @dataclass(frozen=True)
