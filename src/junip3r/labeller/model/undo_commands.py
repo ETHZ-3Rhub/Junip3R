@@ -2,7 +2,7 @@ from typing import Sequence, Optional, cast, Any
 
 from PySide6.QtGui import QUndoCommand
 
-from junip3r.labeller.data.types.abc import IInstance, InstanceID, Selection, IInstanceType, Point, \
+from junip3r.labeller.data.types.abc import IInstance, InstanceID, MemberID, Selection, IInstanceType, Point, \
     Box, IKeypoint, IBoundingBox, IPolygon
 from junip3r.labeller.model.abc import IChangeTracker, IUndoModel
 from junip3r.labeller.model.image_state import ImageStateChangeFlags
@@ -223,7 +223,7 @@ class SetKeypoint(QUndoCommand):
             change_tracker: IChangeTracker,
             image_index: int,
             instance_id: str,
-            member_index: int,
+            member_id: MemberID,
             point: Point | None,
             visibility: float = 0.0,
             name: str = "Set Keypoint",
@@ -234,7 +234,7 @@ class SetKeypoint(QUndoCommand):
         self._change_tracker = change_tracker
         self._image_index = image_index
         self._instance_id = instance_id
-        self._member_index = member_index
+        self._member_id = member_id
         self._point = point
         self._visibility = visibility
 
@@ -242,16 +242,18 @@ class SetKeypoint(QUndoCommand):
         self._previous_visibility: float = 0.0
 
     def redo(self) -> None:
-        keypoint = cast(IKeypoint, self._model.get_member(self._image_index, (self._instance_id, self._member_index)))
+        keypoint = cast(Optional[IKeypoint], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
+        if keypoint is None:
+            return
         self._previous_point = keypoint.p
         self._previous_visibility = keypoint.visibility
 
-        self._model.set_keypoint(self._image_index, (self._instance_id, self._member_index), self._point, self._visibility)
+        self._model.set_keypoint(self._image_index, (self._instance_id, self._member_id), self._point, self._visibility)
         self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)
 
 
     def undo(self) -> None:
-        self._model.set_keypoint(self._image_index, (self._instance_id, self._member_index), self._previous_point, self._previous_visibility)
+        self._model.set_keypoint(self._image_index, (self._instance_id, self._member_id), self._previous_point, self._previous_visibility)
         self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)
 
 
@@ -262,7 +264,7 @@ class SetBoundingBox(QUndoCommand):
             change_tracker: IChangeTracker,
             image_index: int,
             instance_id: str,
-            member_index: int,
+            member_id: MemberID,
             box: Box | None,
             name: str = "Set Bounding Box",
     ) -> None:
@@ -272,20 +274,22 @@ class SetBoundingBox(QUndoCommand):
         self._change_tracker = change_tracker
         self._image_index = image_index
         self._instance_id = instance_id
-        self._member_index = member_index
+        self._member_id = member_id
         self._box = box
 
         self._previous_box: Box | None = None
 
     def redo(self) -> None:
-        bounding_box = cast(IBoundingBox, self._model.get_member(self._image_index, (self._instance_id, self._member_index)))
+        bounding_box = cast(Optional[IBoundingBox], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
+        if bounding_box is None:
+            return
         self._previous_box = bounding_box.box
 
-        self._model.set_bounding_box(self._image_index, (self._instance_id, self._member_index), self._box)
+        self._model.set_bounding_box(self._image_index, (self._instance_id, self._member_id), self._box)
         self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)
 
     def undo(self) -> None:
-        self._model.set_bounding_box(self._image_index, (self._instance_id, self._member_index), self._previous_box)
+        self._model.set_bounding_box(self._image_index, (self._instance_id, self._member_id), self._previous_box)
         self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)
 
 
@@ -296,7 +300,7 @@ class SetPolygon(QUndoCommand):
             change_tracker: IChangeTracker,
             image_index: int,
             instance_id: str,
-            member_index: int,
+            member_id: MemberID,
             points: Sequence[Point],
             name: str = "Set Polygon",
     ) -> None:
@@ -306,20 +310,22 @@ class SetPolygon(QUndoCommand):
         self._change_tracker = change_tracker
         self._image_index = image_index
         self._instance_id = instance_id
-        self._member_index = member_index
+        self._member_id = member_id
         self._points = points
 
         self._previous_points: Sequence[Point] = []
 
     def redo(self) -> None:
-        polygon = cast(IPolygon, self._model.get_member(self._image_index, (self._instance_id, self._member_index)))
+        polygon = cast(Optional[IPolygon], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
+        if polygon is None:
+            return
         self._previous_points = [p.p for p in polygon.points]
 
-        self._model.set_polygon(self._image_index, (self._instance_id, self._member_index), self._points)
+        self._model.set_polygon(self._image_index, (self._instance_id, self._member_id), self._points)
         self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)
 
     def undo(self) -> None:
-        self._model.set_polygon(self._image_index, (self._instance_id, self._member_index), self._previous_points)
+        self._model.set_polygon(self._image_index, (self._instance_id, self._member_id), self._previous_points)
         self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)
 
 
@@ -330,7 +336,7 @@ class SetPolygonPoint(QUndoCommand):
             change_tracker: IChangeTracker,
             image_index: int,
             instance_id: str,
-            member_index: int,
+            member_id: MemberID,
             polygon_point_index: int,
             point: Point,
             name: str = "Set Polygon Point",
@@ -341,23 +347,25 @@ class SetPolygonPoint(QUndoCommand):
         self._change_tracker = change_tracker
         self._image_index = image_index
         self._instance_id = instance_id
-        self._member_index = member_index
+        self._member_id = member_id
         self._polygon_point_index = polygon_point_index
         self._point = point
 
         self._previous_point: Point | None = None
 
     def redo(self) -> None:
-        member = cast(IPolygon, self._model.get_member(self._image_index, (self._instance_id, self._member_index)))
+        member = cast(Optional[IPolygon], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
+        if member is None or self._polygon_point_index >= len(member.points):
+            return
         polygon_point = member.points[self._polygon_point_index]
         self._previous_point = polygon_point.p
 
-        self._model.set_polygon_point(self._image_index, (self._instance_id, self._member_index), self._polygon_point_index, self._point)
+        self._model.set_polygon_point(self._image_index, (self._instance_id, self._member_id), self._polygon_point_index, self._point)
         self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)
 
 
     def undo(self) -> None:
         if self._previous_point is None:
             return
-        self._model.set_polygon_point(self._image_index, (self._instance_id, self._member_index), self._polygon_point_index, self._previous_point)
+        self._model.set_polygon_point(self._image_index, (self._instance_id, self._member_id), self._polygon_point_index, self._previous_point)
         self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)

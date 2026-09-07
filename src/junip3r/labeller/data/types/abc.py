@@ -10,8 +10,9 @@ Box = Tuple[Point, Point]
 TemporalContext = Tuple[List[np.ndarray], np.ndarray, List[np.ndarray]]
 
 InstanceID = Optional[str]
-Selection = Tuple[InstanceID, int]
-ObjectPath = Union[Tuple[InstanceID, int], Tuple[InstanceID, int, int]]
+MemberID = str
+Selection = Tuple[InstanceID, MemberID]
+ObjectPath = Union[Tuple[InstanceID, MemberID], Tuple[InstanceID, MemberID, int]]
 
 
 class LabellerObjectType(Enum):
@@ -45,9 +46,20 @@ class ILabellerParentObject(ILabellerObject, Protocol):
 
 
 @runtime_checkable
-class IKeypoint(ILabellerObject, Protocol):
+class IInstanceMember(ILabellerObject, Protocol):
+    """A labeller object that can be a first-order member of an Instance (as opposed to
+    a sub-member like a bounding box corner or polygon point) - the set of things
+    addressable by a stable MemberID (see Instance.get_member/.path), since those are
+    exactly the objects built directly from an InstanceType's MemberSpecs list.
+    """
+    @property
+    def id(self) -> MemberID: ...
     @property
     def color(self) -> Color: ...
+
+
+@runtime_checkable
+class IKeypoint(IInstanceMember, Protocol):
     @property
     def p(self) -> Optional[Point]: ...
     @property
@@ -66,9 +78,7 @@ class IBoundingBoxCorner(ILabellerObject, Protocol):
 
 
 @runtime_checkable
-class IBoundingBox(ILabellerObject, Protocol):
-    @property
-    def color(self) -> Color: ...
+class IBoundingBox(IInstanceMember, Protocol):
     @property
     def box(self) -> Optional[Box]: ...
     @property
@@ -86,9 +96,7 @@ class IPolygonPoint(ILabellerObject, Protocol):
 
 
 @runtime_checkable
-class IPolygon(ILabellerParentObject, Protocol):
-    @property
-    def color(self) -> Color: ...
+class IPolygon(IInstanceMember, ILabellerParentObject, Protocol):
     @property
     def num_points(self) -> Optional[int]: ...
     @property
@@ -99,9 +107,7 @@ class IPolygon(ILabellerParentObject, Protocol):
 
 
 @runtime_checkable
-class IPolyline(ILabellerParentObject, Protocol):
-    @property
-    def color(self) -> Color: ...
+class IPolyline(IInstanceMember, ILabellerParentObject, Protocol):
     @property
     def num_points(self) -> Optional[int]: ...
     @property
@@ -134,8 +140,11 @@ class IInstance(ILabellerParentObject, Protocol):
     def instance_type(self) -> IInstanceType: ...
     @property
     def skeleton(self) -> ISkeleton: ...
+    @property
+    def members(self) -> Sequence[IInstanceMember]: ...  # narrows ILabellerParentObject.members
 
     def with_instance_id(self, instance_id: InstanceID) -> Self: ...
     def with_name(self, name: str) -> Self: ...
-    def with_members(self, members: List[ILabellerObject]) -> Self: ...
-    def replace_member(self, member_index: int, member: ILabellerObject) -> Self: ...
+    def with_members(self, members: List[IInstanceMember]) -> Self: ...
+    def get_member(self, member_id: MemberID) -> Optional[IInstanceMember]: ...
+    def replace_member(self, member_id: MemberID, member: IInstanceMember) -> Self: ...

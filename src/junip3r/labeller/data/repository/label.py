@@ -86,7 +86,7 @@ class InstanceMapper:
             raise ValueError(
                 f"Instance {instance_id} has {len(instance.members)} members, but {len(data_instance.members)} members in the JSON file")
 
-        for i, (member, member_data) in enumerate(zip(instance.members, data_instance.members)):
+        for member, member_data in zip(instance.members, data_instance.members):
             if member.type == LabellerObjectType.KEYPOINT:
                 member = self._keypoint_from_data(cast(IKeypoint, member), cast(DataKeypoint, member_data))
             elif member.type == LabellerObjectType.BOUNDING_BOX:
@@ -97,7 +97,7 @@ class InstanceMapper:
                 member = self._polyline_from_data(cast(IPolyline, member), cast(DataPolyline, member_data))
             else:
                 raise ValueError(f"Unsupported member type: {member.type}")
-            instance = instance.replace_member(i, member)
+            instance = instance.replace_member(member.id, member)
         return instance
 
 

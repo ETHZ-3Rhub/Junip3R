@@ -3,7 +3,7 @@ from dataclasses import dataclass, field, replace
 from typing import List, Optional, Tuple, Self, Sequence
 
 from junip3r.labeller.data.types.abc import ILabellerParentObject, LabellerObjectType, Color, Point, Box, \
-    IPolygonPoint, IInstanceType, ILabellerObject, ISkeleton, InstanceID
+    IPolygonPoint, IInstanceType, ILabellerObject, IInstanceMember, ISkeleton, InstanceID, MemberID
 
 
 def _normalize_box(box: Optional[Box]) -> Optional[Box]:
@@ -25,14 +25,15 @@ class Keypoint:
     color: Color = (255, 0, 0)
     p: Optional[Point] = None
     visibility: float = 2.0
-    # Stable per-member-slot identity, used only by the setup preview to track a
-    # member across live config edits (see MemberSpecs); the labeller itself never
-    # reads this.
+    # Stable per-member-slot identity (see MemberSpecs). Originally added only for the
+    # setup preview to track a member across live config edits - now also what .path and
+    # Instance.get_member address this member by, since a positional index can silently
+    # point at a different member after a reorder (see AppModel.get_member and friends).
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     @property
     def path(self):
-        return self.instance_id, self.member_index
+        return self.instance_id, self.id
 
     @property
     def type(self):
@@ -64,6 +65,9 @@ class BoundingBoxCorner:
     name: str = "Bounding Box Corner"
     color: Color = (0, 0, 255)
     p: Point = (0.0, 0.0)
+    # The parent BoundingBox's stable id (see BoundingBox.id) - used by .path instead of
+    # member_index, so a corner's path survives its parent member being reordered.
+    member_id: str = ""
 
     @property
     def type(self):
@@ -71,7 +75,7 @@ class BoundingBoxCorner:
 
     @property
     def path(self):
-        return self.instance_id, self.member_index, self.corner_index
+        return self.instance_id, self.member_id, self.corner_index
 
     @property
     def bounds(self) -> Optional[Box]:
@@ -92,9 +96,10 @@ class BoundingBox:
 
     _corners: Optional[Tuple[BoundingBoxCorner, BoundingBoxCorner, BoundingBoxCorner, BoundingBoxCorner]] = None
 
-    # Stable per-member-slot identity, used only by the setup preview to track a
-    # member across live config edits (see MemberSpecs); the labeller itself never
-    # reads this.
+    # Stable per-member-slot identity (see MemberSpecs). Originally added only for the
+    # setup preview to track a member across live config edits - now also what .path and
+    # Instance.get_member address this member by, since a positional index can silently
+    # point at a different member after a reorder (see AppModel.get_member and friends).
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def __post_init__(self):
@@ -102,10 +107,10 @@ class BoundingBox:
             self.box = _normalize_box(self.box)
             (x1, y1), (x2, y2) = self.box
             self._corners = (
-                BoundingBoxCorner(self.instance_id, self.member_index, 0, p=(x1, y1)),
-                BoundingBoxCorner(self.instance_id, self.member_index, 1, p=(x2, y1)),
-                BoundingBoxCorner(self.instance_id, self.member_index, 2, p=(x2, y2)),
-                BoundingBoxCorner(self.instance_id, self.member_index, 3, p=(x1, y2)),
+                BoundingBoxCorner(self.instance_id, self.member_index, 0, p=(x1, y1), member_id=self.id),
+                BoundingBoxCorner(self.instance_id, self.member_index, 1, p=(x2, y1), member_id=self.id),
+                BoundingBoxCorner(self.instance_id, self.member_index, 2, p=(x2, y2), member_id=self.id),
+                BoundingBoxCorner(self.instance_id, self.member_index, 3, p=(x1, y2), member_id=self.id),
             )
 
     @property
@@ -114,7 +119,7 @@ class BoundingBox:
 
     @property
     def path(self):
-        return self.instance_id, self.member_index
+        return self.instance_id, self.id
 
     @property
     def type(self):
@@ -149,10 +154,13 @@ class PolygonPoint:
     name: str = "Polygon Point"
     color: Color = (255, 165, 0)
     p: Point = (0.0, 0.0)
+    # The parent Polygon/Polyline's stable id (see Polygon.id) - used by .path instead of
+    # member_index, so a point's path survives its parent member being reordered.
+    member_id: str = ""
 
     @property
     def path(self):
-        return self.instance_id, self.member_index, self.point_index
+        return self.instance_id, self.member_id, self.point_index
 
     @property
     def type(self):
@@ -182,14 +190,15 @@ class Polygon:
     num_points: Optional[int] = None
     points: Sequence[IPolygonPoint] = field(default_factory=list)
 
-    # Stable per-member-slot identity, used only by the setup preview to track a
-    # member across live config edits (see MemberSpecs); the labeller itself never
-    # reads this.
+    # Stable per-member-slot identity (see MemberSpecs). Originally added only for the
+    # setup preview to track a member across live config edits - now also what .path and
+    # Instance.get_member address this member by, since a positional index can silently
+    # point at a different member after a reorder (see AppModel.get_member and friends).
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     @property
     def path(self):
-        return self.instance_id, self.member_index
+        return self.instance_id, self.id
 
     @property
     def type(self):
@@ -219,7 +228,7 @@ class Polygon:
 
     def with_points(self, points: Sequence[Point]) -> Self:
         points = [
-            PolygonPoint(self.instance_id, self.member_index, i, p=p)
+            PolygonPoint(self.instance_id, self.member_index, i, p=p, member_id=self.id)
             for i, p in enumerate(points)
         ]
         return replace(self, points=points)
@@ -239,14 +248,15 @@ class Polyline:
     num_points: Optional[int] = None
     points: Sequence[IPolygonPoint] = field(default_factory=list)
 
-    # Stable per-member-slot identity, used only by the setup preview to track a
-    # member across live config edits (see MemberSpecs); the labeller itself never
-    # reads this.
+    # Stable per-member-slot identity (see MemberSpecs). Originally added only for the
+    # setup preview to track a member across live config edits - now also what .path and
+    # Instance.get_member address this member by, since a positional index can silently
+    # point at a different member after a reorder (see AppModel.get_member and friends).
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     @property
     def path(self):
-        return self.instance_id, self.member_index
+        return self.instance_id, self.id
 
     @property
     def type(self):
@@ -276,7 +286,7 @@ class Polyline:
 
     def with_points(self, points: Sequence[Point]) -> Self:
         points = [
-            PolygonPoint(self.instance_id, self.member_index, i, p=p)
+            PolygonPoint(self.instance_id, self.member_index, i, p=p, member_id=self.id)
             for i, p in enumerate(points)
         ]
         return replace(self, points=points)
@@ -301,7 +311,7 @@ class Instance:
     instance_id: InstanceID
     name: str
     instance_type: IInstanceType
-    members: Tuple[ILabellerObject, ...] = field(default_factory=tuple)
+    members: Tuple[IInstanceMember, ...] = field(default_factory=tuple)
     skeleton: ISkeleton = field(default_factory=Skeleton)
 
     @property
@@ -338,12 +348,14 @@ class Instance:
     def with_name(self, name: str) -> Self:
         return replace(self, name=name)
 
-    def with_members(self, members: Sequence[ILabellerObject]) -> Self:
+    def with_members(self, members: Sequence[IInstanceMember]) -> Self:
         return replace(self, members=tuple(members))
 
-    def replace_member(self, member_index: int, member: ILabellerObject) -> Self:
-        members = list(self.members)
-        members[member_index] = member
+    def get_member(self, member_id: MemberID) -> Optional[IInstanceMember]:
+        return next((m for m in self.members if m.id == member_id), None)
+
+    def replace_member(self, member_id: MemberID, member: IInstanceMember) -> Self:
+        members = [member if m.id == member_id else m for m in self.members]
         return replace(self, members=tuple(members))
 
 
@@ -364,7 +376,7 @@ class NewInstance:
         return "New Instance"
 
     @property
-    def members(self) -> List[ILabellerObject]:
+    def members(self) -> List[IInstanceMember]:
         return []
 
     @property

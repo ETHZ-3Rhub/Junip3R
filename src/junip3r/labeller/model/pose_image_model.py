@@ -6,8 +6,8 @@ import numpy as np
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QUndoStack
 
-from junip3r.labeller.data.types.abc import InstanceID, Selection, Point, Box, IKeypoint, IInstance, IInstanceType, \
-    ILabellerObject, IBoundingBox
+from junip3r.labeller.data.types.abc import InstanceID, MemberID, Selection, Point, Box, IKeypoint, IInstance, \
+    IInstanceType, ILabellerObject, IBoundingBox
 from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.model.image_state import ImageState, ImageNavigationState, ImageStateChangeFlags
 from junip3r.labeller.model.instance_type_selection_strategy import EditorInstanceTypeWorkflow
@@ -119,146 +119,151 @@ class PoseImageModel(QObject):
         instances = self.get_instances()
         return next((instance for instance in instances if instance.instance_id == instance_id), None)
     
-    def get_member(self, instance_id: InstanceID, member_index: int):
+    def get_member(self, instance_id: InstanceID, member_id: MemberID) -> Optional[ILabellerObject]:
         instance = self.get_instance(instance_id)
-        assert instance is not None, "Instance not found"
-        return instance.members[member_index]
-    
+        if instance is None:
+            return None
+        return instance.get_member(member_id)
+
     def get_selection(self) -> Optional[Selection]:
         return self._model.get_selection(self._image_index)
-    
+
     def get_selected_instance(self) -> Optional[IInstance]:
         selection = self.get_selection()
         if selection is None:
             return None
         instance_id, _ = selection
         return self.get_instance(instance_id)
-    
+
     def get_selected_member(self) -> Optional[ILabellerObject]:
         selection = self.get_selection()
         if selection is None:
             return None
-        instance_id, member_index = selection
-        instance = self.get_instance(instance_id)
-        assert instance is not None, "Instance not found"
-        return instance.members[member_index]
+        instance_id, member_id = selection
+        return self.get_member(instance_id, member_id)
 
-    def place_keypoint(self, instance_id: InstanceID, member_index: int, p: Point, visibility: float = 2.0):
+    def place_keypoint(self, instance_id: InstanceID, member_id: MemberID, p: Point, visibility: float = 2.0):
         with self.macro("Place Keypoint"):
             if instance_id is None:
                 instance_id = self._create_new_instance()
 
-            self._set_keypoint(instance_id, member_index, p, visibility)
-            self._advance_selection(instance_id, member_index)
+            self._set_keypoint(instance_id, member_id, p, visibility)
+            self._advance_selection(instance_id, member_id)
         self._flush()
 
-    def move_keypoint(self, instance_id: InstanceID, member_index: int, p: Point):
+    def move_keypoint(self, instance_id: InstanceID, member_id: MemberID, p: Point):
         assert instance_id is not None, "Instance ID should not be None"
-        member = cast(IKeypoint, self.get_member(instance_id, member_index))
+        member = cast(Optional[IKeypoint], self.get_member(instance_id, member_id))
+        if member is None:
+            return
         visibility = member.visibility
-        self._set_keypoint(instance_id, member_index, p, visibility)
+        self._set_keypoint(instance_id, member_id, p, visibility)
         self._flush()
 
-    def set_keypoint_visibility(self, instance_id: InstanceID, member_index: int, visibility: float):
+    def set_keypoint_visibility(self, instance_id: InstanceID, member_id: MemberID, visibility: float):
         assert instance_id is not None, "Instance ID should not be None"
-        member = cast(IKeypoint, self.get_member(instance_id, member_index))
-        p = member.p
-        assert p is not None, "Keypoint position should not be None"
-        self._set_keypoint(instance_id, member_index, p, visibility)
+        member = cast(Optional[IKeypoint], self.get_member(instance_id, member_id))
+        if member is None or member.p is None:
+            return
+        self._set_keypoint(instance_id, member_id, member.p, visibility)
         self._flush()
 
-    def delete_keypoint(self, instance_id: InstanceID, member_index: int):
+    def delete_keypoint(self, instance_id: InstanceID, member_id: MemberID):
         assert instance_id is not None, "Instance ID should not be None"
         with self.macro("Delete Keypoint"):
-            self._set_keypoint(instance_id, member_index, None, 0.0)
+            self._set_keypoint(instance_id, member_id, None, 0.0)
             self._delete_instance_if_empty(instance_id)
         self._flush()
-        
-    def _place_bounding_box(self, instance_id: InstanceID, member_index: int, box: Optional[Box]):
+
+    def _place_bounding_box(self, instance_id: InstanceID, member_id: MemberID, box: Optional[Box]):
         with self.macro("Place Bounding Box"):
             if instance_id is None:
                 instance_id = self._create_new_instance()
 
-            self._set_bounding_box(instance_id, member_index, box)
-            self._advance_selection(instance_id, member_index)
+            self._set_bounding_box(instance_id, member_id, box)
+            self._advance_selection(instance_id, member_id)
         self._flush()
 
-    def place_bounding_box(self, instance_id: InstanceID, member_index: int, box: Optional[Box]):
-        self._place_bounding_box(instance_id, member_index, box)
+    def place_bounding_box(self, instance_id: InstanceID, member_id: MemberID, box: Optional[Box]):
+        self._place_bounding_box(instance_id, member_id, box)
         self._flush()
 
-    def _move_bounding_box_corner(self, instance_id: InstanceID, member_index: int, corner_index: int, p: Point):
+    def _move_bounding_box_corner(self, instance_id: InstanceID, member_id: MemberID, corner_index: int, p: Point):
         assert instance_id is not None, "Instance ID should not be None"
-        bounding_box = cast(IBoundingBox, self.get_member(instance_id, member_index))
+        bounding_box = cast(Optional[IBoundingBox], self.get_member(instance_id, member_id))
+        if bounding_box is None or bounding_box.corners is None:
+            return
         corners = bounding_box.corners
-        assert corners is not None, "Bounding box corners should not be None"
         opposing_corner = corners[(corner_index + 2) % 4]
-        self._set_bounding_box(instance_id, member_index, (p, opposing_corner.p))
+        self._set_bounding_box(instance_id, member_id, (p, opposing_corner.p))
 
-    def move_bounding_box_corner(self, instance_id: InstanceID, member_index: int, corner_index: int, p: Point):
-        self._move_bounding_box_corner(instance_id, member_index, corner_index, p)
+    def move_bounding_box_corner(self, instance_id: InstanceID, member_id: MemberID, corner_index: int, p: Point):
+        self._move_bounding_box_corner(instance_id, member_id, corner_index, p)
         self._flush()
 
-    def delete_bounding_box(self, instance_id: InstanceID, member_index: int):
+    def delete_bounding_box(self, instance_id: InstanceID, member_id: MemberID):
         assert instance_id is not None, "Instance ID should not be None"
         with self.macro("Delete Bounding Box"):
-            self._set_bounding_box(instance_id, member_index, None)
+            self._set_bounding_box(instance_id, member_id, None)
             self._delete_instance_if_empty(instance_id)
         self._flush()
-    
-    def _place_polygon(self, instance_id: InstanceID, member_index: int, points: List[Point]):
+
+    def _place_polygon(self, instance_id: InstanceID, member_id: MemberID, points: List[Point]):
         with self.macro("Place Polygon"):
             if instance_id is None:
                 instance_id = self._create_new_instance()
 
-            self._set_polygon(instance_id, member_index, points)
-            self._advance_selection(instance_id, member_index)
+            self._set_polygon(instance_id, member_id, points)
+            self._advance_selection(instance_id, member_id)
         self._flush()
 
-    def place_polygon(self, instance_id: InstanceID, member_index: int, points: List[Point]):
-        self._place_polygon(instance_id, member_index, points)
+    def place_polygon(self, instance_id: InstanceID, member_id: MemberID, points: List[Point]):
+        self._place_polygon(instance_id, member_id, points)
         self._flush()
 
-    def delete_polygon(self, instance_id: InstanceID, member_index: int):
+    def delete_polygon(self, instance_id: InstanceID, member_id: MemberID):
         assert instance_id is not None, "Instance ID should not be None"
         with self.macro("Delete Polygon"):
-            self._set_polygon(instance_id, member_index, [])
+            self._set_polygon(instance_id, member_id, [])
             self._delete_instance_if_empty(instance_id)
         self._flush()
-    
-    def _place_polyline(self, instance_id: InstanceID, member_index: int, points: List[Point]):
+
+    def _place_polyline(self, instance_id: InstanceID, member_id: MemberID, points: List[Point]):
         with self.macro("Place Polyline"):
             if instance_id is None:
                 instance_id = self._create_new_instance()
 
-            self._set_polyline(instance_id, member_index, points)
-            self._advance_selection(instance_id, member_index)
+            self._set_polyline(instance_id, member_id, points)
+            self._advance_selection(instance_id, member_id)
         self._flush()
 
-    def place_polyline(self, instance_id: InstanceID, member_index: int, points: List[Point]):
-        self._place_polyline(instance_id, member_index, points)
+    def place_polyline(self, instance_id: InstanceID, member_id: MemberID, points: List[Point]):
+        self._place_polyline(instance_id, member_id, points)
         self._flush()
 
-    def delete_polyline(self, instance_id: InstanceID, member_index: int):
+    def delete_polyline(self, instance_id: InstanceID, member_id: MemberID):
         assert instance_id is not None, "Instance ID should not be None"
         with self.macro("Delete Polyline"):
-            self._set_polyline(instance_id, member_index, [])
+            self._set_polyline(instance_id, member_id, [])
             self._delete_instance_if_empty(instance_id)
         self._flush()
 
-    def move_polygon_point(self, instance_id: InstanceID, member_index: int, point_index: int, p: Point):
-        self._set_polygon_point(instance_id, member_index, point_index, p)
+    def move_polygon_point(self, instance_id: InstanceID, member_id: MemberID, point_index: int, p: Point):
+        self._set_polygon_point(instance_id, member_id, point_index, p)
         self._flush()
 
     def select_instance(self, instance_id: InstanceID):
-        self._set_selection((instance_id, 0))
+        instance = self.get_instance(instance_id)
+        if instance is None or not instance.members:
+            return
+        self._set_selection((instance_id, instance.members[0].id))
         self._flush()
 
-    def select_member(self, member_index: int):
+    def select_member(self, member_id: MemberID):
         selection = self._model.get_selection(self._image_index)
         if selection is None:
             return
-        self._set_selection((selection[0], member_index))
+        self._set_selection((selection[0], member_id))
         self._flush()
 
     def next_selection(self):
@@ -355,8 +360,8 @@ class PoseImageModel(QObject):
             self._model.set_new_instance_type(image_index, new_instance_type)
 
         selection = self.get_selection()
-        if selection is None and self._new_instance is not None:
-            selection = (self._new_instance.instance_id, 0)
+        if selection is None and self._new_instance is not None and self._new_instance.members:
+            selection = (self._new_instance.instance_id, self._new_instance.members[0].id)
             self._model.set_selection(self._image_index, selection)
 
         self.set_flags(self._image_index, ImageStateChangeFlags.ALL)
@@ -373,8 +378,8 @@ class PoseImageModel(QObject):
         #self._flush()
         self.set_image_index(self._image_index)
 
-    def _advance_selection(self, instance_id: InstanceID, member_index: int):
-        next_selection = self._member_selection_strategy.auto_advance(self.get_instances(), (instance_id, member_index))
+    def _advance_selection(self, instance_id: InstanceID, member_id: MemberID):
+        next_selection = self._member_selection_strategy.auto_advance(self.get_instances(), (instance_id, member_id))
         self._undo_stack.push(SetSelection(self._model, self, self._image_index, next_selection))
 
     def _reset_selection(self):
@@ -415,25 +420,25 @@ class PoseImageModel(QObject):
             self._advance_new_instance_type()
         return instance_id
 
-    def _set_keypoint(self, instance_id: InstanceID, member_index: int, p: Optional[Point], visibility: float = 2.0):
+    def _set_keypoint(self, instance_id: InstanceID, member_id: MemberID, p: Optional[Point], visibility: float = 2.0):
         assert instance_id is not None, "Instance ID should not be None"
-        self._undo_stack.push(SetKeypoint(self._model, self, self._image_index, instance_id, member_index, p, visibility))
+        self._undo_stack.push(SetKeypoint(self._model, self, self._image_index, instance_id, member_id, p, visibility))
 
-    def _set_bounding_box(self, instance_id: InstanceID, member_index: int, box: Optional[Box]):
+    def _set_bounding_box(self, instance_id: InstanceID, member_id: MemberID, box: Optional[Box]):
         assert instance_id is not None, "Instance ID should not be None"
-        self._undo_stack.push(SetBoundingBox(self._model, self, self._image_index, instance_id, member_index, box))
+        self._undo_stack.push(SetBoundingBox(self._model, self, self._image_index, instance_id, member_id, box))
 
-    def _set_polygon(self, instance_id: InstanceID, member_index: int, points: List[Point]):
+    def _set_polygon(self, instance_id: InstanceID, member_id: MemberID, points: List[Point]):
         assert instance_id is not None, "Instance ID should not be None"
-        self._undo_stack.push(SetPolygon(self._model, self, self._image_index, instance_id, member_index, points))
+        self._undo_stack.push(SetPolygon(self._model, self, self._image_index, instance_id, member_id, points))
 
-    def _set_polyline(self, instance_id: InstanceID, member_index: int, points: List[Point]):
+    def _set_polyline(self, instance_id: InstanceID, member_id: MemberID, points: List[Point]):
         assert instance_id is not None, "Instance ID should not be None"
-        self._undo_stack.push(SetPolygon(self._model, self, self._image_index, instance_id, member_index, points))
+        self._undo_stack.push(SetPolygon(self._model, self, self._image_index, instance_id, member_id, points))
 
-    def _set_polygon_point(self, instance_id: InstanceID, member_index: int, point_index: int, p: Point):
+    def _set_polygon_point(self, instance_id: InstanceID, member_id: MemberID, point_index: int, p: Point):
         assert instance_id is not None, "Instance ID should not be None"
-        self._undo_stack.push(SetPolygonPoint(self._model, self, self._image_index, instance_id, member_index, point_index, p))
+        self._undo_stack.push(SetPolygonPoint(self._model, self, self._image_index, instance_id, member_id, point_index, p))
 
     def _delete_instance(self, instance_id: InstanceID):
         assert instance_id is not None, "Instance ID should not be None"

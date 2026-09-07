@@ -5,8 +5,8 @@ from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QPolygonF, QP
 from PySide6.QtWidgets import QStyleOptionViewItem, QWidget, QVBoxLayout, QSplitter, QLabel, \
     QListView, QComboBox, QStyledItemDelegate, QApplication, QSizePolicy
 
-from junip3r.labeller.data.types.abc import IInstance, ILabellerObject, LabellerObjectType, IInstanceType, \
-    Color, IBoundingBox, IKeypoint, IPolygon, IPolyline
+from junip3r.labeller.data.types.abc import IInstance, ILabellerObject, IInstanceMember, LabellerObjectType, \
+    IInstanceType, Color, IBoundingBox, IKeypoint, IPolygon, IPolyline
 from junip3r.labeller.model.pose_image_model import ImageState, ImageStateChangeFlags
 
 
@@ -209,12 +209,14 @@ class ColorIcon(QStyledItemDelegate):
 
 
 class MemberListModel(QAbstractListModel):
+    MemberIDRole = Qt.ItemDataRole.UserRole + 1
+
     def __init__(self):
         super().__init__()
-        self._members: Sequence[ILabellerObject] = ()
+        self._members: Sequence[IInstanceMember] = ()
         self._icon_cache: Dict[Hashable, QIcon] = {}
 
-    def set_members(self, members: Sequence[ILabellerObject]):
+    def set_members(self, members: Sequence[IInstanceMember]):
         self.beginResetModel()
         self._members = members
         self.endResetModel()
@@ -222,15 +224,13 @@ class MemberListModel(QAbstractListModel):
     def rowCount(self, parent=None):
         return len(self._members)
 
-    def _get_icon(self, member: ILabellerObject):
+    def _get_icon(self, member: IInstanceMember):
         if member.type == LabellerObjectType.BOUNDING_BOX:
-            member = cast(IBoundingBox, member)
             cache_key = (member.type, member.color)
             if cache_key not in self._icon_cache:
                 self._icon_cache[cache_key] = _make_box_icon(member.color)
             return self._icon_cache[cache_key]
         elif member.type == LabellerObjectType.KEYPOINT:
-            member = cast(IKeypoint, member)
             cache_key = (member.type, member.color)
             if cache_key not in self._icon_cache:
                 self._icon_cache[cache_key] = _make_keypoint_icon(member.color)
@@ -257,6 +257,8 @@ class MemberListModel(QAbstractListModel):
 
         if role == Qt.ItemDataRole.DisplayRole:
             return member.name
+        elif role == MemberListModel.MemberIDRole:
+            return member.id
         elif role == Qt.ItemDataRole.FontRole:
             return QFont("Segoe UI", 12, italic=False)
         elif role == Qt.ItemDataRole.DecorationRole:
@@ -399,12 +401,20 @@ class SelectionControls(QWidget):
                 self.lst_members.setCurrentIndex(QModelIndex())
                 return
             else:
-                instance_id, member_index = selection
+                instance_id, member_id = selection
 
                 instance_index = next((i for i, inst in enumerate(image_state.instances) if inst.instance_id == instance_id), None)
                 if instance_index is not None:
                     self.lst_instances.setCurrentIndex(QModelIndex(self.instance_list_model.index(instance_index, 0)))
-                    self.lst_members.setCurrentIndex(QModelIndex(self.member_list_model.index(member_index, 0)))
+                    # Resolved fresh from the current member list, not trusted as a row
+                    # number carried over from elsewhere - a config edit can reorder
+                    # members between two selections.
+                    selected_members = image_state.instances[instance_index].members
+                    member_row = next((i for i, m in enumerate(selected_members) if m.id == member_id), None)
+                    if member_row is not None:
+                        self.lst_members.setCurrentIndex(QModelIndex(self.member_list_model.index(member_row, 0)))
+                    else:
+                        self.lst_members.setCurrentIndex(QModelIndex())
                 else:
                     self.lst_instances.setCurrentIndex(QModelIndex())
                     self.lst_members.setCurrentIndex(QModelIndex())
@@ -420,8 +430,9 @@ class SelectionControls(QWidget):
 
     def _select_member(self, index: QModelIndex):
         if index.isValid():
-            member_index = index.row()
-            self.member_selected.emit(member_index)
+            member_id = index.data(MemberListModel.MemberIDRole)
+            if member_id is not None:
+                self.member_selected.emit(member_id)
 
     def _select_instance_type(self, *_):
         instance_type = self.dpd_instance_type.currentData(TypeListModel.InstanceTypeRole)

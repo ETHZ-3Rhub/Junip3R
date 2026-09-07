@@ -147,10 +147,10 @@ def test_get_instance_returns_none_for_unknown_id():
 def test_set_and_get_selection_round_trip():
     model, *_, selection = _build_model()
 
-    model.set_selection(0, ("i1", 0))
+    model.set_selection(0, ("i1", "m0"))
 
-    assert model.get_selection(0) == ("i1", 0)
-    assert selection.get_selection(0) == ("i1", 0)
+    assert model.get_selection(0) == ("i1", "m0")
+    assert selection.get_selection(0) == ("i1", "m0")
 
 
 def test_change_instance_type_carries_over_matching_member_data():
@@ -172,8 +172,8 @@ def test_change_instance_type_carries_over_matching_member_data():
     )
 
     old_instance = old_type.new_instance("i1", "Old")
-    old_instance = old_instance.replace_member(0, old_instance.members[0].with_box(((0.0, 0.0), (1.0, 1.0))))
-    old_instance = old_instance.replace_member(1, old_instance.members[1].with_p((2.0, 3.0)))
+    old_instance = old_instance.replace_member(old_instance.members[0].id, old_instance.members[0].with_box(((0.0, 0.0), (1.0, 1.0))))
+    old_instance = old_instance.replace_member(old_instance.members[1].id, old_instance.members[1].with_p((2.0, 3.0)))
 
     model, *_ = _build_model()
     model.set_instances(0, [old_instance])
@@ -198,7 +198,7 @@ def test_change_instance_type_stops_copying_at_first_type_mismatch():
     )
 
     old_instance = old_type.new_instance("i1", "Old")
-    old_instance = old_instance.replace_member(0, old_instance.members[0].with_p((2.0, 3.0)))
+    old_instance = old_instance.replace_member(old_instance.members[0].id, old_instance.members[0].with_p((2.0, 3.0)))
 
     model, *_ = _build_model()
     model.set_instances(0, [old_instance])

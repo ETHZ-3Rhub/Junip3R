@@ -154,12 +154,20 @@ def test_instance_with_instance_id_propagates_to_members():
     assert updated.members[0].instance_id == "new"
 
 
-def test_instance_replace_member_replaces_by_index():
-    kp0, kp1 = Keypoint(name="a"), Keypoint(name="b")
+def test_instance_get_member_finds_by_stable_id_not_position():
+    kp0, kp1 = Keypoint(name="a", id="m0"), Keypoint(name="b", id="m1")
     instance = Instance(instance_id="i1", name="Mouse 1", instance_type=FakeInstanceType(), members=(kp0, kp1))
 
-    replacement = Keypoint(name="c")
-    updated = instance.replace_member(1, replacement)
+    assert instance.get_member("m1") is kp1
+    assert instance.get_member("missing") is None
+
+
+def test_instance_replace_member_replaces_by_stable_id_not_position():
+    kp0, kp1 = Keypoint(name="a", id="m0"), Keypoint(name="b", id="m1")
+    instance = Instance(instance_id="i1", name="Mouse 1", instance_type=FakeInstanceType(), members=(kp0, kp1))
+
+    replacement = Keypoint(name="c", id="m1")
+    updated = instance.replace_member("m1", replacement)
 
     assert updated.members == (kp0, replacement)
     assert instance.members == (kp0, kp1)  # original untouched

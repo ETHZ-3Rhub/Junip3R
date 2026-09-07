@@ -10,10 +10,18 @@ class FakeInstanceType:
         return f"FakeInstanceType({self.name!r})"
 
 
+class FakeMember:
+    def __init__(self, id):
+        self.id = id
+
+    def __repr__(self):
+        return f"FakeMember({self.id!r})"
+
+
 class FakeInstance:
     def __init__(self, instance_id, num_members=1):
         self.instance_id = instance_id
-        self.members = [object() for _ in range(num_members)]
+        self.members = [FakeMember(f"m{i}") for i in range(num_members)]
 
     def __repr__(self):
         return f"FakeInstance({self.instance_id!r})"
@@ -89,14 +97,14 @@ def test_editor_next_member_manual_advances_within_instance():
     strategy = EditorMemberSelectionStrategy()
     i1 = FakeInstance("i1", num_members=2)
 
-    assert strategy.next_member_manual([i1], ("i1", 0)) == ("i1", 1)
+    assert strategy.next_member_manual([i1], ("i1", "m0")) == ("i1", "m1")
 
 
 def test_editor_next_member_manual_crosses_into_next_instance():
     strategy = EditorMemberSelectionStrategy()
     i1, i2 = FakeInstance("i1", 1), FakeInstance("i2", 2)
 
-    assert strategy.next_member_manual([i1, i2], ("i1", 0)) == ("i2", 0)
+    assert strategy.next_member_manual([i1, i2], ("i1", "m0")) == ("i2", "m0")
 
 
 def test_editor_next_member_manual_wraps_to_new_instance_slot_when_present():
@@ -104,7 +112,7 @@ def test_editor_next_member_manual_wraps_to_new_instance_slot_when_present():
     i1 = FakeInstance("i1", 1)
     new_instance = FakeInstance(None, 1)
 
-    assert strategy.next_member_manual([i1, new_instance], ("i1", 0)) == (None, 0)
+    assert strategy.next_member_manual([i1, new_instance], ("i1", "m0")) == (None, "m0")
 
 
 def test_editor_next_member_manual_wraps_to_first_instance_when_no_new_instance():
@@ -112,7 +120,7 @@ def test_editor_next_member_manual_wraps_to_first_instance_when_no_new_instance(
     i1, i2 = FakeInstance("i1", 1), FakeInstance("i2", 1)
 
     # last member of the last instance -> wraps back to instances[0]
-    assert strategy.next_member_manual([i1, i2], ("i2", 0)) == ("i1", 0)
+    assert strategy.next_member_manual([i1, i2], ("i2", "m0")) == ("i1", "m0")
 
 
 def test_editor_next_member_manual_returns_none_for_unknown_selection():
@@ -120,8 +128,8 @@ def test_editor_next_member_manual_returns_none_for_unknown_selection():
     i1 = FakeInstance("i1", 1)
 
     assert strategy.next_member_manual([i1], None) is None
-    assert strategy.next_member_manual([i1], ("missing", 0)) is None
-    assert strategy.next_member_manual([], ("i1", 0)) is None
+    assert strategy.next_member_manual([i1], ("missing", "m0")) is None
+    assert strategy.next_member_manual([], ("i1", "m0")) is None
 
 
 def test_editor_prev_member_manual_falls_back_when_at_first_member_of_first_instance():
@@ -130,7 +138,7 @@ def test_editor_prev_member_manual_falls_back_when_at_first_member_of_first_inst
 
     # No previous member/instance exists for i1's only member -> falls through to
     # the "pick a start point" branch, which here has no new-instance slot -> instances[0].
-    assert strategy.prev_member_manual([i1, i2], ("i1", 0)) == ("i1", 0)
+    assert strategy.prev_member_manual([i1, i2], ("i1", "m0")) == ("i1", "m0")
 
 
 def test_editor_prev_member_manual_prefers_new_instance_slot_in_fallback():
@@ -138,14 +146,14 @@ def test_editor_prev_member_manual_prefers_new_instance_slot_in_fallback():
     i1 = FakeInstance("i1", 1)
     new_instance = FakeInstance(None, 1)
 
-    assert strategy.prev_member_manual([i1, new_instance], ("i1", 0)) == (None, 0)
+    assert strategy.prev_member_manual([i1, new_instance], ("i1", "m0")) == (None, "m0")
 
 
 def test_editor_prev_member_manual_moves_to_last_member_of_previous_instance():
     strategy = EditorMemberSelectionStrategy()
     i1, i2 = FakeInstance("i1", 3), FakeInstance("i2", 1)
 
-    assert strategy.prev_member_manual([i1, i2], ("i2", 0)) == ("i1", 2)
+    assert strategy.prev_member_manual([i1, i2], ("i2", "m0")) == ("i1", "m2")
 
 
 def test_editor_auto_advance_does_not_fall_through_to_next_instance():
@@ -154,7 +162,7 @@ def test_editor_auto_advance_does_not_fall_through_to_next_instance():
 
     # Unlike next_member_manual, auto_advance has no "new instance" slot here,
     # so it stops instead of crossing into i2.
-    assert strategy.auto_advance([i1, i2], ("i1", 0)) is None
+    assert strategy.auto_advance([i1, i2], ("i1", "m0")) is None
 
 
 def test_editor_auto_advance_jumps_to_new_instance_slot_when_present():
@@ -162,19 +170,19 @@ def test_editor_auto_advance_jumps_to_new_instance_slot_when_present():
     i1 = FakeInstance("i1", 1)
     new_instance = FakeInstance(None, 1)
 
-    assert strategy.auto_advance([i1, new_instance], ("i1", 0)) == (None, 0)
+    assert strategy.auto_advance([i1, new_instance], ("i1", "m0")) == (None, "m0")
 
 
 def test_editor_next_instance_falls_back_to_new_instance_for_unknown_selection():
     strategy = EditorMemberSelectionStrategy()
     new_instance = FakeInstance(None, 1)
 
-    assert strategy.next_instance([new_instance], ("missing", 0)) == (None, 0)
+    assert strategy.next_instance([new_instance], ("missing", "m0")) == (None, "m0")
 
 
 def test_editor_invalid_selection_returns_new_instance_slot_or_none():
     strategy = EditorMemberSelectionStrategy()
     new_instance = FakeInstance(None, 1)
 
-    assert strategy.invalid_selection([new_instance], ("anything", 0)) == (None, 0)
+    assert strategy.invalid_selection([new_instance], ("anything", "m0")) == (None, "m0")
     assert strategy.invalid_selection([FakeInstance("i1", 1)], None) is None

@@ -109,7 +109,7 @@ class AppModel(IUndoModel, IReadOnlyAppModel):
         # TODO: Gneerate correct name
         new_instance = instance_type.new_instance(instance_id=instance.instance_id, name=instance_type.name)
 
-        for member_index, (old_member, new_member) in enumerate(zip(instance.members, new_instance.members)):
+        for old_member, new_member in zip(instance.members, new_instance.members):
             if old_member.type != new_member.type:
                 break
             if old_member.type == LabellerObjectType.KEYPOINT:
@@ -120,7 +120,7 @@ class AppModel(IUndoModel, IReadOnlyAppModel):
                 new_member = new_member.with_points(old_member.points)
             elif old_member.type == LabellerObjectType.POLYLINE:
                 new_member = new_member.with_points(old_member.points)
-            new_instance = new_instance.replace_member(member_index, new_member)
+            new_instance = new_instance.replace_member(new_member.id, new_member)
 
         self.replace_instance(image_index, instance_id, new_instance)
 
@@ -136,70 +136,83 @@ class AppModel(IUndoModel, IReadOnlyAppModel):
     def set_new_instance_type(self, image_index: int, instance_type: IInstanceType | None) -> None:
         self._selection_repository.set_new_instance_type(image_index, instance_type)
 
-    def get_member(self, image_index: int, selection: Selection) -> ILabellerObject:
-        instance_id, member_index = selection
+    def get_member(self, image_index: int, selection: Selection) -> Optional[ILabellerObject]:
+        instance_id, member_id = selection
         instance = self.get_instance(image_index, instance_id)
-        assert instance is not None
-        return instance.members[member_index]
+        if instance is None:
+            return None
+        return instance.get_member(member_id)
 
     def set_keypoint(self, image_index: int, selection: Selection, point: Point | None,
                      visibility: float = 2.0) -> None:
-        instance_id, member_index = selection
+        instance_id, member_id = selection
         instance = self.get_instance(image_index, instance_id)
         if instance is None:
             return
-        member = cast(IKeypoint, instance.members[member_index])
+        member = cast(Optional[IKeypoint], instance.get_member(member_id))
+        if member is None:
+            return
         member = member.with_p(point)
         member = member.with_visibility(visibility)
-        instance = instance.replace_member(member_index, member)
+        instance = instance.replace_member(member_id, member)
         self.replace_instance(image_index, instance_id, instance)
 
     def set_bounding_box(self, image_index: int, selection: Selection, box: Box | None) -> None:
-        instance_id, member_index = selection
+        instance_id, member_id = selection
         instance = self.get_instance(image_index, instance_id)
         if instance is None:
             return
-        member = cast(IBoundingBox, instance.members[member_index])
+        member = cast(Optional[IBoundingBox], instance.get_member(member_id))
+        if member is None:
+            return
         member = member.with_box(box)
-        instance = instance.replace_member(member_index, member)
+        instance = instance.replace_member(member_id, member)
         self.replace_instance(image_index, instance_id, instance)
 
     def set_polygon(self, image_index: int, selection: Selection, points: Sequence[Point]) -> None:
-        instance_id, member_index = selection
+        instance_id, member_id = selection
         instance = self.get_instance(image_index, instance_id)
         if instance is None:
             return
-        member = cast(IPolygon, instance.members[member_index])
+        member = cast(Optional[IPolygon], instance.get_member(member_id))
+        if member is None:
+            return
         member = member.with_points(points)
-        instance = instance.replace_member(member_index, member)
+        instance = instance.replace_member(member_id, member)
         self.replace_instance(image_index, instance_id, instance)
 
     def set_polyline(self, image_index: int, selection: Selection, points: Sequence[Point]) -> None:
-        instance_id, member_index = selection
+        instance_id, member_id = selection
         instance = self.get_instance(image_index, instance_id)
         if instance is None:
             return
-        member = cast(IPolyline, instance.members[member_index])
+        member = cast(Optional[IPolyline], instance.get_member(member_id))
+        if member is None:
+            return
         member = member.with_points(points)
-        instance = instance.replace_member(member_index, member)
+        instance = instance.replace_member(member_id, member)
         self.replace_instance(image_index, instance_id, instance)
 
     def set_polygon_point(self, image_index: int, selection: Selection, point_index: int, point: Point) -> None:
-        instance_id, member_index = selection
+        instance_id, member_id = selection
         instance = self.get_instance(image_index, instance_id)
         if instance is None:
             return
-        member = cast(IPolygon, instance.members[member_index])
+        member = cast(Optional[IPolygon], instance.get_member(member_id))
+        if member is None:
+            return
         member = member.replace_point(point_index, point)
-        instance = instance.replace_member(member_index, member)
+        instance = instance.replace_member(member_id, member)
         self.replace_instance(image_index, instance_id, instance)
 
     def set_polyline_point(self, image_index: int, selection: Selection, point_index: int, point: Point) -> None:
-        instance_id, member_index = selection
+        instance_id, member_id = selection
         instance = self.get_instance(image_index, instance_id)
         if instance is None:
             return
-        member = cast(IPolyline, instance.members[member_index])
+        member = cast(Optional[IPolyline], instance.get_member(member_id))
+        if member is None:
+            return
         member = member.replace_point(point_index, point)
-        instance = instance.replace_member(member_index, member)
+        instance = instance.replace_member(member_id, member)
         self.replace_instance(image_index, instance_id, instance)

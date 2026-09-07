@@ -4,7 +4,7 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-from junip3r.labeller.data.types.abc import IInstanceType, IInstance, Selection, ILabellerObject
+from junip3r.labeller.data.types.abc import IInstanceType, IInstance, Selection, IInstanceMember
 from junip3r.labeller.model.operations import Operation, Inspect
 
 
@@ -33,16 +33,14 @@ class ImageState:
         return instance
 
     @property
-    def selected_member(self) -> Optional[ILabellerObject]:
+    def selected_member(self) -> Optional[IInstanceMember]:
         if self.selection is None:
             return None
         instance = self.selected_instance
         if instance is None:
             return None
-        member_index = self.selection[1]
-        if member_index >= len(instance.members):
-            return None
-        return instance.members[member_index]
+        member_id = self.selection[1]
+        return instance.get_member(member_id)
 
     def get_instance(self, instance_id: Optional[str]) -> Optional[IInstance]:
         if instance_id is None:
