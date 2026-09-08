@@ -1,11 +1,12 @@
-from typing import List, Sequence, Optional, Tuple
+from typing import Dict, List, Sequence, Optional, Tuple
 
 from PySide6.QtCore import Signal, QAbstractListModel, QModelIndex, QMimeData
-from PySide6.QtGui import Qt, QFont
+from PySide6.QtGui import Qt, QFont, QIcon
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListView, QAbstractItemView, QPushButton, QMenu, \
     QHBoxLayout
 
-from junip3r.labeller.data.types.abc import InstanceID
+from junip3r.common.icons import ColorIcon, make_bounding_box_icon
+from junip3r.labeller.data.types.abc import Color, InstanceID
 from junip3r.setup.data.types.data import SetupInstanceType
 from junip3r.setup.model.config_model import ConfigState, ConfigStateChangeFlags
 
@@ -21,6 +22,7 @@ class ExpectedInstanceModel(QAbstractListModel):
         super().__init__(parent)
 
         self._instances: List[Tuple[str, SetupInstanceType]] = []
+        self._icon_cache: Dict[Color, QIcon] = {}
 
     def set_instances(self, instances: Sequence[Tuple[str, SetupInstanceType]]):
         self.beginResetModel()
@@ -58,7 +60,20 @@ class ExpectedInstanceModel(QAbstractListModel):
             return instance_id
         elif role == Qt.ItemDataRole.FontRole:
             return QFont("Segoe UI", 12, italic=False)
+        elif role == Qt.ItemDataRole.DecorationRole:
+            return self._get_icon(instance_type)
         return None
+
+    def _get_icon(self, instance_type: SetupInstanceType) -> Optional[QIcon]:
+        # Unresolved color only - matches the instance type list's own display ("Auto"
+        # until the user sets one explicitly). This list only edits config, so it has no
+        # business resolving colors the way the (separate) preview window does.
+        if not instance_type.bounding_box or instance_type.color is None:
+            return None
+        color = instance_type.color
+        if color not in self._icon_cache:
+            self._icon_cache[color] = make_bounding_box_icon(color)
+        return self._icon_cache[color]
 
     def supportedDragActions(self) -> Qt.DropAction:
         return Qt.DropAction.MoveAction
@@ -216,6 +231,7 @@ class ExpectedInstanceList(QWidget):
         layout.addLayout(button_layout)
 
         self.lst_instances.setModel(self._instances_model)
+        self.lst_instances.setItemDelegate(ColorIcon(self.lst_instances))
 
         self._instances_model.instances_reordered.connect(self.instances_reordered)
 

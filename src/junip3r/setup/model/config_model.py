@@ -148,13 +148,6 @@ class ConfigModel(QObject):
         new_instance_type = old_instance_type.with_color(color)
         self.replace_instance_type(instance_type_id, new_instance_type)
 
-    def insert_member(self, instance_type_id: str, member: SetupMember, index: int = -1):
-        old_instance_type = self.get_instance_type(instance_type_id)
-        if old_instance_type is None:
-            raise ValueError(f"Instance type '{instance_type_id}' not found")
-        new_instance_type = old_instance_type.insert_member(member, index)
-        self.replace_instance_type(instance_type_id, new_instance_type)
-
     def add_member(self, instance_type_id: str, member: SetupMember):
         old_instance_type = self.get_instance_type(instance_type_id)
         if old_instance_type is None:

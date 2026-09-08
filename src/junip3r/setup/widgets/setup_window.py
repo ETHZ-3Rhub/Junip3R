@@ -196,6 +196,7 @@ class SetupMainWindow(QMainWindow):
         self.setup_controls.member_removed.connect(self._model.remove_member)
 
         self.setup_controls.instance_type_renamed.connect(self._model.rename_instance_type)
+        self.setup_controls.instance_type_color_changed.connect(self._model.set_instance_type_color)
         self.setup_controls.instance_types_reordered.connect(self._model.reorder_instance_types)
 
         self.setup_controls.bounding_box_mode_changed.connect(self._model.set_bounding_box_mode)

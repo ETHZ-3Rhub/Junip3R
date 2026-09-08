@@ -21,6 +21,7 @@ class SetupControls(QWidget):
     member_removed = Signal(str, str)  # InstanceTypeID, MemberID
 
     instance_type_renamed = Signal(str, str)  # InstanceTypeID, New name
+    instance_type_color_changed = Signal(str, object)  # InstanceTypeID, Optional[Color]
     instance_types_reordered = Signal(object)  # Sequence[InstanceTypeID]
 
     bounding_box_mode_changed = Signal(str, str)
@@ -79,6 +80,7 @@ class SetupControls(QWidget):
         self._instance_type_list.instance_type_selected.connect(self.instance_type_selected)
         self._instance_type_list.instance_type_added.connect(self.instance_type_added)
         self._instance_type_list.instance_type_renamed.connect(self.instance_type_renamed)
+        self._instance_type_list.instance_type_color_changed.connect(self.instance_type_color_changed)
         self._instance_type_list.instance_types_reordered.connect(self.instance_types_reordered)
         self._instance_type_list.instance_type_removed.connect(self.instance_type_removed)
 
