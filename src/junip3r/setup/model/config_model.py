@@ -29,6 +29,10 @@ class ConfigModel(QObject):
         self._flags = ConfigStateChangeFlags.NONE
 
     @property
+    def mode(self) -> ConfigMode:
+        return self._mode
+
+    @property
     def state(self) -> ConfigState:
         match self._mode:
             case ConfigMode.JUNIPER:

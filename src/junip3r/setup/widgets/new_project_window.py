@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+import cv2
 import numpy as np
 import yaml
 from PySide6.QtCore import Qt, QAbstractListModel, Signal
@@ -19,7 +20,6 @@ from junip3r.labeller.data.repository.label import InstanceMapper
 from junip3r.labeller.data.types.abc import IInstanceType, IInstance
 from junip3r.labeller.model.camera_model import CameraModel
 from junip3r.labeller.widgets.pose_image import PoseImage
-from junip3r.setup.preview.data.repository.preview_persistence import PreviewPersistenceRepository
 from junip3r.setup.preview.placeholder_image import load_image_rgb, load_placeholder_image
 from junip3r.setup.widgets.preview_pose_image_controller import PreviewPoseImageController
 from junip3r.setup.model.preview_pose_image_model import PreviewPoseImageModel
@@ -419,7 +419,12 @@ class NewProjectWindow(QWidget):
             shutil.copy(preset.config_file, Path(location) / "config.yaml")
 
             if preset.image is not None or preset.instances:
-                PreviewPersistenceRepository(location / "_labeller" / "preview").save(preset.image, preset.instances)
+                preview_folder = location / "_labeller" / "preview"
+                preview_folder.mkdir(parents=True, exist_ok=True)
+                if preset.image is not None:
+                    cv2.imwrite(str(preview_folder / "image.png"), cv2.cvtColor(preset.image, cv2.COLOR_RGB2BGR))
+                data = InstanceMapper([]).to_data(preset.instances)
+                LabelSerializer().write_instances(preview_folder / "labels.json", data)
 
             message_box = QMessageBox()
             message_box.setIcon(QMessageBox.Icon.Question)
