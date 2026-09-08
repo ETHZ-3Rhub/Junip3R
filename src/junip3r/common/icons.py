@@ -2,8 +2,26 @@ from typing import Optional
 
 from PySide6.QtCore import QPointF
 from PySide6.QtGui import Qt, QIcon, QPixmap, QPainter, QColor, QPen, QPolygonF, QFontMetricsF
+from PySide6.QtWidgets import QStyleOptionViewItem, QStyledItemDelegate
 
 from junip3r.labeller.data.types.abc import Color
+
+
+class ColorIcon(QStyledItemDelegate):
+    """Paints a DecorationRole icon without letting Qt tint it to the palette color."""
+
+    def initStyleOption(self, option: QStyleOptionViewItem, index):
+        super().initStyleOption(option, index)
+        option.icon = QIcon()  # prevent Qt from drawing (and tinting) the icon itself
+
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)  # selection highlight + text
+        icon = index.data(Qt.ItemDataRole.DecorationRole)
+        if icon is not None:
+            size = option.decorationSize
+            x = option.rect.left() + 4
+            y = option.rect.top() + (option.rect.height() - size.height()) // 2
+            icon.paint(painter, x, y, size.width(), size.height())
 
 
 def make_keypoint_icon(color: tuple, size: int = 16) -> QIcon:

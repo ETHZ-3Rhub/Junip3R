@@ -1,12 +1,13 @@
-from typing import Optional, Dict, Sequence, cast, Hashable
+from typing import Dict, Optional, Sequence, cast, Hashable
 
-from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QPointF, Signal
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QPolygonF, QPen, QFontMetricsF
-from PySide6.QtWidgets import QStyleOptionViewItem, QWidget, QVBoxLayout, QSplitter, QLabel, \
-    QListView, QComboBox, QStyledItemDelegate, QApplication, QSizePolicy
+from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, Signal
+from PySide6.QtGui import QFont, QIcon
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QSplitter, QLabel, \
+    QListView, QComboBox, QApplication, QSizePolicy
 
+from junip3r.common.icons import ColorIcon, make_keypoint_icon, make_bounding_box_icon, make_polygon_icon, make_polyline_icon
 from junip3r.labeller.data.types.abc import IInstance, ILabellerObject, IInstanceMember, LabellerObjectType, \
-    IInstanceType, Color, IBoundingBox, IKeypoint, IPolygon, IPolyline
+    IInstanceType, IBoundingBox, IKeypoint, IPolygon, IPolyline
 from junip3r.labeller.model.pose_image_model import ImageState, ImageStateChangeFlags
 
 
@@ -63,151 +64,6 @@ class InstanceListModel(QAbstractListModel):
         return False
 
 
-def _make_keypoint_icon(color: tuple, size: int = 16) -> QIcon:
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setBrush(QColor(*color))
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.drawEllipse(1, 1, size - 2, size - 2)
-    painter.end()
-    return QIcon(pixmap)
-
-
-def _make_box_icon(color: tuple, size: int = 16) -> QIcon:
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setBrush(Qt.BrushStyle.NoBrush)
-    pen = painter.pen()
-    pen.setColor(QColor(*color))
-    pen.setWidth(2)
-    painter.setPen(pen)
-    painter.drawRect(2, 2, size - 4, size - 4)
-    painter.end()
-    return QIcon(pixmap)
-
-
-def _make_polygon_icon(
-    color: Color,
-    size: int = 16,
-    num_points: Optional[int] = None,
-) -> QIcon:
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.GlobalColor.transparent)
-
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-    pen = QPen(QColor(*color), 2)
-    painter.setPen(pen)
-    painter.setBrush(Qt.BrushStyle.NoBrush)
-
-    cx = size / 2.0
-    cy = size / 2.0
-    radius = (size - 4) / 2.0
-
-    # regular pentagon
-    points = [
-        QPointF(cx,                   cy - radius),
-        QPointF(cx + radius * 0.9511, cy - radius * 0.3090),
-        QPointF(cx + radius * 0.5878, cy + radius * 0.8090),
-        QPointF(cx - radius * 0.5878, cy + radius * 0.8090),
-        QPointF(cx - radius * 0.9511, cy - radius * 0.3090),
-    ]
-    painter.drawPolygon(QPolygonF(points))
-
-    if num_points is not None:
-        text = str(num_points)
-
-        font = painter.font()
-        font.setPixelSize(7)
-        font.setBold(True)
-        painter.setFont(font)
-
-        metrics = QFontMetricsF(font)
-        badge_rect = metrics.tightBoundingRect(text).adjusted(-1.5, -0.5, 1.5, 0.5)
-        badge_rect.moveBottomRight(QPointF(size - 0.5, size - 0.5))
-
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(Qt.GlobalColor.white)
-        painter.drawRoundedRect(badge_rect, 1.5, 1.5)
-
-        painter.setPen(Qt.GlobalColor.black)
-        painter.drawText(
-            badge_rect,
-            Qt.AlignmentFlag.AlignCenter,
-            text,
-        )
-
-    painter.end()
-    return QIcon(pixmap)
-
-
-def _make_polyline_icon(color: tuple, size: int = 16, num_points: Optional[int] = None) -> QIcon:
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.GlobalColor.transparent)
-
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-    pen = QPen(QColor(*color), 2)
-    painter.setPen(pen)
-    painter.setBrush(Qt.BrushStyle.NoBrush)
-
-    # 4-point zigzag polyline
-    points =[
-        QPointF(2, size - 3),
-        QPointF(size * 0.33, 3),
-        QPointF(size * 0.66, size - 5),
-        QPointF(size - 2, 5),
-    ]
-    painter.drawPolyline(QPolygonF(points))
-
-    if num_points is not None:
-        text = str(num_points)
-
-        font = painter.font()
-        font.setPixelSize(7)
-        font.setBold(True)
-        painter.setFont(font)
-
-        metrics = QFontMetricsF(font)
-        badge_rect = metrics.tightBoundingRect(text).adjusted(-1.5, -0.5, 1.5, 0.5)
-        badge_rect.moveBottomRight(QPointF(size - 0.5, size - 0.5))
-
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(Qt.GlobalColor.white)
-        painter.drawRoundedRect(badge_rect, 1.5, 1.5)
-
-        painter.setPen(Qt.GlobalColor.black)
-        painter.drawText(
-            badge_rect,
-            Qt.AlignmentFlag.AlignCenter,
-            text,
-        )
-
-    painter.end()
-    return QIcon(pixmap)
-
-
-class ColorIcon(QStyledItemDelegate):
-    def initStyleOption(self, option: QStyleOptionViewItem, index):
-        super().initStyleOption(option, index)
-        option.icon = QIcon()  # prevent Qt from drawing (and tinting) the icon itself
-
-    def paint(self, painter, option, index):
-        super().paint(painter, option, index)  # selection highlight + text
-        icon = index.data(Qt.ItemDataRole.DecorationRole)
-        if icon is not None:
-            size = option.decorationSize
-            x = option.rect.left() + 4
-            y = option.rect.top() + (option.rect.height() - size.height()) // 2
-            icon.paint(painter, x, y, size.width(), size.height())
-
-
 class MemberListModel(QAbstractListModel):
     MemberIDRole = Qt.ItemDataRole.UserRole + 1
 
@@ -228,24 +84,24 @@ class MemberListModel(QAbstractListModel):
         if member.type == LabellerObjectType.BOUNDING_BOX:
             cache_key = (member.type, member.color)
             if cache_key not in self._icon_cache:
-                self._icon_cache[cache_key] = _make_box_icon(member.color)
+                self._icon_cache[cache_key] = make_bounding_box_icon(member.color)
             return self._icon_cache[cache_key]
         elif member.type == LabellerObjectType.KEYPOINT:
             cache_key = (member.type, member.color)
             if cache_key not in self._icon_cache:
-                self._icon_cache[cache_key] = _make_keypoint_icon(member.color)
+                self._icon_cache[cache_key] = make_keypoint_icon(member.color)
             return self._icon_cache[cache_key]
         elif member.type == LabellerObjectType.POLYGON:
             member = cast(IPolygon, member)
             cache_key = (member.type, member.color, member.num_points)
             if cache_key not in self._icon_cache:
-                self._icon_cache[cache_key] = _make_polygon_icon(member.color, 16, member.num_points)
+                self._icon_cache[cache_key] = make_polygon_icon(member.color, 16, member.num_points)
             return self._icon_cache[cache_key]
         elif member.type == LabellerObjectType.POLYLINE:
             member = cast(IPolyline, member)
             cache_key = (member.type, member.color, member.num_points)
             if cache_key not in self._icon_cache:
-                self._icon_cache[cache_key] = _make_polyline_icon(member.color, 16, member.num_points)
+                self._icon_cache[cache_key] = make_polyline_icon(member.color, 16, member.num_points)
             return self._icon_cache[cache_key]
         else:
             if "default" not in self._icon_cache:
@@ -449,7 +305,7 @@ class SelectionControls(QWidget):
 
 if __name__ == "__main__":
     app = QApplication([])
-    icon = _make_polygon_icon((255, 0, 0), size=16, num_points=5)
+    icon = make_polygon_icon((255, 0, 0), size=16, num_points=5)
     image = QLabel()
     image.setPixmap(icon.pixmap(320, 320))
     image.show()
