@@ -37,7 +37,7 @@ class InstanceListModel(QAbstractListModel):
         if instance is None:
             return None
 
-        if role == Qt.ItemDataRole.DisplayRole:
+        if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole):
             return instance.name
         elif role == InstanceListModel.InstanceIDRole:
             return instance.instance_id
@@ -448,7 +448,6 @@ class SelectionControls(QWidget):
 
 
 if __name__ == "__main__":
-
     app = QApplication([])
     icon = _make_polygon_icon((255, 0, 0), size=16, num_points=5)
     image = QLabel()

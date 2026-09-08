@@ -1,4 +1,4 @@
-from typing import Protocol, Any, Sequence
+from typing import Protocol, Any, Dict, List, Optional, Sequence
 
 from junip3r.labeller.data.types.abc import IInstanceType
 
@@ -9,6 +9,21 @@ class InstanceTypeSelectionWorkflow(Protocol):
 
     def manual_selection(self, existing: Sequence[IInstanceType], selected: IInstanceType) -> IInstanceType: ...
     def automatic_selection(self, existing: Sequence[IInstanceType], current: IInstanceType) -> IInstanceType: ...
+
+
+def _ranks(names: Sequence[str]) -> List[int]:
+    """The 0-based rank of each name among same-named entries seen so far - e.g.
+    ["mouse", "rat", "mouse"] -> [0, 0, 1]. Used to tell same-named expected slots
+    apart positionally, since a plain per-name count can't distinguish "the first
+    mouse slot" from "the second mouse slot".
+    """
+    seen: Dict[str, int] = {}
+    ranks = []
+    for name in names:
+        rank = seen.get(name, 0)
+        ranks.append(rank)
+        seen[name] = rank + 1
+    return ranks
 
 
 class EditorInstanceTypeWorkflow(InstanceTypeSelectionWorkflow):
@@ -40,19 +55,9 @@ class EditorInstanceTypeWorkflow(InstanceTypeSelectionWorkflow):
         if not self._expected_instance_types:
             return selected
 
-        existing_names = [t.name for t in existing]
-        expected_names = [t.name for t in self._expected_instance_types]
-
-        existing_count = {t: existing_names.count(t) for t in set(expected_names)}
-        expected_count = {t: expected_names.count(t) for t in set(expected_names)}
-
-        # Scan from cursor forward (with wrap) for an unfulfilled slot
-        for offset in range(len(self._expected_instance_types)):
-            idx = (self._cursor + offset) % len(self._expected_instance_types)
-            slot_type = expected_names[idx]
-            if existing_count.get(slot_type, 0) < expected_count.get(slot_type, 0):
-                self._cursor = idx
-                break
+        idx = self._first_unfulfilled_slot(existing)
+        if idx is not None:
+            self._cursor = idx
 
         return selected
 
@@ -76,19 +81,29 @@ class EditorInstanceTypeWorkflow(InstanceTypeSelectionWorkflow):
         if not self._expected_instance_types:
             return current
 
-        existing_names = [t.name for t in existing]
+        idx = self._first_unfulfilled_slot(existing)
+        if idx is None:
+            return current  # all fulfilled; keep cursor unchanged
+
+        self._cursor = idx
+        return self._expected_instance_types[idx]
+
+    def _first_unfulfilled_slot(self, existing: Sequence[IInstanceType]) -> Optional[int]:
+        """Scan expected slots from the cursor forward (with wrap) for the first one
+        not yet matched by an existing instance, one-to-one by position rather than by
+        aggregate per-name count - a slot is fulfilled once the existing count for its
+        name exceeds the slot's own rank among same-named slots (see _ranks), not once
+        it reaches the name's total expected count. Otherwise a run like
+        [mouse, rat, mouse] would keep suggesting "mouse" until both mouse slots were
+        used up before ever reaching "rat", instead of alternating in list order.
+        """
         expected_names = [t.name for t in self._expected_instance_types]
+        existing_names = [t.name for t in existing]
+        existing_count = {name: existing_names.count(name) for name in set(expected_names)}
+        ranks = _ranks(expected_names)
 
-        existing_count = {t: existing_names.count(t) for t in set(expected_names)}
-        expected_count = {t: expected_names.count(t) for t in set(expected_names)}
-
-        # Scan from cursor forward (with wrap) for an unfulfilled slot
-        for offset in range(len(self._expected_instance_types)):
-            idx = (self._cursor + offset) % len(self._expected_instance_types)
-            slot_type = expected_names[idx]
-            if existing_count.get(slot_type, 0) < expected_count.get(slot_type, 0):
-                self._cursor = idx
-                return self._expected_instance_types[idx]
-
-        # All fulfilled; return current selection (keep cursor unchanged)
-        return current
+        for offset in range(len(expected_names)):
+            idx = (self._cursor + offset) % len(expected_names)
+            if existing_count.get(expected_names[idx], 0) <= ranks[idx]:
+                return idx
+        return None

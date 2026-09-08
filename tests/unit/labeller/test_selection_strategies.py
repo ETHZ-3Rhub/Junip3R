@@ -91,6 +91,30 @@ def test_manual_selection_always_returns_the_selected_type_but_still_advances_cu
     assert workflow.capture_state() == 1  # cursor advanced to B's slot anyway
 
 
+def test_automatic_selection_follows_list_order_with_a_repeated_name():
+    # [mouse, rat, mouse] should suggest mouse -> rat -> mouse, not mouse -> mouse -> rat
+    # (a same-named slot must not be treated as fulfilled just because *some* instance
+    # of that name exists elsewhere in the expected list).
+    mouse, rat = FakeInstanceType("mouse"), FakeInstanceType("rat")
+    workflow = EditorInstanceTypeWorkflow(expected_instance_types=[mouse, rat, mouse])
+
+    first = workflow.automatic_selection(existing=[], current=mouse)
+    assert first is mouse
+    assert workflow.capture_state() == 0
+
+    second = workflow.automatic_selection(existing=[mouse], current=mouse)
+    assert second is rat
+    assert workflow.capture_state() == 1
+
+    third = workflow.automatic_selection(existing=[mouse, rat], current=rat)
+    assert third is mouse
+    assert workflow.capture_state() == 2
+
+    fourth = workflow.automatic_selection(existing=[mouse, rat, mouse], current=mouse)
+    assert fourth is mouse  # all slots fulfilled; falls back to current, cursor unchanged
+    assert workflow.capture_state() == 2
+
+
 # --- EditorMemberSelectionStrategy ---------------------------------------------------
 
 def test_editor_next_member_manual_advances_within_instance():
