@@ -117,6 +117,91 @@ def test_instance_type_insert_member_at_index():
     assert [m.id for m in updated.members] == ["m0", "new", "m1"]
 
 
+def test_instance_type_with_bounding_box_is_an_immutable_update():
+    instance_type = SetupInstanceType(name="mouse")
+
+    updated = instance_type.with_bounding_box(True)
+
+    assert updated.bounding_box is True
+    assert instance_type.bounding_box is False
+
+
+def test_instance_type_with_color_is_an_immutable_update():
+    instance_type = SetupInstanceType(name="mouse")
+
+    updated = instance_type.with_color((1, 2, 3))
+
+    assert updated.color == (1, 2, 3)
+    assert instance_type.color is None
+
+
+# --- SetupInstanceType bounding box <-> flat member list ------------------------------
+
+def test_instance_type_from_config_splits_off_a_leading_bounding_box_member():
+    config = InstanceTypeConfig(
+        name="mouse",
+        members=[_member_config("box", LabellerObjectType.BOUNDING_BOX), _member_config("nose")],
+        skeleton=SkeletonConfig(),
+        color=(1, 2, 3),
+    )
+
+    instance_type = SetupInstanceType.from_config(config)
+
+    assert instance_type.bounding_box is True
+    assert instance_type.color == (1, 2, 3)
+    assert [m.name for m in instance_type.members] == ["nose"]
+
+
+def test_instance_type_from_config_leaves_bounding_box_unset_without_a_leading_bbox_member():
+    config = InstanceTypeConfig(name="mouse", members=[_member_config("nose")], skeleton=SkeletonConfig())
+
+    instance_type = SetupInstanceType.from_config(config)
+
+    assert instance_type.bounding_box is False
+    assert [m.name for m in instance_type.members] == ["nose"]
+
+
+def test_instance_type_to_config_puts_the_bounding_box_first_and_carries_the_color():
+    instance_type = SetupInstanceType(
+        name="mouse",
+        members=[SetupMember(name="nose")],
+        bounding_box=True,
+        color=(1, 2, 3),
+    )
+
+    config = SetupInstanceType.to_config(instance_type)
+
+    assert [m.type for m in config.members] == [LabellerObjectType.BOUNDING_BOX, LabellerObjectType.KEYPOINT]
+    assert config.color == (1, 2, 3)
+
+
+def test_instance_type_without_bounding_box_omits_it_from_config_members():
+    instance_type = SetupInstanceType(name="mouse", members=[SetupMember(name="nose")], bounding_box=False)
+
+    config = SetupInstanceType.to_config(instance_type)
+
+    assert [m.type for m in config.members] == [LabellerObjectType.KEYPOINT]
+
+
+def test_instance_type_bounding_box_round_trip_preserves_skeleton_indices():
+    nose = SetupMember(id="nose")
+    tail = SetupMember(id="tail")
+    instance_type = SetupInstanceType(
+        name="mouse",
+        members=[nose, tail],
+        bounding_box=True,
+        skeleton=SetupSkeleton(lines=[("nose", "tail")]),
+    )
+
+    config = SetupInstanceType.to_config(instance_type)
+    # The bounding box occupies index 0, so the keypoint line must be (1, 2).
+    assert config.skeleton.lines == [(1, 2)]
+
+    round_tripped = SetupInstanceType.from_config(config)
+    assert round_tripped.bounding_box is True
+    assert set(round_tripped.skeleton.lines) == {(round_tripped.members[0].id, round_tripped.members[1].id)}
+
+
 # --- SetupConfig ---------------------------------------------------------------------
 
 def test_setup_config_from_config_to_config_round_trip():

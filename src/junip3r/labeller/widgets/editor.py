@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, QObject, QEvent, Signal
 from PySide6.QtGui import QAction, QKeySequence, QKeyEvent
 from PySide6.QtWidgets import QWidget, QSplitter, QHBoxLayout, QSizePolicy, QVBoxLayout
 
+from junip3r.common.config.abc import ConfigMode
 from junip3r.labeller.model.context_model import ContextModel
 from junip3r.labeller.model.image_settings_model import ImageSettingsModel
 from junip3r.labeller.model.pose_image_model import PoseImageModel
@@ -135,6 +136,9 @@ class Editor(QWidget):
         self.redo_action.setShortcut(QKeySequence.StandardKey.Redo)
         self.redo_action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.addAction(self.redo_action)
+
+    def set_mode(self, mode: ConfigMode):
+        self.selection_controls.set_mode(mode)
 
     def set_model(self, model: PoseImageModel, context_model: Optional[ContextModel] = None, image_settings_model: Optional[ImageSettingsModel] = None):
         self.model = model

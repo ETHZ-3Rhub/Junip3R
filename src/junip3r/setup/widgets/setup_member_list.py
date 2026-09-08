@@ -352,15 +352,14 @@ class MemberList(QWidget):
         if flags & ConfigStateChangeFlags.INSTANCE_TYPES or flags & ConfigStateChangeFlags.SELECTION:
             selected_instance_type = state.selected_instance_type
             if selected_instance_type is not None:
-                members = selected_instance_type.members
-                self._member_model.set_members(members)
-                self._update_bounding_box_mode(members)
+                self._member_model.set_members(selected_instance_type.members)
+                self._update_bounding_box(selected_instance_type.bounding_box)
             else:
                 self._member_model.set_members([])
+                self._update_bounding_box(False)
 
-    def _update_bounding_box_mode(self, members: Sequence[ISetupMember]):
-        is_manual = len(members) > 0 and members[0].type == LabellerObjectType.BOUNDING_BOX
-        mode = "manual" if is_manual else "automatic"
+    def _update_bounding_box(self, bounding_box: bool):
+        mode = "manual" if bounding_box else "automatic"
         index = self.dpd_bounding_box_mode.findData(mode)
         self.dpd_bounding_box_mode.blockSignals(True)
         self.dpd_bounding_box_mode.setCurrentIndex(index)

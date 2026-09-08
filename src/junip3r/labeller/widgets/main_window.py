@@ -2,6 +2,7 @@ from typing import Optional
 
 from PySide6.QtCore import Signal
 
+from junip3r.common.config.abc import ConfigMode
 from junip3r.labeller.export.yolo.set_split import ISetSplitRepository
 from junip3r.labeller.export.yolo.widgets.yolo_export_dialog import YoloExportDialog
 from junip3r.labeller.layout.labeller_layout import EditorMainWindowLayout
@@ -44,6 +45,9 @@ class EditorMainWindow(EditorMainWindowLayout):
             self.stk_content.setCurrentIndex(0)
         else:
             self.stk_content.setCurrentIndex(1)
+
+    def set_mode(self, mode: ConfigMode):
+        self.editor.set_mode(mode)
 
     def set_set_split_repository(self, set_split_repository: ISetSplitRepository):
         self._set_split_repository = set_split_repository

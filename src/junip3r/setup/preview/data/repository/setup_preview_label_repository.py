@@ -1,5 +1,5 @@
 import colorsys
-from typing import List, cast, Sequence, Tuple, Union
+from typing import List, cast, Sequence, Tuple, Union, Optional
 
 from junip3r.labeller.config.data import InstanceType, MemberSpecs, SkeletonSpecs
 from junip3r.labeller.data.repository.abc import ILabelRepository, IConfigRepository
@@ -80,19 +80,41 @@ def _color_from_hue(hue: float) -> Color:
     return int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)
 
 
-def resolve_instance_types(instance_types: Sequence[ISetupInstanceType]) -> List[InstanceType]:
+def resolve_instance_types(instance_types: Sequence[ISetupInstanceType], mode: str) -> List[InstanceType]:
     num_instance_types = len(instance_types)
-    return [_resolve_instance_type(instance_type, index, num_instance_types) for index, instance_type in enumerate(instance_types)]
+    return [_resolve_instance_type(instance_type, index, num_instance_types, mode) for index, instance_type in enumerate(instance_types)]
 
 
-def _resolve_instance_type(instance_type: ISetupInstanceType, index: int, num_instance_types: int) -> InstanceType:
-    # InstanceType.color has no default (see labeller/config/data.py) - resolved the same
-    # way _resolve_members resolves an unset member color, since setup doesn't have its
-    # own per-instance-type color concept yet.
-    color = (0, 0, 255) if num_instance_types <= 1 else _color_from_hue(index / num_instance_types)
+def _resolve_instance_type(instance_type: ISetupInstanceType, index: int, num_instance_types: int, mode: str) -> InstanceType:
+    color = _resolve_instance_type_color(instance_type.color, index, num_instance_types)
+
+    # The bounding box is resolved separately from, and kept entirely out of the
+    # index/count _resolve_members uses for its per-position hue fallback - otherwise
+    # toggling manual/automatic bounding box mode would shift every keypoint's
+    # auto-assigned color for no reason. Matches how
+    # labeller/config/parser.py::_build_members_yolo_pose keeps num_keypoints/
+    # keypoint_index counting only KEYPOINT members, never the bounding box.
     members = _resolve_members(instance_type.members)
-    skeleton = _resolve_skeleton(instance_type.skeleton, instance_type.members)
+    if instance_type.bounding_box:
+        # yolo_detect's wire format has no separate name for its one-and-only
+        # member - the labeller displays it under the instance type's own name
+        # (see labeller/config/parser.py::_build_members_yolo_detect). Its color
+        # always comes from the instance type's own resolved color, never from a
+        # per-position hue fallback.
+        bounding_box_name = instance_type.name if mode == "yolo_detect" else "Bounding Box"
+        bounding_box = MemberSpecs(bounding_box_name, LabellerObjectType.BOUNDING_BOX, color, None, id=instance_type.id)
+        members = [bounding_box, *members]
+
+    skeleton = _resolve_skeleton(instance_type.skeleton, members)
     return InstanceType(instance_type.name, members, skeleton, color=color, id=instance_type.id)
+
+
+def _resolve_instance_type_color(color: Optional[Color], index: int, num_instance_types: int) -> Color:
+    if color is not None:
+        return color
+    if num_instance_types <= 1:
+        return (0, 0, 255)
+    return _color_from_hue(index / num_instance_types)
 
 
 def _resolve_members(members: Sequence[ISetupMember]) -> List[MemberSpecs]:

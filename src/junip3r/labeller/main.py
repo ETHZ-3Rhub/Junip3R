@@ -61,6 +61,7 @@ def from_config_file(config_file: Path, integrated: bool = False) -> EditorMainW
 
     editor = EditorMainWindow(show_frame_extractor=integrated)
     editor.set_model(app_model, context_model, image_settings_model)
+    editor.set_mode(labeller_config.mode)
     editor.set_set_split_repository(set_split_repository)
 
     return editor

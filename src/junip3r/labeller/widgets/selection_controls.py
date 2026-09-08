@@ -5,6 +5,7 @@ from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QSplitter, QLabel, \
     QListView, QComboBox, QApplication, QSizePolicy
 
+from junip3r.common.config.abc import ConfigMode
 from junip3r.common.icons import ColorIcon, make_keypoint_icon, make_bounding_box_icon, make_polygon_icon, make_polyline_icon
 from junip3r.labeller.data.types.abc import IInstance, ILabellerObject, IInstanceMember, LabellerObjectType, \
     IInstanceType, IBoundingBox, IKeypoint, IPolygon, IPolyline
@@ -19,11 +20,16 @@ class InstanceListModel(QAbstractListModel):
     def __init__(self):
         super().__init__()
         self._instances: Sequence[IInstance] = ()
+        self._icon_cache: Dict[Hashable, QIcon] = {}
+        self._mode: Optional[ConfigMode] = None
 
     def set_instances(self, instances: Sequence[IInstance]):
         self.beginResetModel()
         self._instances = instances
         self.endResetModel()
+
+    def set_mode(self, mode: ConfigMode):
+        self._mode = mode
 
     def flags(self, index):
         if index.row() == len(self._instances):
@@ -32,6 +38,21 @@ class InstanceListModel(QAbstractListModel):
 
     def rowCount(self, parent=None):
         return len(self._instances)
+
+    def _get_bounding_box_icon(self, instance: IInstance) -> Optional[QIcon]:
+        # Used in place of the member list, which is hidden in yolo_detect mode (every
+        # instance's one and only member would otherwise show this same icon there) -
+        # shown only there, so it doesn't duplicate what the member list already shows
+        # for itself in yolo_pose/junip3r.
+        if self._mode != ConfigMode.YOLO_DETECT:
+            return None
+        bounding_box = next((m for m in instance.members if m.type == LabellerObjectType.BOUNDING_BOX), None)
+        if bounding_box is None:
+            return None
+        bounding_box = cast(IBoundingBox, bounding_box)
+        if bounding_box.color not in self._icon_cache:
+            self._icon_cache[bounding_box.color] = make_bounding_box_icon(bounding_box.color)
+        return self._icon_cache[bounding_box.color]
 
     def data(self, index, role=None):
         instance = self._instances[index.row()]
@@ -47,6 +68,8 @@ class InstanceListModel(QAbstractListModel):
                 return QFont("Segoe UI", 12, italic=True)
             else:
                 return QFont("Segoe UI", 12, italic=False)
+        elif role == Qt.ItemDataRole.DecorationRole:
+            return self._get_bounding_box_icon(instance)
         return None
 
     def setData(self, index, value, role=None):
@@ -188,18 +211,18 @@ class SelectionControls(QWidget):
         self.dpd_instance_type.setFont(QFont("Segoe UI", 12, italic=False))
         frm_instance_type_layout.addWidget(self.dpd_instance_type)
 
-        frm_members = QWidget(splitter)
-        frm_members_layout = QVBoxLayout(frm_members)
+        self.frm_members = QWidget(splitter)
+        frm_members_layout = QVBoxLayout(self.frm_members)
         frm_members_layout.setContentsMargins(0, 0, 0, 0)
 
-        lbl_members = QLabel("Members", frm_members)
+        lbl_members = QLabel("Members", self.frm_members)
         lbl_members.setFont(QFont("Segoe UI", 14, italic=False))
         frm_members_layout.addWidget(lbl_members)
 
-        self.lst_members = QListView(frm_members)
+        self.lst_members = QListView(self.frm_members)
         frm_members_layout.addWidget(self.lst_members)
 
-        splitter.addWidget(frm_members)
+        splitter.addWidget(self.frm_members)
 
         layout.addWidget(splitter)
 
@@ -222,6 +245,15 @@ class SelectionControls(QWidget):
         self.instance_list_model.instance_renamed.connect(self.instance_renamed)
 
         self._instance_type: Optional[IInstanceType] = None
+
+    def set_mode(self, mode: ConfigMode):
+        # The member list is redundant in yolo_detect - every instance has exactly
+        # one member (its bounding box), shown instead via InstanceListModel's own
+        # bounding box icon (only shown in that mode - see its docstring). Mode is
+        # fixed for the life of a labeller session (set once at config load), so this
+        # is a one-time call, not part of ImageState.
+        self.frm_members.setVisible(mode != ConfigMode.YOLO_DETECT)
+        self.instance_list_model.set_mode(mode)
 
     def _has_instance_type_changed(self, image_state: ImageState, flags: ImageStateChangeFlags) -> bool:
         if flags & ImageStateChangeFlags.INSTANCES or flags & ImageStateChangeFlags.SELECTION:

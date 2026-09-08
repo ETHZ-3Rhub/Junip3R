@@ -254,7 +254,7 @@ class SetupMainWindow(QMainWindow):
         labels_file = preview_folder / "labels.json"
         if labels_file.exists():
             loaded_instances = LabelSerializer().load_instances(labels_file)
-            instance_types = resolve_instance_types(self._model.get_instance_types())
+            instance_types = resolve_instance_types(self._model.get_instance_types(), self._model.state.mode)
             try:
                 instances = InstanceMapper(instance_types).from_data(loaded_instances)
             except (KeyError, ValueError) as e:
@@ -274,7 +274,7 @@ class SetupMainWindow(QMainWindow):
 
     def set_state(self, state: ConfigState, flags: ConfigStateChangeFlags):
         self._state = state
-        instance_types = resolve_instance_types(state.instance_types)
+        instance_types = resolve_instance_types(state.instance_types, state.mode)
         self.config_repository.set_state(instance_types)
         self.label_repository.set_state(instance_types, state.expected_instance_types)
         self.preview_pose_image_model.refresh()

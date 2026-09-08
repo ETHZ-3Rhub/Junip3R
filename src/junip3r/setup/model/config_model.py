@@ -132,12 +132,21 @@ class ConfigModel(QObject):
         if old_instance_type is None:
             raise ValueError(f"Instance type '{instance_type_id}' not found")
 
-        if mode == "automatic" and len(old_instance_type.members) > 0 and old_instance_type.members[0].type == LabellerObjectType.BOUNDING_BOX:
-            member_id = old_instance_type.members[0].id
-            self.remove_member(instance_type_id, member_id)
-        elif mode == "manual" and (len(old_instance_type.members) == 0 or old_instance_type.members[0].type != LabellerObjectType.BOUNDING_BOX):
-            name = self._generate_new_member_name(instance_type_id, LabellerObjectType.BOUNDING_BOX)
-            self.insert_member(instance_type_id, SetupMember(type=LabellerObjectType.BOUNDING_BOX, name=name, immortal=True), 0)
+        if mode == "automatic":
+            new_instance_type = old_instance_type.with_bounding_box(False)
+        elif mode == "manual":
+            new_instance_type = old_instance_type.with_bounding_box(True)
+        else:
+            raise ValueError(f"Invalid bounding box mode: {mode}")
+
+        self.replace_instance_type(instance_type_id, new_instance_type)
+
+    def set_instance_type_color(self, instance_type_id: str, color: Optional[Color]):
+        old_instance_type = self.get_instance_type(instance_type_id)
+        if old_instance_type is None:
+            raise ValueError(f"Instance type '{instance_type_id}' not found")
+        new_instance_type = old_instance_type.with_color(color)
+        self.replace_instance_type(instance_type_id, new_instance_type)
 
     def insert_member(self, instance_type_id: str, member: SetupMember, index: int = -1):
         old_instance_type = self.get_instance_type(instance_type_id)

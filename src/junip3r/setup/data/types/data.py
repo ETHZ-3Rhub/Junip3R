@@ -1,6 +1,6 @@
 import uuid
 from dataclasses import dataclass, replace, field
-from typing import Sequence, Tuple, Self, Optional
+from typing import Sequence, Tuple, Self, Optional, List
 
 from junip3r.common.config.data import InstanceTypeConfig, MemberConfig, SkeletonConfig, Config
 from junip3r.labeller.config.data import MemberSpecs, SkeletonSpecs
@@ -17,8 +17,6 @@ class SetupMember:
     name: str = "Member"
     size: Optional[int] = None
     color: Optional[Color] = None
-
-    immortal: bool = False
 
     @classmethod
     def from_config(cls, config: MemberConfig) -> Self:
@@ -88,6 +86,24 @@ class SetupSkeleton:
         return SkeletonSpecs(lines, color)
 
 
+def _bounding_box_member(instance_type_id: str, color: Optional[Color]) -> SetupMember:
+    # Synthesized on demand rather than stored - the bounding box has no editing
+    # state of its own beyond "present or not" (see SetupInstanceType.bounding_box),
+    # so its member-slot id is just derived from the instance type's own id, which
+    # is already stable for the object's lifetime.
+    return SetupMember(id=instance_type_id, type=LabellerObjectType.BOUNDING_BOX, name="Bounding Box", color=color)
+
+
+def instance_type_members(instance_type: ISetupInstanceType) -> List[ISetupMember]:
+    """The instance type's members in on-disk/labeller order: bounding box first
+    (if manual), then the rest. This is the one place that knows how the setup
+    app's split-out `bounding_box`/`color` fields map back onto the flat member
+    list every other layer (config.yaml, the labeller, the preview) still expects."""
+    if not instance_type.bounding_box:
+        return list(instance_type.members)
+    return [_bounding_box_member(instance_type.id, instance_type.color), *instance_type.members]
+
+
 @dataclass(frozen=True)
 class SetupInstanceType:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -95,17 +111,41 @@ class SetupInstanceType:
     members: Sequence[SetupMember] = ()
     skeleton: SetupSkeleton = SetupSkeleton()
 
+    # Whether this instance type has a (manually drawn) bounding box, as opposed to
+    # one computed automatically from its keypoints at export time. Kept out of
+    # `members` (rather than inferred from its position, as before) so it can't be
+    # reordered/duplicated/lost through the same editing operations that manage the
+    # freeform member list.
+    bounding_box: bool = False
+
+    # The instance type's own associated color - used for the bounding box (manual
+    # or automatic) and, more generally, to color-code the instance type wherever
+    # it's shown (e.g. the instance type list), regardless of mode.
+    color: Optional[Color] = None
+
     @classmethod
     def from_config(cls, config: InstanceTypeConfig) -> Self:
-        members = [SetupMember.from_config(m) for m in config.members]
-        skeleton = SetupSkeleton.from_config(config.skeleton, members)
-        return cls(name=config.name, members=members, skeleton=skeleton)
+        instance_type_id = str(uuid.uuid4())
+
+        has_bounding_box = len(config.members) > 0 and config.members[0].type == LabellerObjectType.BOUNDING_BOX
+        member_configs = config.members[1:] if has_bounding_box else config.members
+        members = [SetupMember.from_config(m) for m in member_configs]
+
+        if has_bounding_box:
+            flattened = [_bounding_box_member(instance_type_id, config.color), *members]
+        else:
+            flattened = members
+        skeleton = SetupSkeleton.from_config(config.skeleton, flattened)
+
+        return cls(id=instance_type_id, name=config.name, members=members, skeleton=skeleton,
+                    bounding_box=has_bounding_box, color=config.color)
 
     @classmethod
     def to_config(cls, instance_type: ISetupInstanceType) -> InstanceTypeConfig:
-        members = [SetupMember.to_config(m) for m in instance_type.members]
-        skeleton = SetupSkeleton.to_config(instance_type.skeleton, instance_type.members)
-        return InstanceTypeConfig(name=instance_type.name, members=members, skeleton=skeleton)
+        flattened = instance_type_members(instance_type)
+        members = [SetupMember.to_config(m) for m in flattened]
+        skeleton = SetupSkeleton.to_config(instance_type.skeleton, flattened)
+        return InstanceTypeConfig(name=instance_type.name, members=members, skeleton=skeleton, color=instance_type.color)
 
     def get_member(self, member_id: str) -> SetupMember | None:
         return next((m for m in self.members if m.id == member_id), None)
@@ -121,6 +161,12 @@ class SetupInstanceType:
 
     def with_skeleton(self, skeleton: SetupSkeleton) -> Self:
         return replace(self, skeleton=skeleton)
+
+    def with_bounding_box(self, bounding_box: bool) -> Self:
+        return replace(self, bounding_box=bounding_box)
+
+    def with_color(self, color: Optional[Color]) -> Self:
+        return replace(self, color=color)
 
     def insert_member(self, member: SetupMember, index: int = -1) -> Self:
         members = list(self.members)

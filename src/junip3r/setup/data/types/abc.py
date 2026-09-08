@@ -33,6 +33,10 @@ class ISetupInstanceType(Protocol):
     def members(self) -> Sequence[ISetupMember]: ...
     @property
     def skeleton(self) -> ISetupSkeleton: ...
+    @property
+    def bounding_box(self) -> bool: ...  # False = automatic; True = manual, drawn using `color`
+    @property
+    def color(self) -> Optional[Color]: ...
 
 
 class ISetupConfig(Protocol):
