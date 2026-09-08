@@ -90,6 +90,7 @@ def test_label_repository_round_trips_instances_through_real_instance_types(tmp_
             MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0)),
         ],
         SkeletonSpecs([], (0, 0, 0)),
+        color=(0, 0, 255),
     )
     instance = instance_type.new_instance("i1", "Mouse 1")
     instance = instance.replace_member(instance.members[0].id, instance.members[0].with_box(((0.0, 0.0), (1.0, 1.0))))

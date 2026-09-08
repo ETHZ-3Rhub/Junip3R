@@ -8,10 +8,11 @@ from junip3r.setup.preview.data.repository.preview_persistence import PreviewPer
 
 def _instance():
     instance_type = InstanceType(
-        "mouse", [MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0))], SkeletonSpecs([], (0, 0, 0))
+        "mouse", [MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0))], SkeletonSpecs([], (0, 0, 0)),
+        color=(0, 0, 255),
     )
     instance = instance_type.new_instance("i1", "Mouse 1")
-    return instance.replace_member(0, instance.members[0].with_p((0.5, 0.5)))
+    return instance.replace_member(instance.members[0].id, instance.members[0].with_p((0.5, 0.5)))
 
 
 def test_save_writes_image_and_labels(tmp_path):

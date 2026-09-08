@@ -48,6 +48,12 @@ class InstanceType:
     members: Sequence[MemberSpecs]
     skeleton: SkeletonSpecs
 
+    # The instance type's own associated color - independent of any single member,
+    # used e.g. for a manual/automatic bounding box and for color-coding instances
+    # in a list. Always resolved to a real value by config-parse time (see
+    # labeller/config/parser.py), same as MemberSpecs.color.
+    color: Color
+
     # Stable per-type identity, same story as MemberSpecs.id - only read by the
     # setup preview.
     id: str = field(default_factory=lambda: str(uuid.uuid4()))

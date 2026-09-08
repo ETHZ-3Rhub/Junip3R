@@ -56,8 +56,7 @@ def _deserialize_skeleton(data: Dict[str, Any] | List[Tuple[str, str]], members:
 class YoloDetectInstanceTypeSerializer:
     @classmethod
     def serialize(cls, instance_type: InstanceTypeConfig) -> Dict[str, Any] | str:
-        bounding_box = instance_type.members[0]
-        color = bounding_box.color
+        color = instance_type.color
         if color is not None:
             return {"name": instance_type.name, "color": _color_to_hex(color)}
         else:
@@ -77,22 +76,20 @@ class YoloDetectInstanceTypeSerializer:
         if color_string is not None:
             color: Optional[Color] = _string_to_color(color_string)
 
-        members = [MemberConfig(name=name, type=LabellerObjectType.BOUNDING_BOX, color=color)]
-        return InstanceTypeConfig(name=name, members=members)
+        members = [MemberConfig(name=name, type=LabellerObjectType.BOUNDING_BOX)]
+        return InstanceTypeConfig(name=name, members=members, color=color)
 
 
 class YoloPoseInstanceTypeSerializer:
     @classmethod
     def serialize(cls, instance_type: InstanceTypeConfig) -> Dict[str, Any]:
         instance_dict: Dict[str, Any] = {"name": instance_type.name}
-        if len(instance_type.members) > 0 and instance_type.members[0].type == LabellerObjectType.BOUNDING_BOX:
-            color = instance_type.members[0].color
-            if color is not None:
-                instance_dict["bounding_box"] = {"mode": "manual", "color": _color_to_hex(color)}
-            else:
-                instance_dict["bounding_box"] = "manual"
-        else:
-            instance_dict["bounding_box"] = "automatic"
+
+        has_bounding_box = len(instance_type.members) > 0 and instance_type.members[0].type == LabellerObjectType.BOUNDING_BOX
+        instance_dict["bounding_box"] = "manual" if has_bounding_box else "automatic"
+
+        if instance_type.color is not None:
+            instance_dict["color"] = _color_to_hex(instance_type.color)
 
         keypoints = []
         for member in instance_type.members:
@@ -113,22 +110,20 @@ class YoloPoseInstanceTypeSerializer:
     def deserialize(cls, data: Dict[str, Any], index: int = 0) -> InstanceTypeConfig:
         name = data.get("name", f"Instance Type {index + 1}")
 
-        bounding_box_color_string: Optional[str] = None
-        bounding_box_color: Optional[Color] = None
-
+        # Accept the old {"mode": ..., "color": ...} shape too, for the mode alone -
+        # a nested legacy color is intentionally not migrated (see `color` below).
         bounding_box_data = data.get("bounding_box", "manual")
         if isinstance(bounding_box_data, str):
             bounding_box_mode = bounding_box_data
         else:
             bounding_box_mode = bounding_box_data.get("mode", "manual")
-            bounding_box_color_string = bounding_box_data.get("color")
-
-        if bounding_box_color_string is not None:
-            bounding_box_color = _string_to_color(bounding_box_color_string)
 
         bounding_box = []
         if bounding_box_mode == "manual":
-            bounding_box = [MemberConfig(name="Bounding Box", type=LabellerObjectType.BOUNDING_BOX, color=bounding_box_color)]
+            bounding_box = [MemberConfig(name="Bounding Box", type=LabellerObjectType.BOUNDING_BOX)]
+
+        color_string = data.get("color")
+        color: Optional[Color] = _string_to_color(color_string) if color_string is not None else None
 
         keypoints = []
         keypoints_data = data.get("keypoints", [])
@@ -151,7 +146,7 @@ class YoloPoseInstanceTypeSerializer:
 
         skeleton = _deserialize_skeleton(data.get("skeleton", {}), members)
 
-        return InstanceTypeConfig(name=name, members=members, skeleton=skeleton)
+        return InstanceTypeConfig(name=name, members=members, skeleton=skeleton, color=color)
 
 
 class JuniperInstanceTypeSerializer:
@@ -164,6 +159,9 @@ class JuniperInstanceTypeSerializer:
 
         instance_dict["skeleton"] = _serialize_skeleton(instance_type.skeleton, instance_type.members)
 
+        if instance_type.color is not None:
+            instance_dict["color"] = _color_to_hex(instance_type.color)
+
         return instance_dict
 
     @classmethod
@@ -171,7 +169,11 @@ class JuniperInstanceTypeSerializer:
         name = data.get("name", f"Instance Type {index + 1}")
         members = [cls.deserialize_member(member_data, i) for i, member_data in enumerate(data.get("members", []))]
         skeleton = _deserialize_skeleton(data.get("skeleton", {}), members)
-        return InstanceTypeConfig(name=name, members=members, skeleton=skeleton)
+
+        color_string = data.get("color")
+        color: Optional[Color] = _string_to_color(color_string) if color_string is not None else None
+
+        return InstanceTypeConfig(name=name, members=members, skeleton=skeleton, color=color)
 
     @classmethod
     def serialize_member(cls, member: MemberConfig) -> Dict[str, Any]:

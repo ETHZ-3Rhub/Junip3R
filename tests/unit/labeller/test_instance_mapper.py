@@ -9,7 +9,7 @@ from junip3r.labeller.data.types.abc import LabellerObjectType
 def _instance_type(name="mouse", members=None):
     if members is None:
         members = [MemberSpecs(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))]
-    return InstanceType(name=name, members=members, skeleton=SkeletonSpecs([], (0, 0, 0)))
+    return InstanceType(name=name, members=members, skeleton=SkeletonSpecs([], (0, 0, 0)), color=(0, 0, 255))
 
 
 def test_from_data_resolves_the_instance_type_by_name_and_reuses_the_stored_instance_id():

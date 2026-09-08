@@ -1,5 +1,4 @@
-import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Sequence, Tuple, Optional
 
 from junip3r.labeller.data.types.abc import LabellerObjectType, Color
@@ -25,6 +24,7 @@ class InstanceTypeConfig:
     name: str = "Instance Type"
     members: Sequence[MemberConfig] = ()
     skeleton: SkeletonConfig = SkeletonConfig()
+    color: Optional[Color] = None
 
 
 @dataclass(frozen=True)

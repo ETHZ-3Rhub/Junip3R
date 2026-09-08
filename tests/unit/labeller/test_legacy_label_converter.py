@@ -15,6 +15,7 @@ def test_convert_legacy_labels_writes_a_readable_v2_file(tmp_path: Path):
             MemberSpecs("tail", LabellerObjectType.KEYPOINT, (0, 255, 0)),
         ],
         SkeletonSpecs([], (0, 0, 0)),
+        color=(0, 0, 255),
     )
 
     old_file = tmp_path / "a.csv"
@@ -36,6 +37,7 @@ def test_derives_automatic_bounding_box_type_when_instance_type_has_no_box_membe
         "mouse",
         [MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0))],
         SkeletonSpecs([], (0, 0, 0)),
+        color=(0, 0, 255),
     )
 
     old_file = tmp_path / "a.csv"

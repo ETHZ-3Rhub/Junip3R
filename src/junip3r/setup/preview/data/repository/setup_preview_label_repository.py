@@ -81,13 +81,18 @@ def _color_from_hue(hue: float) -> Color:
 
 
 def resolve_instance_types(instance_types: Sequence[ISetupInstanceType]) -> List[InstanceType]:
-    return [_resolve_instance_type(instance_type) for instance_type in instance_types]
+    num_instance_types = len(instance_types)
+    return [_resolve_instance_type(instance_type, index, num_instance_types) for index, instance_type in enumerate(instance_types)]
 
 
-def _resolve_instance_type(instance_type: ISetupInstanceType) -> InstanceType:
+def _resolve_instance_type(instance_type: ISetupInstanceType, index: int, num_instance_types: int) -> InstanceType:
+    # InstanceType.color has no default (see labeller/config/data.py) - resolved the same
+    # way _resolve_members resolves an unset member color, since setup doesn't have its
+    # own per-instance-type color concept yet.
+    color = (0, 0, 255) if num_instance_types <= 1 else _color_from_hue(index / num_instance_types)
     members = _resolve_members(instance_type.members)
     skeleton = _resolve_skeleton(instance_type.skeleton, instance_type.members)
-    return InstanceType(instance_type.name, members, skeleton, id=instance_type.id)
+    return InstanceType(instance_type.name, members, skeleton, color=color, id=instance_type.id)
 
 
 def _resolve_members(members: Sequence[ISetupMember]) -> List[MemberSpecs]:

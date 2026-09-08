@@ -100,7 +100,7 @@ def test_app_model_hits_repository_on_every_call():
 
 def test_insert_and_remove_instance_round_trip():
     model, *_, labels, _ = _build_model()
-    instance_type = InstanceType("mouse", [MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0))], SkeletonSpecs([], (0, 0, 0)))
+    instance_type = InstanceType("mouse", [MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0))], SkeletonSpecs([], (0, 0, 0)), color=(0, 0, 255))
     instance = instance_type.new_instance("i1", "Mouse 1")
 
     model.insert_instance(0, instance)
@@ -112,7 +112,7 @@ def test_insert_and_remove_instance_round_trip():
 
 def test_set_instances_does_not_seed_get_instances():
     model, *_, labels, _ = _build_model()
-    instance_type = InstanceType("mouse", [MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0))], SkeletonSpecs([], (0, 0, 0)))
+    instance_type = InstanceType("mouse", [MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0))], SkeletonSpecs([], (0, 0, 0)), color=(0, 0, 255))
     instance = instance_type.new_instance("i1", "Mouse 1")
 
     model.set_instances(0, [instance])
@@ -161,6 +161,7 @@ def test_change_instance_type_carries_over_matching_member_data():
             MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0)),
         ],
         SkeletonSpecs([], (0, 0, 0)),
+        color=(0, 0, 255),
     )
     new_type = InstanceType(
         "new",
@@ -169,6 +170,7 @@ def test_change_instance_type_carries_over_matching_member_data():
             MemberSpecs("nose2", LabellerObjectType.KEYPOINT, (0, 255, 0)),
         ],
         SkeletonSpecs([], (0, 0, 0)),
+        color=(0, 255, 0),
     )
 
     old_instance = old_type.new_instance("i1", "Old")
@@ -187,7 +189,7 @@ def test_change_instance_type_carries_over_matching_member_data():
 
 
 def test_change_instance_type_stops_copying_at_first_type_mismatch():
-    old_type = InstanceType("old", [MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0))], SkeletonSpecs([], (0, 0, 0)))
+    old_type = InstanceType("old", [MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0))], SkeletonSpecs([], (0, 0, 0)), color=(0, 0, 255))
     new_type = InstanceType(
         "new",
         [
@@ -195,6 +197,7 @@ def test_change_instance_type_stops_copying_at_first_type_mismatch():
             MemberSpecs("nose2", LabellerObjectType.KEYPOINT, (0, 255, 0)),
         ],
         SkeletonSpecs([], (0, 0, 0)),
+        color=(0, 255, 0),
     )
 
     old_instance = old_type.new_instance("i1", "Old")

@@ -75,3 +75,55 @@ def test_tags_are_parsed_onto_the_config():
     config = parse_config({"instance_types": ["cat"], "tags": ["a", "b"]})
 
     assert config.tags == ["a", "b"]
+
+
+def test_yolo_detect_explicit_color_is_shared_by_the_instance_type_and_its_box():
+    config = parse_config({"mode": "yolo_detect", "instance_types": [{"name": "cat", "color": "#ff0000"}]})
+
+    cat = config.instance_types[0]
+    assert cat.color == (255, 0, 0)
+    assert cat.members[0].color == (255, 0, 0)
+
+
+def test_yolo_pose_manual_bounding_box_color_comes_from_the_instance_type():
+    raw_config = {
+        "mode": "yolo_pose",
+        "instance_types": [
+            {"name": "mouse", "bounding_box": "manual", "color": "#ff0000", "keypoints": ["nose"]}
+        ],
+    }
+
+    config = parse_config(raw_config)
+
+    mouse = config.instance_types[0]
+    assert mouse.color == (255, 0, 0)
+    assert mouse.members[0].type == LabellerObjectType.BOUNDING_BOX
+    assert mouse.members[0].color == (255, 0, 0)
+
+
+def test_yolo_pose_automatic_bounding_box_still_resolves_an_instance_type_color():
+    raw_config = {
+        "mode": "yolo_pose",
+        "instance_types": [
+            {"name": "mouse", "bounding_box": "automatic", "keypoints": ["nose"]}
+        ],
+    }
+
+    config = parse_config(raw_config)
+
+    # No box is rendered for an automatic instance type, but the color used to
+    # color-code it elsewhere (e.g. an instance list) still resolves to something.
+    assert config.instance_types[0].color == (0, 0, 255)
+
+
+def test_junip3r_instance_type_color_is_parsed():
+    raw_config = {
+        "mode": "junip3r",
+        "instance_types": [
+            {"name": "mouse", "members": [{"name": "nose", "type": "keypoint"}], "color": "#00ff00"}
+        ],
+    }
+
+    config = parse_config(raw_config)
+
+    assert config.instance_types[0].color == (0, 255, 0)

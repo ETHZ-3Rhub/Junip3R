@@ -35,40 +35,45 @@ def _build_members_junip3r(members: Sequence[MemberConfig]) -> List[MemberSpecs]
     ]
 
 
-def _build_members_yolo_pose(members: Sequence[MemberConfig], instance_type_index: int, num_instance_types: int) -> List[MemberSpecs]:
-    bounding_box_default = (0, 0, 255) if num_instance_types == 1 else color_from_hue(instance_type_index / num_instance_types)
+def _resolve_instance_type_color(instance_type: InstanceTypeConfig, index: int, num_instance_types: int) -> Color:
+    default = (0, 0, 255) if num_instance_types == 1 else color_from_hue(index / num_instance_types)
+    return instance_type.color if instance_type.color is not None else default
+
+
+def _build_members_yolo_pose(members: Sequence[MemberConfig], bounding_box_color: Color) -> List[MemberSpecs]:
     num_keypoints = sum(1 for m in members if m.type == LabellerObjectType.KEYPOINT)
 
     built = []
     keypoint_index = 0
     for member in members:
         if member.type == LabellerObjectType.BOUNDING_BOX:
-            default = bounding_box_default
+            built.append(MemberSpecs(name=member.name, type=member.type, color=bounding_box_color, size=member.size))
         else:
             default = color_from_hue(keypoint_index / num_keypoints)
+            built.append(MemberSpecs(name=member.name, type=member.type, color=_resolve_color(member, default), size=member.size))
             keypoint_index += 1
-        built.append(MemberSpecs(name=member.name, type=member.type, color=_resolve_color(member, default), size=member.size))
     return built
 
 
-def _build_members_yolo_detect(members: Sequence[MemberConfig], instance_type_index: int, num_instance_types: int) -> List[MemberSpecs]:
-    default = (0, 0, 255) if num_instance_types == 1 else color_from_hue(instance_type_index / num_instance_types)
+def _build_members_yolo_detect(members: Sequence[MemberConfig], bounding_box_color: Color) -> List[MemberSpecs]:
     member = members[0]
-    return [MemberSpecs(name=member.name, type=member.type, color=_resolve_color(member, default), size=member.size)]
+    return [MemberSpecs(name=member.name, type=member.type, color=bounding_box_color, size=member.size)]
 
 
 def _build_instance_type(mode: ConfigMode, instance_type: InstanceTypeConfig, index: int, num_instance_types: int) -> InstanceType:
+    color = _resolve_instance_type_color(instance_type, index, num_instance_types)
+
     if mode == ConfigMode.JUNIPER:
         members = _build_members_junip3r(instance_type.members)
     elif mode == ConfigMode.YOLO_POSE:
-        members = _build_members_yolo_pose(instance_type.members, index, num_instance_types)
+        members = _build_members_yolo_pose(instance_type.members, color)
     elif mode == ConfigMode.YOLO_DETECT:
-        members = _build_members_yolo_detect(instance_type.members, index, num_instance_types)
+        members = _build_members_yolo_detect(instance_type.members, color)
     else:
         raise ValueError(f"Invalid mode: {mode}")
 
     skeleton = _build_skeleton(instance_type.skeleton)
-    return InstanceType(name=instance_type.name, members=members, skeleton=skeleton)
+    return InstanceType(name=instance_type.name, members=members, skeleton=skeleton, color=color)
 
 
 def _build_instance_types(config: CommonConfig) -> Tuple[List[InstanceType], List[InstanceType]]:
