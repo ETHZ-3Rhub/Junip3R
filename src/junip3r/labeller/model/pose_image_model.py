@@ -1,13 +1,14 @@
 import uuid
 from contextlib import contextmanager
-from typing import Optional, List, Sequence, cast, Dict
+from typing import Optional, List, Sequence, Dict, cast
 
 import numpy as np
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QUndoStack
 
-from junip3r.labeller.data.types.abc import InstanceID, MemberID, Selection, Point, Box, IKeypoint, IInstance, \
-    IInstanceType, ILabellerObject, IBoundingBox
+from junip3r.labeller.config.data import InstanceType
+from junip3r.labeller.data.types.abc import InstanceID, MemberID, Selection, Point, Box, InstanceMember
+from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox
 from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.model.image_state import ImageState, ImageNavigationState, ImageStateChangeFlags
 from junip3r.labeller.model.instance_type_selection_strategy import EditorInstanceTypeWorkflow
@@ -35,7 +36,7 @@ class PoseImageModel(QObject):
 
         self._image_state_flags: ImageStateChangeFlags = ImageStateChangeFlags.NONE
 
-        self._copied_instance: IInstance | None = None
+        self._copied_instance: Instance | None = None
 
         if self._model.get_num_images() > 0:
             self.set_image_index(0)
@@ -96,7 +97,7 @@ class PoseImageModel(QObject):
         return self._cached_image
 
     @property
-    def _new_instance(self) -> IInstance | None:
+    def _new_instance(self) -> Instance | None:
         new_instance_type = self._model.get_new_instance_type(self._image_index)
         if new_instance_type is None:
             return None
@@ -108,18 +109,18 @@ class PoseImageModel(QObject):
     def get_image(self) -> Optional[np.ndarray]:
         return self._get_image()
 
-    def get_instances(self) -> Sequence[IInstance]:
+    def get_instances(self) -> Sequence[Instance]:
         instances = self._model.get_instances(self._image_index)
         new_instance = self._new_instance
         if new_instance is not None:
             instances = tuple(list(instances) + [new_instance])
         return instances
 
-    def get_instance(self, instance_id: InstanceID) -> IInstance | None:
+    def get_instance(self, instance_id: InstanceID) -> Instance | None:
         instances = self.get_instances()
         return next((instance for instance in instances if instance.instance_id == instance_id), None)
     
-    def get_member(self, instance_id: InstanceID, member_id: MemberID) -> Optional[ILabellerObject]:
+    def get_member(self, instance_id: InstanceID, member_id: MemberID) -> Optional[InstanceMember]:
         instance = self.get_instance(instance_id)
         if instance is None:
             return None
@@ -128,14 +129,14 @@ class PoseImageModel(QObject):
     def get_selection(self) -> Optional[Selection]:
         return self._model.get_selection(self._image_index)
 
-    def get_selected_instance(self) -> Optional[IInstance]:
+    def get_selected_instance(self) -> Optional[Instance]:
         selection = self.get_selection()
         if selection is None:
             return None
         instance_id, _ = selection
         return self.get_instance(instance_id)
 
-    def get_selected_member(self) -> Optional[ILabellerObject]:
+    def get_selected_member(self) -> Optional[InstanceMember]:
         selection = self.get_selection()
         if selection is None:
             return None
@@ -153,7 +154,7 @@ class PoseImageModel(QObject):
 
     def move_keypoint(self, instance_id: InstanceID, member_id: MemberID, p: Point):
         assert instance_id is not None, "Instance ID should not be None"
-        member = cast(Optional[IKeypoint], self.get_member(instance_id, member_id))
+        member = cast(Optional[Keypoint], self.get_member(instance_id, member_id))
         if member is None:
             return
         visibility = member.visibility
@@ -162,7 +163,7 @@ class PoseImageModel(QObject):
 
     def set_keypoint_visibility(self, instance_id: InstanceID, member_id: MemberID, visibility: float):
         assert instance_id is not None, "Instance ID should not be None"
-        member = cast(Optional[IKeypoint], self.get_member(instance_id, member_id))
+        member = cast(Optional[Keypoint], self.get_member(instance_id, member_id))
         if member is None or member.p is None:
             return
         self._set_keypoint(instance_id, member_id, member.p, visibility)
@@ -190,7 +191,7 @@ class PoseImageModel(QObject):
 
     def _move_bounding_box_corner(self, instance_id: InstanceID, member_id: MemberID, corner_index: int, p: Point):
         assert instance_id is not None, "Instance ID should not be None"
-        bounding_box = cast(Optional[IBoundingBox], self.get_member(instance_id, member_id))
+        bounding_box = cast(Optional[BoundingBox], self.get_member(instance_id, member_id))
         if bounding_box is None or bounding_box.corners is None:
             return
         corners = bounding_box.corners
@@ -282,7 +283,7 @@ class PoseImageModel(QObject):
         self._set_selection(prev_selection)
         self._flush()
 
-    def select_instance_type(self, instance_type: IInstanceType):
+    def select_instance_type(self, instance_type: InstanceType):
         instance_id, _ = self._model.get_selection(self._image_index)
         if instance_id is None:
             instances = self._model.get_instances(self._image_index)
@@ -395,10 +396,10 @@ class PoseImageModel(QObject):
         assert new_instance_type is not None, "New instance type should not be None"
         self._undo_stack.push(AdvanceNewInstanceType(self._model, self, self._workflow, self._image_index))
 
-    def _add_instance(self, instance: IInstance):
+    def _add_instance(self, instance: Instance):
         self._undo_stack.push(AddInstance(self._model, self, self._image_index, instance))
 
-    def _generate_new_instance_name(self, instance_type: IInstanceType) -> str:
+    def _generate_new_instance_name(self, instance_type: InstanceType) -> str:
         instances = self._model.get_instances(self._image_index)
         existing_names = {instance.name for instance in instances if instance.instance_type == instance_type}
         base_name = instance_type.name

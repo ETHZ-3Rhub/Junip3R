@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
-from junip3r.labeller.data.types.abc import IKeypoint, IBoundingBox, Point, IPolygon, IPolyline, IPolygonPoint, \
-    IBoundingBoxCorner
+from junip3r.labeller.data.types.abc import Point
+from junip3r.labeller.data.types.data import Keypoint, BoundingBox, Polygon, Polyline, PolygonPoint, BoundingBoxCorner
 
 
 class Operation:
@@ -23,12 +23,12 @@ class Inspect(Operation):
 
 @dataclass(frozen=True)
 class DragPoint(Operation):
-    member: IKeypoint
+    member: Keypoint
 
 
 @dataclass(frozen=True)
 class DrawBox(Operation):
-    member: IBoundingBox
+    member: BoundingBox
     p1: Optional[Point] = None
 
     @property
@@ -42,14 +42,14 @@ class DrawBox(Operation):
 
 @dataclass(frozen=True)
 class DragBoundingBoxCorner(Operation):
-    bounding_box: IBoundingBox
-    corner: IBoundingBoxCorner
-    opposing_corner: IBoundingBoxCorner
+    bounding_box: BoundingBox
+    corner: BoundingBoxCorner
+    opposing_corner: BoundingBoxCorner
 
 
 @dataclass(frozen=True)
 class DrawPolygon(Operation):
-    member: IPolygon
+    member: Polygon
     points: Sequence[Point] = field(default_factory=tuple)
 
     @property
@@ -63,12 +63,12 @@ class DrawPolygon(Operation):
 
 @dataclass(frozen=True)
 class DragPolygonPoint(Operation):
-    member: IPolygonPoint
+    member: PolygonPoint
 
 
 @dataclass(frozen=True)
 class DrawPolyline(Operation):
-    member: IPolyline
+    member: Polyline
     points: Sequence[Point] = field(default_factory=tuple)
 
     @property

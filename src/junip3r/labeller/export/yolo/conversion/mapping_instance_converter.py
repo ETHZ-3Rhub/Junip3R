@@ -1,6 +1,7 @@
-from typing import Sequence, cast, List, Tuple, Iterable
+from typing import Sequence, List, Tuple, Iterable
 
-from junip3r.labeller.data.types.abc import IInstance, LabellerObjectType, IKeypoint, IBoundingBox, Box
+from junip3r.labeller.data.types.abc import Box
+from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox
 from junip3r.labeller.export.yolo.data import (
     YoloBox,
     YoloKeypoint,
@@ -34,7 +35,7 @@ class MappingYoloPoseInstanceConverter:
     def __init__(self, config: YoloDatasetConfig):
         self._config = config
 
-    def convert(self, instances: Sequence[IInstance]) -> Sequence[YoloPoseInstance]:
+    def convert(self, instances: Sequence[Instance]) -> Sequence[YoloPoseInstance]:
         num_keypoints = self._config.num_keypoints
 
         yolo_instances: List[YoloPoseInstance] = []
@@ -42,10 +43,9 @@ class MappingYoloPoseInstanceConverter:
             mapping = self._config.instance_types[instance.instance_type.name]
 
             if mapping.bounding_box is not None:
-                box_member = next((m for m in instance.members if m.type == LabellerObjectType.BOUNDING_BOX and m.name == mapping.bounding_box), None)
+                box_member = next((m for m in instance.members if isinstance(m, BoundingBox) and m.name == mapping.bounding_box), None)
                 if box_member is None:
                     raise ValueError(f"Instance of type {instance.instance_type.name} is missing required bounding box member '{mapping.bounding_box}'")
-                box_member = cast(IBoundingBox, box_member)
 
                 bounding_box = box_member.box
                 if bounding_box is None:
@@ -58,12 +58,10 @@ class MappingYoloPoseInstanceConverter:
             keypoints: List[YoloKeypoint] = [(0., 0., 0.)] * num_keypoints
 
             for member in instance.members:
-                if member.type != LabellerObjectType.KEYPOINT:
+                if not isinstance(member, Keypoint):
                     continue
                 if member.name not in mapping.keypoints:
                     continue
-
-                member = cast(IKeypoint, member)
 
                 keypoint_index = mapping.keypoints[member.name]
                 x, y = member.p if member.p is not None and member.visibility > 0.5 else (0., 0.)

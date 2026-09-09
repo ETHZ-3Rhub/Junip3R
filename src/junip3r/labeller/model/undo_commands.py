@@ -1,9 +1,10 @@
-from typing import Sequence, Optional, cast, Any
+from typing import Sequence, Optional, Any, cast
 
 from PySide6.QtGui import QUndoCommand
 
-from junip3r.labeller.data.types.abc import IInstance, InstanceID, MemberID, Selection, IInstanceType, Point, \
-    Box, IKeypoint, IBoundingBox, IPolygon
+from junip3r.labeller.config.data import InstanceType
+from junip3r.labeller.data.types.abc import InstanceID, MemberID, Selection, Point, Box
+from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox, Polygon
 from junip3r.labeller.model.abc import IChangeTracker, IUndoModel
 from junip3r.labeller.model.image_state import ImageStateChangeFlags
 from junip3r.labeller.model.instance_type_selection_strategy import EditorInstanceTypeWorkflow
@@ -15,7 +16,7 @@ class AddInstance(QUndoCommand):
             model: IUndoModel,
             change_tracker: IChangeTracker,
             image_index: int,
-            instance: IInstance,
+            instance: Instance,
             name: str = "Add Instance",
     ) -> None:
         super().__init__(name)
@@ -53,7 +54,7 @@ class RemoveInstance(QUndoCommand):
         self._instance_id = instance_id
 
         self._removed_index: Optional[int] = None
-        self._removed_instance: Optional[IInstance] = None
+        self._removed_instance: Optional[Instance] = None
 
     def redo(self) -> None:
         instances = self._model.get_instances(self._image_index)
@@ -79,7 +80,7 @@ class ChangeInstanceType(QUndoCommand):
             change_tracker: IChangeTracker,
             image_index: int,
             instance_id: InstanceID,
-            instance_type: IInstanceType,
+            instance_type: InstanceType,
             name: str = "Change Instance Type",
     ) -> None:
         super().__init__(name)
@@ -90,7 +91,7 @@ class ChangeInstanceType(QUndoCommand):
         self._instance_id = instance_id
         self._instance_type = instance_type
 
-        self._prev_instance: Optional[IInstance] = None
+        self._prev_instance: Optional[Instance] = None
 
     def redo(self) -> None:
         self._prev_instance = self._model.get_instance(self._image_index, self._instance_id)
@@ -196,7 +197,7 @@ class AdvanceNewInstanceType(QUndoCommand):
         self._image_index = image_index
 
         self._prev_workflow_state: Any = None
-        self._previous_instance_type: IInstanceType | None = None
+        self._previous_instance_type: InstanceType | None = None
 
     def redo(self) -> None:
         self._prev_workflow_state = self._workflow.capture_state()
@@ -242,7 +243,7 @@ class SetKeypoint(QUndoCommand):
         self._previous_visibility: float = 0.0
 
     def redo(self) -> None:
-        keypoint = cast(Optional[IKeypoint], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
+        keypoint = cast(Optional[Keypoint], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
         if keypoint is None:
             return
         self._previous_point = keypoint.p
@@ -280,7 +281,7 @@ class SetBoundingBox(QUndoCommand):
         self._previous_box: Box | None = None
 
     def redo(self) -> None:
-        bounding_box = cast(Optional[IBoundingBox], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
+        bounding_box = cast(Optional[BoundingBox], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
         if bounding_box is None:
             return
         self._previous_box = bounding_box.box
@@ -316,7 +317,7 @@ class SetPolygon(QUndoCommand):
         self._previous_points: Sequence[Point] = []
 
     def redo(self) -> None:
-        polygon = cast(Optional[IPolygon], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
+        polygon = cast(Optional[Polygon], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
         if polygon is None:
             return
         self._previous_points = [p.p for p in polygon.points]
@@ -354,7 +355,7 @@ class SetPolygonPoint(QUndoCommand):
         self._previous_point: Point | None = None
 
     def redo(self) -> None:
-        member = cast(Optional[IPolygon], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
+        member = cast(Optional[Polygon], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
         if member is None or self._polygon_point_index >= len(member.points):
             return
         polygon_point = member.points[self._polygon_point_index]

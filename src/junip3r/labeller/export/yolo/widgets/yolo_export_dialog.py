@@ -10,7 +10,9 @@ from PySide6.QtWidgets import QDialog, QFormLayout, QLineEdit, QToolButton, QWid
     QPushButton
 
 from junip3r.common.tags.data import TagValue
-from junip3r.labeller.data.types.abc import IInstance, IInstanceType, LabellerObjectType
+from junip3r.labeller.config.data import InstanceType
+from junip3r.labeller.data.types.abc import LabellerObjectType
+from junip3r.labeller.data.types.data import Instance
 from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import \
     MappingYoloDatasetMetadataGenerator, MappingYoloDatasetGenerator, MappingYoloPoseInstanceConverter
 from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig, YoloPoseInstance
@@ -49,8 +51,8 @@ class ExportJob:
     config: YoloDatasetConfig
     set_split_config: SetSplitConfig
     model: IReadOnlyAppModel
-    instance_filter: Callable[[IInstance], bool]
-    image_filter: Callable[[Sequence[IInstance]], bool]
+    instance_filter: Callable[[Instance], bool]
+    image_filter: Callable[[Sequence[Instance]], bool]
     set_mapper: Callable[[str], Optional[str]]
     canceled: bool = False
 
@@ -242,7 +244,7 @@ class YoloExportDialog(QDialog):
         if folder:
             self.txt_location.setText(folder)
 
-    def _selected_instance_types(self) -> List[IInstanceType]:
+    def _selected_instance_types(self) -> List[InstanceType]:
         selected = []
         for i in range(self.lst_instance_types.count()):
             item = self.lst_instance_types.item(i)
@@ -253,7 +255,7 @@ class YoloExportDialog(QDialog):
     def _selected_instance_type_names(self) -> Set[str]:
         return {instance_type.name for instance_type in self._selected_instance_types()}
 
-    def _filtered_instances(self, image_index: int, selected_names: Set[str]) -> List[IInstance]:
+    def _filtered_instances(self, image_index: int, selected_names: Set[str]) -> List[Instance]:
         return [
             instance for instance in self._model.get_instances(image_index)
             if instance.instance_type.name in selected_names

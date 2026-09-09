@@ -1,13 +1,14 @@
 from pathlib import Path
-from typing import Optional, Sequence, cast
+from typing import Optional, Sequence
 
 import numpy as np
 
 from junip3r.common.tags.data import Tags
+from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.data.repository.abc import ILabelRepository, IImageRepository, IConfigRepository, \
     ISelectionRepository, ITagRepository
-from junip3r.labeller.data.types.abc import InstanceID, Selection, Point, Box, IKeypoint, IInstance, IInstanceType, \
-    ILabellerObject, IBoundingBox, IPolygon, IPolyline, LabellerObjectType
+from junip3r.labeller.data.types.abc import InstanceID, Selection, Point, Box, InstanceMember
+from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox, Polygon, Polyline
 from junip3r.labeller.model.abc import IUndoModel, IReadOnlyAppModel
 
 
@@ -62,13 +63,13 @@ class AppModel(IUndoModel, IReadOnlyAppModel):
     def get_image_file(self, image_index: int) -> Optional[Path]:
         return self._image_repository.get_image_file(image_index)
 
-    def get_instance_types(self, image_index: int) -> Sequence[IInstanceType]:
+    def get_instance_types(self, image_index: int) -> Sequence[InstanceType]:
         return self._config_repository.get_instance_types(image_index)
 
-    def get_expected_instances(self, image_index: int) -> Sequence[IInstanceType]:
+    def get_expected_instances(self, image_index: int) -> Sequence[InstanceType]:
         return self._config_repository.get_expected_instances(image_index)
 
-    def get_instances(self, image_index: int) -> Sequence[IInstance]:
+    def get_instances(self, image_index: int) -> Sequence[Instance]:
         return self._label_repository.get_instances(image_index)
 
     def get_tags(self, image_index: int) -> Tags:
@@ -77,14 +78,25 @@ class AppModel(IUndoModel, IReadOnlyAppModel):
     def set_tags(self, image_index: int, tags: Tags) -> None:
         self._tag_repository.set_tags(image_index, tags)
 
-    def get_instance(self, image_index: int, instance_id: InstanceID) -> Optional[IInstance]:
+    def get_instance(self, image_index: int, instance_id: InstanceID) -> Optional[Instance]:
         instances = self.get_instances(image_index)
         return next((instance for instance in instances if instance.instance_id == instance_id), None)
 
-    def set_instances(self, image_index: int, instances: Sequence[IInstance]) -> None:
+    def _require_instance(self, image_index: int, instance_id: InstanceID) -> Instance:
+        # A caller reaching a set_*/change_instance_type method below is expected to have
+        # already resolved instance_id to a real instance (e.g. via get_instance/get_member,
+        # which stay Optional-returning lookups precisely so callers can check first and
+        # no-op instead of ever calling through here) - a missing instance at this point is
+        # a caller bug, not a legitimate runtime state.
+        instance = self.get_instance(image_index, instance_id)
+        if instance is None:
+            raise ValueError(f"No instance with id {instance_id!r} on image {image_index}")
+        return instance
+
+    def set_instances(self, image_index: int, instances: Sequence[Instance]) -> None:
         self._label_repository.set_instances(image_index, list(instances))
 
-    def insert_instance(self, image_index: int, instance: IInstance, insertion_index: int = None) -> None:
+    def insert_instance(self, image_index: int, instance: Instance, insertion_index: int = None) -> None:
         instances = list(self.get_instances(image_index))
         if insertion_index is None:
             instances.append(instance)
@@ -97,28 +109,24 @@ class AppModel(IUndoModel, IReadOnlyAppModel):
         instances = [instance for instance in instances if instance.instance_id != instance_id]
         self.set_instances(image_index, instances)
 
-    def replace_instance(self, image_index: int, instance_id: InstanceID, instance: IInstance) -> None:
+    def replace_instance(self, image_index: int, instance_id: InstanceID, instance: Instance) -> None:
         instances = self.get_instances(image_index)
         instances = [instance if inst.instance_id == instance_id else inst for inst in instances]
         self.set_instances(image_index, instances)
 
-    def change_instance_type(self, image_index: int, instance_id: InstanceID, instance_type: IInstanceType) -> None:
-        instance = self.get_instance(image_index, instance_id)
-        if instance is None:
-            return
+    def change_instance_type(self, image_index: int, instance_id: InstanceID, instance_type: InstanceType) -> None:
+        instance = self._require_instance(image_index, instance_id)
         # TODO: Gneerate correct name
         new_instance = instance_type.new_instance(instance_id=instance.instance_id, name=instance_type.name)
 
         for old_member, new_member in zip(instance.members, new_instance.members):
-            if old_member.type != new_member.type:
+            if type(old_member) is not type(new_member):
                 break
-            if old_member.type == LabellerObjectType.KEYPOINT:
+            if isinstance(old_member, Keypoint) and isinstance(new_member, Keypoint):
                 new_member = new_member.with_p(old_member.p)
-            elif old_member.type == LabellerObjectType.BOUNDING_BOX:
+            elif isinstance(old_member, BoundingBox) and isinstance(new_member, BoundingBox):
                 new_member = new_member.with_box(old_member.box)
-            elif old_member.type == LabellerObjectType.POLYGON:
-                new_member = new_member.with_points(old_member.points)
-            elif old_member.type == LabellerObjectType.POLYLINE:
+            elif isinstance(old_member, (Polygon, Polyline)) and isinstance(new_member, (Polygon, Polyline)):
                 new_member = new_member.with_points(old_member.points)
             new_instance = new_instance.replace_member(new_member.id, new_member)
 
@@ -130,13 +138,13 @@ class AppModel(IUndoModel, IReadOnlyAppModel):
     def set_selection(self, image_index: int, selection: Optional[Selection]) -> None:
         self._selection_repository.set_selection(image_index, selection)
 
-    def get_new_instance_type(self, image_index: int) -> IInstanceType | None:
+    def get_new_instance_type(self, image_index: int) -> InstanceType | None:
         return self._selection_repository.get_new_instance_type(image_index)
 
-    def set_new_instance_type(self, image_index: int, instance_type: IInstanceType | None) -> None:
+    def set_new_instance_type(self, image_index: int, instance_type: InstanceType | None) -> None:
         self._selection_repository.set_new_instance_type(image_index, instance_type)
 
-    def get_member(self, image_index: int, selection: Selection) -> Optional[ILabellerObject]:
+    def get_member(self, image_index: int, selection: Selection) -> Optional[InstanceMember]:
         instance_id, member_id = selection
         instance = self.get_instance(image_index, instance_id)
         if instance is None:
@@ -146,73 +154,36 @@ class AppModel(IUndoModel, IReadOnlyAppModel):
     def set_keypoint(self, image_index: int, selection: Selection, point: Point | None,
                      visibility: float = 2.0) -> None:
         instance_id, member_id = selection
-        instance = self.get_instance(image_index, instance_id)
-        if instance is None:
-            return
-        member = cast(Optional[IKeypoint], instance.get_member(member_id))
-        if member is None:
-            return
-        member = member.with_p(point)
-        member = member.with_visibility(visibility)
-        instance = instance.replace_member(member_id, member)
-        self.replace_instance(image_index, instance_id, instance)
+        instance = self._require_instance(image_index, instance_id)
+        new_instance = instance.set_keypoint(member_id, point, visibility)
+        self.replace_instance(image_index, instance_id, new_instance)
 
     def set_bounding_box(self, image_index: int, selection: Selection, box: Box | None) -> None:
         instance_id, member_id = selection
-        instance = self.get_instance(image_index, instance_id)
-        if instance is None:
-            return
-        member = cast(Optional[IBoundingBox], instance.get_member(member_id))
-        if member is None:
-            return
-        member = member.with_box(box)
-        instance = instance.replace_member(member_id, member)
-        self.replace_instance(image_index, instance_id, instance)
+        instance = self._require_instance(image_index, instance_id)
+        new_instance = instance.set_bounding_box(member_id, box)
+        self.replace_instance(image_index, instance_id, new_instance)
 
     def set_polygon(self, image_index: int, selection: Selection, points: Sequence[Point]) -> None:
         instance_id, member_id = selection
-        instance = self.get_instance(image_index, instance_id)
-        if instance is None:
-            return
-        member = cast(Optional[IPolygon], instance.get_member(member_id))
-        if member is None:
-            return
-        member = member.with_points(points)
-        instance = instance.replace_member(member_id, member)
-        self.replace_instance(image_index, instance_id, instance)
+        instance = self._require_instance(image_index, instance_id)
+        new_instance = instance.set_polygon(member_id, points)
+        self.replace_instance(image_index, instance_id, new_instance)
 
     def set_polyline(self, image_index: int, selection: Selection, points: Sequence[Point]) -> None:
         instance_id, member_id = selection
-        instance = self.get_instance(image_index, instance_id)
-        if instance is None:
-            return
-        member = cast(Optional[IPolyline], instance.get_member(member_id))
-        if member is None:
-            return
-        member = member.with_points(points)
-        instance = instance.replace_member(member_id, member)
-        self.replace_instance(image_index, instance_id, instance)
+        instance = self._require_instance(image_index, instance_id)
+        new_instance = instance.set_polyline(member_id, points)
+        self.replace_instance(image_index, instance_id, new_instance)
 
     def set_polygon_point(self, image_index: int, selection: Selection, point_index: int, point: Point) -> None:
         instance_id, member_id = selection
-        instance = self.get_instance(image_index, instance_id)
-        if instance is None:
-            return
-        member = cast(Optional[IPolygon], instance.get_member(member_id))
-        if member is None:
-            return
-        member = member.replace_point(point_index, point)
-        instance = instance.replace_member(member_id, member)
-        self.replace_instance(image_index, instance_id, instance)
+        instance = self._require_instance(image_index, instance_id)
+        new_instance = instance.set_polygon_point(member_id, point_index, point)
+        self.replace_instance(image_index, instance_id, new_instance)
 
     def set_polyline_point(self, image_index: int, selection: Selection, point_index: int, point: Point) -> None:
         instance_id, member_id = selection
-        instance = self.get_instance(image_index, instance_id)
-        if instance is None:
-            return
-        member = cast(Optional[IPolyline], instance.get_member(member_id))
-        if member is None:
-            return
-        member = member.replace_point(point_index, point)
-        instance = instance.replace_member(member_id, member)
-        self.replace_instance(image_index, instance_id, instance)
+        instance = self._require_instance(image_index, instance_id)
+        new_instance = instance.set_polyline_point(member_id, point_index, point)
+        self.replace_instance(image_index, instance_id, new_instance)

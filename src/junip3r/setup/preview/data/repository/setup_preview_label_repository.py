@@ -7,17 +7,15 @@ from junip3r.common.labels.serialization import LabelSerializer
 from junip3r.labeller.config.data import InstanceType, MemberSpecs, SkeletonSpecs
 from junip3r.labeller.data.repository.abc import ILabelRepository, IConfigRepository
 from junip3r.labeller.data.repository.label import InstanceMapper
-from junip3r.labeller.data.types.abc import IInstance, LabellerObjectType, Color, IInstanceType
+from junip3r.labeller.data.types.abc import LabellerObjectType, Color
 from junip3r.labeller.data.types.data import Keypoint, BoundingBox, Polygon, Polyline, Instance
 from junip3r.setup.data.types.abc import ISetupInstanceType, ISetupMember, ISetupSkeleton
 
 logger = logging.getLogger(__name__)
 
-# The labeller's own member delegates, which the setup preview uses directly (see
+# The labeller's own member classes, which the setup preview uses directly (see
 # MemberSpecs/InstanceType's `id` field) instead of maintaining parallel ID-only
-# subclasses. A plain Union rather than a protocol, since only these four concrete
-# types are ever actually constructed here - the labeller's own IKeypoint/IBoundingBox/
-# etc. protocols intentionally don't include `id`, as the labeller itself never uses it.
+# subclasses - only these four concrete types are ever actually constructed here.
 PreviewMember = Union[Keypoint, BoundingBox, Polygon, Polyline]
 
 
@@ -33,7 +31,7 @@ class SetupConfigRepository(IConfigRepository):
     def get_instance_types(self, image_index: int) -> List[InstanceType]:
         return self._instance_types
 
-    def get_expected_instances(self, image_index: int) -> List[IInstanceType]:
+    def get_expected_instances(self, image_index: int) -> List[InstanceType]:
         return self._expected_instances
 
     def get_tag_names(self, image_index: int) -> List[str]:
@@ -68,10 +66,10 @@ class SetupPreviewLabelRepository(ILabelRepository):
     def set_label_file(self, label_file: Optional[Path]):
         self._label_file = label_file
 
-    def get_instances(self, image_index: int) -> Sequence[IInstance]:
+    def get_instances(self, image_index: int) -> Sequence[Instance]:
         return self._load()
 
-    def set_instances(self, image_index: int, instances: Sequence[IInstance]):
+    def set_instances(self, image_index: int, instances: Sequence[Instance]):
         if self._label_file is None:
             return
         data = InstanceMapper(self._instance_types).to_data(instances)
@@ -210,21 +208,13 @@ def _copy_instance_data(source_instance: Instance, target_instance: Instance) ->
 
 
 def _copy_member_data(source_member: PreviewMember, target_member: PreviewMember) -> PreviewMember:
-    if source_member.type == LabellerObjectType.KEYPOINT:
-        source_member = cast(Keypoint, source_member)
-        target_member = cast(Keypoint, target_member)
+    if isinstance(source_member, Keypoint) and isinstance(target_member, Keypoint):
         new_member = target_member.with_p(source_member.p)
-    elif source_member.type == LabellerObjectType.BOUNDING_BOX:
-        source_member = cast(BoundingBox, source_member)
-        target_member = cast(BoundingBox, target_member)
+    elif isinstance(source_member, BoundingBox) and isinstance(target_member, BoundingBox):
         new_member = target_member.with_box(source_member.box)
-    elif source_member.type == LabellerObjectType.POLYGON:
-        source_member = cast(Polygon, source_member)
-        target_member = cast(Polygon, target_member)
+    elif isinstance(source_member, Polygon) and isinstance(target_member, Polygon):
         new_member = target_member.with_points([p.p for p in source_member.points])
-    elif source_member.type == LabellerObjectType.POLYLINE:
-        source_member = cast(Polyline, source_member)
-        target_member = cast(Polyline, target_member)
+    elif isinstance(source_member, Polyline) and isinstance(target_member, Polyline):
         new_member = target_member.with_points([p.p for p in source_member.points])
     else:
         raise ValueError(f"Unknown member type: {source_member.type}")

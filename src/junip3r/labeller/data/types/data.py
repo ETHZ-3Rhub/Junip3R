@@ -1,9 +1,15 @@
 import uuid
 from dataclasses import dataclass, field, replace
-from typing import List, Optional, Tuple, Self, Sequence
+from typing import List, Optional, Tuple, Self, Sequence, TYPE_CHECKING, cast
 
-from junip3r.labeller.data.types.abc import ILabellerParentObject, LabellerObjectType, Color, Point, Box, \
-    IPolygonPoint, IInstanceType, ILabellerObject, IInstanceMember, ISkeleton, InstanceID, MemberID
+from junip3r.labeller.data.types.abc import LabellerParentObject, LabellerObjectType, Color, Point, Box, \
+    LabellerObject, InstanceMember, InstanceID, MemberID
+
+if TYPE_CHECKING:
+    # labeller.config.data imports Keypoint/BoundingBox/.../Instance from this module to
+    # build InstanceType.new_instance()/MemberSpecs.new_instance() - importing InstanceType
+    # back here for real (not just for type checking) would be circular.
+    from junip3r.labeller.config.data import InstanceType
 
 
 def _normalize_box(box: Optional[Box]) -> Optional[Box]:
@@ -18,7 +24,7 @@ def _normalize_box(box: Optional[Box]) -> Optional[Box]:
 
 
 @dataclass
-class Keypoint:
+class Keypoint(InstanceMember):
     instance_id: InstanceID = None
     member_index: int = 0
     name: str = "Keypoint"
@@ -58,7 +64,7 @@ class Keypoint:
 
 
 @dataclass
-class BoundingBoxCorner:
+class BoundingBoxCorner(LabellerObject):
     instance_id: InstanceID = None
     member_index: int = 0
     corner_index: int = 0
@@ -87,7 +93,7 @@ class BoundingBoxCorner:
 
 
 @dataclass
-class BoundingBox:
+class BoundingBox(InstanceMember, LabellerParentObject):
     instance_id: InstanceID = None
     member_index: int = 0
     name: str = "Bounding Box"
@@ -126,18 +132,16 @@ class BoundingBox:
         return LabellerObjectType.BOUNDING_BOX
 
     @property
-    def members(self) -> Sequence[ILabellerObject]:
+    def members(self) -> Sequence[LabellerObject]:
         if self._corners is not None:
             return self._corners
         return []
 
     @property
     def bounds(self) -> Optional[Box]:
+        # Equivalent to the union of the 4 corners' bounds (LabellerParentObject's
+        # default), but the box is already right there - no need to recompute it.
         return self.box
-
-    @property
-    def is_set(self) -> bool:
-        return self.box is not None
 
     def with_instance_id(self, instance_id: InstanceID) -> Self:
         return replace(self, instance_id=instance_id)
@@ -147,7 +151,7 @@ class BoundingBox:
 
 
 @dataclass
-class PolygonPoint:
+class PolygonPoint(LabellerObject):
     instance_id: InstanceID = None
     member_index: int = 0
     point_index: int = 0
@@ -182,13 +186,13 @@ class PolygonPoint:
 
 
 @dataclass
-class Polygon:
+class Polygon(InstanceMember, LabellerParentObject):
     instance_id: InstanceID = None
     member_index: int = 0
     name: str = "Polygon"
     color: Color = (255, 165, 0)
     num_points: Optional[int] = None
-    points: Sequence[IPolygonPoint] = field(default_factory=list)
+    points: Sequence[PolygonPoint] = field(default_factory=list)
 
     # Stable per-member-slot identity (see MemberSpecs). Originally added only for the
     # setup preview to track a member across live config edits - now also what .path and
@@ -205,22 +209,8 @@ class Polygon:
         return LabellerObjectType.POLYGON
 
     @property
-    def members(self) -> Sequence[ILabellerObject]:
+    def members(self) -> Sequence[LabellerObject]:
         return self.points
-
-    @property
-    def bounds(self) -> Optional[Box]:
-        if len(self.points) <= 0:
-            return None
-        min_x = min(p.p[0] for p in self.points)
-        min_y = min(p.p[1] for p in self.points)
-        max_x = max(p.p[0] for p in self.points)
-        max_y = max(p.p[1] for p in self.points)
-        return (min_x, min_y), (max_x, max_y)
-
-    @property
-    def is_set(self) -> bool:
-        return len(self.points) > 0
 
     def with_instance_id(self, instance_id: InstanceID) -> Self:
         points = [p.with_instance_id(instance_id) for p in self.points]
@@ -240,13 +230,13 @@ class Polygon:
 
 
 @dataclass
-class Polyline:
+class Polyline(InstanceMember, LabellerParentObject):
     instance_id: InstanceID = None
     member_index: int = 0
     name: str = "Polyline"
     color: Color = (255, 0, 0)
     num_points: Optional[int] = None
-    points: Sequence[IPolygonPoint] = field(default_factory=list)
+    points: Sequence[PolygonPoint] = field(default_factory=list)
 
     # Stable per-member-slot identity (see MemberSpecs). Originally added only for the
     # setup preview to track a member across live config edits - now also what .path and
@@ -263,22 +253,8 @@ class Polyline:
         return LabellerObjectType.POLYLINE
 
     @property
-    def members(self) -> Sequence[ILabellerObject]:
+    def members(self) -> Sequence[LabellerObject]:
         return self.points
-
-    @property
-    def bounds(self) -> Optional[Box]:
-        if len(self.points) <= 0:
-            return None
-        min_x = min(p.p[0] for p in self.points)
-        min_y = min(p.p[1] for p in self.points)
-        max_x = max(p.p[0] for p in self.points)
-        max_y = max(p.p[1] for p in self.points)
-        return (min_x, min_y), (max_x, max_y)
-
-    @property
-    def is_set(self) -> bool:
-        return len(self.points) > 0
 
     def with_instance_id(self, instance_id: InstanceID) -> Self:
         points = [p.with_instance_id(instance_id) for p in self.points]
@@ -307,39 +283,20 @@ class Skeleton:
 
 
 @dataclass
-class Instance:
+class Instance(LabellerParentObject):
     instance_id: InstanceID
     name: str
-    instance_type: IInstanceType
-    members: Tuple[IInstanceMember, ...] = field(default_factory=tuple)
-    skeleton: ISkeleton = field(default_factory=Skeleton)
+    instance_type: "InstanceType"
+    members: Tuple[InstanceMember, ...] = field(default_factory=tuple)
+    skeleton: Skeleton = field(default_factory=Skeleton)
 
     @property
-    def parent(self) -> Optional[ILabellerParentObject]:
+    def parent(self) -> Optional[LabellerParentObject]:
         return None
 
     @property
     def type(self):
         return LabellerObjectType.INSTANCE
-
-    @property
-    def bounds(self) -> Optional[Box]:
-        if len(self.members) <= 0:
-            return None
-
-        sub_bounds = [m.bounds for m in self.members if m.bounds is not None]
-        if len(sub_bounds) <= 0:
-            return None
-
-        min_x = min(b[0][0] for b in sub_bounds)
-        min_y = min(b[0][1] for b in sub_bounds)
-        max_x = max(b[1][0] for b in sub_bounds)
-        max_y = max(b[1][1] for b in sub_bounds)
-        return (min_x, min_y), (max_x, max_y)
-
-    @property
-    def is_set(self) -> bool:
-        return any(m.is_set for m in self.members)
 
     def with_instance_id(self, instance_id: InstanceID) -> Self:
         members = [m.with_instance_id(instance_id) for m in self.members]
@@ -348,23 +305,60 @@ class Instance:
     def with_name(self, name: str) -> Self:
         return replace(self, name=name)
 
-    def with_members(self, members: Sequence[IInstanceMember]) -> Self:
+    def with_members(self, members: Sequence[InstanceMember]) -> Self:
         return replace(self, members=tuple(members))
 
-    def get_member(self, member_id: MemberID) -> Optional[IInstanceMember]:
+    def get_member(self, member_id: MemberID) -> Optional[InstanceMember]:
         return next((m for m in self.members if m.id == member_id), None)
 
-    def replace_member(self, member_id: MemberID, member: IInstanceMember) -> Self:
+    def replace_member(self, member_id: MemberID, member: InstanceMember) -> Self:
         members = [member if m.id == member_id else m for m in self.members]
         return replace(self, members=tuple(members))
+
+    def _require_member(self, member_id: MemberID) -> InstanceMember:
+        # A caller reaching a set_* method below is expected to have already resolved
+        # member_id to a real member (see e.g. PoseImageModel.move_keypoint or
+        # SetKeypoint.redo, which check AppModel.get_member first and no-op rather than
+        # calling through here at all) - a missing member at this point is a caller bug,
+        # not a legitimate runtime state. No type check either: calling set_polygon on a
+        # member_id that isn't a Polygon is equally a caller bug and should fail loudly
+        # (AttributeError from the blind cast below) rather than silently no-op.
+        member = self.get_member(member_id)
+        if member is None:
+            raise ValueError(f"Instance {self.instance_id!r} has no member with id {member_id!r}")
+        return member
+
+    def set_keypoint(self, member_id: MemberID, p: Optional[Point], visibility: float = 2.0) -> Self:
+        member = cast(Keypoint, self._require_member(member_id)).with_p(p).with_visibility(visibility)
+        return self.replace_member(member_id, member)
+
+    def set_bounding_box(self, member_id: MemberID, box: Optional[Box]) -> Self:
+        member = cast(BoundingBox, self._require_member(member_id)).with_box(box)
+        return self.replace_member(member_id, member)
+
+    def set_polygon(self, member_id: MemberID, points: Sequence[Point]) -> Self:
+        member = cast(Polygon, self._require_member(member_id)).with_points(points)
+        return self.replace_member(member_id, member)
+
+    def set_polyline(self, member_id: MemberID, points: Sequence[Point]) -> Self:
+        member = cast(Polyline, self._require_member(member_id)).with_points(points)
+        return self.replace_member(member_id, member)
+
+    def set_polygon_point(self, member_id: MemberID, point_index: int, point: Point) -> Self:
+        member = cast(Polygon, self._require_member(member_id)).replace_point(point_index, point)
+        return self.replace_member(member_id, member)
+
+    def set_polyline_point(self, member_id: MemberID, point_index: int, point: Point) -> Self:
+        member = cast(Polyline, self._require_member(member_id)).replace_point(point_index, point)
+        return self.replace_member(member_id, member)
 
 
 @dataclass
 class NewInstance:
-    instance_type: IInstanceType
+    instance_type: "InstanceType"
 
     @property
-    def parent(self) -> Optional[ILabellerParentObject]:
+    def parent(self) -> Optional[LabellerParentObject]:
         return None
 
     @property
@@ -376,11 +370,11 @@ class NewInstance:
         return "New Instance"
 
     @property
-    def members(self) -> List[IInstanceMember]:
+    def members(self) -> List[InstanceMember]:
         return []
 
     @property
-    def skeleton(self) -> ISkeleton:
+    def skeleton(self) -> Skeleton:
         return Skeleton()
 
     def with_instance_id(self, instance_id: InstanceID) -> Self:

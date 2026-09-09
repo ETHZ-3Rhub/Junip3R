@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Tuple, Sequence
 
 from junip3r.common.config.abc import ConfigMode
-from junip3r.labeller.data.types.abc import Color, InstanceID, ILabellerObject, IInstance, LabellerObjectType
+from junip3r.labeller.data.types.abc import Color, InstanceID, InstanceMember, LabellerObjectType
 from junip3r.labeller.data.types.data import Keypoint, BoundingBox, Polygon, Polyline, Skeleton, Instance
 
 
@@ -20,7 +20,7 @@ class MemberSpecs:
     # member across live config edits; the labeller itself never reads this.
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
-    def new_instance(self, instance_id: InstanceID, member_index: int, name: str) -> ILabellerObject:
+    def new_instance(self, instance_id: InstanceID, member_index: int, name: str) -> InstanceMember:
         if self.type == LabellerObjectType.KEYPOINT:
             return Keypoint(instance_id, member_index, name, self.color, None, 2.0, id=self.id)
         elif self.type == LabellerObjectType.BOUNDING_BOX:
@@ -58,7 +58,7 @@ class InstanceType:
     # setup preview.
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
-    def new_instance(self, instance_id: InstanceID, name: str) -> IInstance:
+    def new_instance(self, instance_id: InstanceID, name: str) -> Instance:
         members = [
             member.new_instance(instance_id, member_index, member.name)
             for member_index, member in enumerate(self.members)

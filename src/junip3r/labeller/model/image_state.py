@@ -4,7 +4,9 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-from junip3r.labeller.data.types.abc import IInstanceType, IInstance, Selection, IInstanceMember
+from junip3r.labeller.config.data import InstanceType
+from junip3r.labeller.data.types.abc import Selection, InstanceMember
+from junip3r.labeller.data.types.data import Instance
 from junip3r.labeller.model.operations import Operation, Inspect
 
 
@@ -20,12 +22,12 @@ class ImageStateChangeFlags(IntFlag):
 @dataclass(frozen=True)
 class ImageState:
     image: Optional[np.ndarray] = None
-    instance_types: Sequence[IInstanceType] = field(default_factory=tuple)
-    instances: Sequence[IInstance] = field(default_factory=tuple)
+    instance_types: Sequence[InstanceType] = field(default_factory=tuple)
+    instances: Sequence[Instance] = field(default_factory=tuple)
     selection: Optional[Selection] = None
 
     @property
-    def selected_instance(self) -> Optional[IInstance]:
+    def selected_instance(self) -> Optional[Instance]:
         if self.selection is None:
             return None
         instance_id = self.selection[0]
@@ -33,7 +35,7 @@ class ImageState:
         return instance
 
     @property
-    def selected_member(self) -> Optional[IInstanceMember]:
+    def selected_member(self) -> Optional[InstanceMember]:
         if self.selection is None:
             return None
         instance = self.selected_instance
@@ -42,7 +44,7 @@ class ImageState:
         member_id = self.selection[1]
         return instance.get_member(member_id)
 
-    def get_instance(self, instance_id: Optional[str]) -> Optional[IInstance]:
+    def get_instance(self, instance_id: Optional[str]) -> Optional[Instance]:
         if instance_id is None:
             return None
         return next((instance for instance in self.instances if instance.instance_id == instance_id), None)

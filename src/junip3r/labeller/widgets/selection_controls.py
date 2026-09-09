@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Sequence, cast, Hashable
+from typing import Dict, Optional, Sequence, Hashable
 
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, Signal
 from PySide6.QtGui import QFont, QIcon
@@ -7,8 +7,9 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QSplitter, QLabel, \
 
 from junip3r.common.config.abc import ConfigMode
 from junip3r.common.icons import ColorIcon, make_keypoint_icon, make_bounding_box_icon, make_polygon_icon, make_polyline_icon
-from junip3r.labeller.data.types.abc import IInstance, ILabellerObject, IInstanceMember, LabellerObjectType, \
-    IInstanceType, IBoundingBox, IKeypoint, IPolygon, IPolyline
+from junip3r.labeller.config.data import InstanceType
+from junip3r.labeller.data.types.abc import InstanceMember
+from junip3r.labeller.data.types.data import Instance, BoundingBox, Keypoint, Polygon, Polyline
 from junip3r.labeller.model.pose_image_model import ImageState, ImageStateChangeFlags
 
 
@@ -19,11 +20,11 @@ class InstanceListModel(QAbstractListModel):
 
     def __init__(self):
         super().__init__()
-        self._instances: Sequence[IInstance] = ()
+        self._instances: Sequence[Instance] = ()
         self._icon_cache: Dict[Hashable, QIcon] = {}
         self._mode: Optional[ConfigMode] = None
 
-    def set_instances(self, instances: Sequence[IInstance]):
+    def set_instances(self, instances: Sequence[Instance]):
         self.beginResetModel()
         self._instances = instances
         self.endResetModel()
@@ -39,17 +40,16 @@ class InstanceListModel(QAbstractListModel):
     def rowCount(self, parent=None):
         return len(self._instances)
 
-    def _get_bounding_box_icon(self, instance: IInstance) -> Optional[QIcon]:
+    def _get_bounding_box_icon(self, instance: Instance) -> Optional[QIcon]:
         # Used in place of the member list, which is hidden in yolo_detect mode (every
         # instance's one and only member would otherwise show this same icon there) -
         # shown only there, so it doesn't duplicate what the member list already shows
         # for itself in yolo_pose/junip3r.
         if self._mode != ConfigMode.YOLO_DETECT:
             return None
-        bounding_box = next((m for m in instance.members if m.type == LabellerObjectType.BOUNDING_BOX), None)
+        bounding_box = next((m for m in instance.members if isinstance(m, BoundingBox)), None)
         if bounding_box is None:
             return None
-        bounding_box = cast(IBoundingBox, bounding_box)
         if bounding_box.color not in self._icon_cache:
             self._icon_cache[bounding_box.color] = make_bounding_box_icon(bounding_box.color)
         return self._icon_cache[bounding_box.color]
@@ -92,10 +92,10 @@ class MemberListModel(QAbstractListModel):
 
     def __init__(self):
         super().__init__()
-        self._members: Sequence[IInstanceMember] = ()
+        self._members: Sequence[InstanceMember] = ()
         self._icon_cache: Dict[Hashable, QIcon] = {}
 
-    def set_members(self, members: Sequence[IInstanceMember]):
+    def set_members(self, members: Sequence[InstanceMember]):
         self.beginResetModel()
         self._members = members
         self.endResetModel()
@@ -103,25 +103,23 @@ class MemberListModel(QAbstractListModel):
     def rowCount(self, parent=None):
         return len(self._members)
 
-    def _get_icon(self, member: IInstanceMember):
-        if member.type == LabellerObjectType.BOUNDING_BOX:
+    def _get_icon(self, member: InstanceMember):
+        if isinstance(member, BoundingBox):
             cache_key = (member.type, member.color)
             if cache_key not in self._icon_cache:
                 self._icon_cache[cache_key] = make_bounding_box_icon(member.color)
             return self._icon_cache[cache_key]
-        elif member.type == LabellerObjectType.KEYPOINT:
+        elif isinstance(member, Keypoint):
             cache_key = (member.type, member.color)
             if cache_key not in self._icon_cache:
                 self._icon_cache[cache_key] = make_keypoint_icon(member.color)
             return self._icon_cache[cache_key]
-        elif member.type == LabellerObjectType.POLYGON:
-            member = cast(IPolygon, member)
+        elif isinstance(member, Polygon):
             cache_key = (member.type, member.color, member.num_points)
             if cache_key not in self._icon_cache:
                 self._icon_cache[cache_key] = make_polygon_icon(member.color, 16, member.num_points)
             return self._icon_cache[cache_key]
-        elif member.type == LabellerObjectType.POLYLINE:
-            member = cast(IPolyline, member)
+        elif isinstance(member, Polyline):
             cache_key = (member.type, member.color, member.num_points)
             if cache_key not in self._icon_cache:
                 self._icon_cache[cache_key] = make_polyline_icon(member.color, 16, member.num_points)
@@ -150,9 +148,9 @@ class TypeListModel(QAbstractListModel):
 
     def __init__(self):
         super().__init__()
-        self._instance_types: Sequence[IInstanceType] = ()
+        self._instance_types: Sequence[InstanceType] = ()
 
-    def set_instance_types(self, instance_types: Sequence[IInstanceType]):
+    def set_instance_types(self, instance_types: Sequence[InstanceType]):
         self.beginResetModel()
         self._instance_types = instance_types
         self.endResetModel()
@@ -244,7 +242,7 @@ class SelectionControls(QWidget):
 
         self.instance_list_model.instance_renamed.connect(self.instance_renamed)
 
-        self._instance_type: Optional[IInstanceType] = None
+        self._instance_type: Optional[InstanceType] = None
 
     def set_mode(self, mode: ConfigMode):
         # The member list is redundant in yolo_detect - every instance has exactly
@@ -307,7 +305,7 @@ class SelectionControls(QWidget):
                     self.lst_instances.setCurrentIndex(QModelIndex())
                     self.lst_members.setCurrentIndex(QModelIndex())
 
-    def _set_instances(self, instances: Sequence[IInstance]):
+    def _set_instances(self, instances: Sequence[Instance]):
         self.instance_list_model.set_instances(instances)
         self._instance_ids = [inst.instance_id for inst in instances]
 

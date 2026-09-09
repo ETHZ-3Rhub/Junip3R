@@ -1,6 +1,6 @@
 import time
 from dataclasses import dataclass, field, replace
-from typing import Optional, List, Tuple, cast, Iterator, Mapping, Sequence
+from typing import Optional, List, Tuple, Iterator, Mapping, Sequence
 
 import cv2
 import numpy as np
@@ -10,8 +10,9 @@ from PySide6.QtGui import QMouseEvent, QImage
 from PySide6.QtWidgets import QLabel
 
 from junip3r.labeller.controller.geometry import clamp_to_image01
-from junip3r.labeller.data.types.abc import IInstance, IKeypoint, ILabellerObject, LabellerObjectType, IBoundingBox, \
-    IPolygon, IPolyline, IPolygonPoint, Point, IBoundingBoxCorner, Box
+from junip3r.labeller.data.types.abc import LabellerObject, LabellerObjectType, Point, Box
+from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox, Polygon, Polyline, PolygonPoint, \
+    BoundingBoxCorner
 from junip3r.labeller.model.camera_model import CameraState
 from junip3r.labeller.model.context_model import ContextState
 from junip3r.labeller.model.image_settings_model import ImageSettingsState
@@ -70,7 +71,7 @@ class PointerEvent:
     camera_state: CameraState
     image_frame: Optional[ImageFrame] = None
 
-    hovered_member: Optional[ILabellerObject] = None
+    hovered_member: Optional[LabellerObject] = None
 
 
 @dataclass(frozen=True)
@@ -91,37 +92,37 @@ class RenderOverrides:
     polygon_point_highlights: Mapping[int, bool] = field(default_factory=dict)
     polygon_point_positions: Mapping[int, Point] = field(default_factory=dict)
 
-    def is_keypoint_highlighted(self, member: IKeypoint) -> bool:
+    def is_keypoint_highlighted(self, member: Keypoint) -> bool:
         key = id(member)
         return key in self.keypoint_highlights and self.keypoint_highlights[key]
 
-    def effective_keypoint_position(self, member: IKeypoint) -> Optional[Point]:
+    def effective_keypoint_position(self, member: Keypoint) -> Optional[Point]:
         key = id(member)
         if key in self.keypoint_positions:
             return self.keypoint_positions[key]
         return member.p
 
-    def is_bounding_box_corner_highlighted(self, member: IBoundingBoxCorner) -> bool:
+    def is_bounding_box_corner_highlighted(self, member: BoundingBoxCorner) -> bool:
         key = id(member)
         return key in self.bounding_box_corner_highlights and self.bounding_box_corner_highlights[key]
 
-    def effective_bounding_box_corner_position(self, member: IBoundingBoxCorner) -> Optional[Point]:
+    def effective_bounding_box_corner_position(self, member: BoundingBoxCorner) -> Optional[Point]:
         key = id(member)
         if key in self.bounding_box_corner_positions:
             return self.bounding_box_corner_positions[key]
         return member.p
 
-    def effective_bounding_box_position(self, member: IBoundingBox) -> Optional[Box]:
+    def effective_bounding_box_position(self, member: BoundingBox) -> Optional[Box]:
         key = id(member)
         if key in self.bounding_box_positions:
             return self.bounding_box_positions[key]
         return member.box
 
-    def is_polygon_point_highlighted(self, member: IPolygonPoint) -> bool:
+    def is_polygon_point_highlighted(self, member: PolygonPoint) -> bool:
         key = id(member)
         return key in self.polygon_point_highlights and self.polygon_point_highlights[key]
 
-    def effective_polygon_point_position(self, member: IPolygonPoint) -> Point:
+    def effective_polygon_point_position(self, member: PolygonPoint) -> Point:
         key = id(member)
         if key in self.polygon_point_positions:
             return self.polygon_point_positions[key]
@@ -163,10 +164,10 @@ class PoseImage(QLabel):
         self._image_settings_state = ImageSettingsState()
         self._operation_state = OperationState()
 
-        self._hovered_member: Optional[ILabellerObject] = None
+        self._hovered_member: Optional[LabellerObject] = None
 
-        self._hovered_members: List[ILabellerObject] = []
-        self._new_hovered_members: List[ILabellerObject] = []
+        self._hovered_members: List[LabellerObject] = []
+        self._new_hovered_members: List[LabellerObject] = []
 
         self._update_timer = QtCore.QTimer()
         self._update_timer.setInterval(1000 // 60)
@@ -321,14 +322,14 @@ class PoseImage(QLabel):
             case _:
                 return overrides
 
-    def _draw_skeleton(self, rc: RenderingContext, instance: IInstance, opacity: float = 1.0):
+    def _draw_skeleton(self, rc: RenderingContext, instance: Instance, opacity: float = 1.0):
         color = QtGui.QColor(*instance.skeleton.color)
 
         for i1, i2 in instance.skeleton.lines:
             member_1 = instance.members[i1]
             member_2 = instance.members[i2]
 
-            if not isinstance(member_1, IKeypoint) or not isinstance(member_2, IKeypoint):
+            if not isinstance(member_1, Keypoint) or not isinstance(member_2, Keypoint):
                 continue
 
             p1_image01 = rc.overrides.effective_keypoint_position(member_1)
@@ -339,17 +340,15 @@ class PoseImage(QLabel):
 
             rc.renderer.draw_skeleton_line(p1_image01, p2_image01, color, opacity=opacity)
 
-    def _draw_member(self, rc: RenderingContext, member: ILabellerObject, opacity: float = 1.0):
-         if member.type == LabellerObjectType.KEYPOINT:
-             member = cast(IKeypoint, member)
+    def _draw_member(self, rc: RenderingContext, member: LabellerObject, opacity: float = 1.0):
+         if isinstance(member, Keypoint):
              p = rc.overrides.effective_keypoint_position(member)
              highlighted = rc.overrides.is_keypoint_highlighted(member)
              if p is not None and member.visibility > 0.5:
                  visible = member.visibility > 1.5
                  color = QtGui.QColor(*member.color)
                  rc.renderer.draw_keypoint(p, color, visible, highlighted, opacity=opacity)
-         elif member.type == LabellerObjectType.BOUNDING_BOX:
-             member = cast(IBoundingBox, member)
+         elif isinstance(member, BoundingBox):
              box = rc.overrides.effective_bounding_box_position(member)
              if box is not None:
                  color = QtGui.QColor(*member.color)
@@ -362,8 +361,7 @@ class PoseImage(QLabel):
                          if highlighted:
                             p = rc.overrides.effective_bounding_box_corner_position(corner)
                             rc.renderer.draw_bounding_box_corner(p, color, opacity=opacity)
-         elif member.type == LabellerObjectType.POLYGON:
-             member = cast(IPolygon, member)
+         elif isinstance(member, Polygon):
              points = [rc.overrides.effective_polygon_point_position(p) for p in member.points]
              highlighted = [rc.overrides.is_polygon_point_highlighted(p) for p in member.points]
              if len(points) > 0:
@@ -371,8 +369,7 @@ class PoseImage(QLabel):
                  rc.renderer.draw_polygon(points, color, opacity=opacity, fill_opacity=opacity/5)
                  for point, highlighted in zip(points, highlighted):
                      rc.renderer.draw_polygon_point(point, color, highlighted, opacity=opacity)
-         elif member.type == LabellerObjectType.POLYLINE:
-             member = cast(IPolyline, member)
+         elif isinstance(member, Polyline):
              points = [rc.overrides.effective_polygon_point_position(p) for p in member.points]
              highlighted = [rc.overrides.is_polygon_point_highlighted(p) for p in member.points]
              if len(points) > 0:
@@ -381,7 +378,7 @@ class PoseImage(QLabel):
                  for point, highlighted in zip(points, highlighted):
                      rc.renderer.draw_polygon_point(point, color, highlighted, opacity=opacity)
 
-    def _draw_instances(self, rc: RenderingContext, instances: Sequence[IInstance], opacity: float = 1.0):
+    def _draw_instances(self, rc: RenderingContext, instances: Sequence[Instance], opacity: float = 1.0):
         for instance in instances:
             self._draw_skeleton(rc, instance, opacity)
 
@@ -389,17 +386,16 @@ class PoseImage(QLabel):
             for member in instance.members:
                 self._draw_member(rc, member, opacity)
 
-    def _draw_label(self, rc: RenderingContext, member: ILabellerObject):
-        match member.type:
-            case LabellerObjectType.INSTANCE:
+    def _draw_label(self, rc: RenderingContext, member: LabellerObject):
+        match member:
+            case Instance():
                 bounds = member.bounds
                 if bounds is not None:
                     rc.renderer.draw_instance_label(bounds[0], bounds[1], member.name)
-            case LabellerObjectType.KEYPOINT:
-                member = cast(IKeypoint, member)
+            case Keypoint():
                 if member.p is not None:
                     rc.renderer.draw_point_label(member.p, member.name)
-            case LabellerObjectType.BOUNDING_BOX | LabellerObjectType.POLYGON | LabellerObjectType.POLYLINE:
+            case BoundingBox() | Polygon() | Polyline():
                 if member.bounds is not None:
                     rc.renderer.draw_box_label(member.bounds[0], member.name)
 
@@ -527,7 +523,7 @@ class PoseImage(QLabel):
 
     # --- Helpers ---
 
-    def hit_test_keypoint(self, keypoint: IKeypoint, pos_view: Tuple[float, float]) -> bool:
+    def hit_test_keypoint(self, keypoint: Keypoint, pos_view: Tuple[float, float]) -> bool:
         p_keypoint_image01 = keypoint.p
 
         if p_keypoint_image01 is None:
@@ -545,7 +541,7 @@ class PoseImage(QLabel):
         dist = (pos_view[0] - p_keypoint_view[0]) ** 2 + (pos_view[1] - p_keypoint_view[1]) ** 2
         return dist < effective_radius ** 2
 
-    def hit_test_box(self, box: IBoundingBox, pos_view: Tuple[float, float]) -> bool:
+    def hit_test_box(self, box: BoundingBox, pos_view: Tuple[float, float]) -> bool:
         if box.box is None:
             return False
 
@@ -566,7 +562,7 @@ class PoseImage(QLabel):
 
         return (p1_view[0] <= pos_view[0] <= p2_view[0]) and (p1_view[1] <= pos_view[1] <= p2_view[1])
 
-    def hit_test_bounding_box_corner(self, member: IBoundingBoxCorner, pos_view: Tuple[float, float]) -> bool:
+    def hit_test_bounding_box_corner(self, member: BoundingBoxCorner, pos_view: Tuple[float, float]) -> bool:
         p_keypoint_image01 = member.p
 
         if p_keypoint_image01 is None:
@@ -584,7 +580,7 @@ class PoseImage(QLabel):
         dist = (pos_view[0] - p_keypoint_view[0]) ** 2 + (pos_view[1] - p_keypoint_view[1]) ** 2
         return dist < effective_radius ** 2
 
-    def hit_test_polygon(self, polygon: IPolygon, pos_view: Tuple[float, float]) -> bool:
+    def hit_test_polygon(self, polygon: Polygon, pos_view: Tuple[float, float]) -> bool:
         if len(polygon.points) <= 3:
             return False
 
@@ -661,7 +657,7 @@ class PoseImage(QLabel):
             for start, end in zip(points_view, points_view[1:])
         )
 
-    def hit_test_polyline(self, polyline: IPolyline, pos_view: Tuple[float, float]) -> bool:
+    def hit_test_polyline(self, polyline: Polyline, pos_view: Tuple[float, float]) -> bool:
         if len(polyline.points) <= 1:
             return False
 
@@ -680,7 +676,7 @@ class PoseImage(QLabel):
         dist = (pos_view[0] - point_view[0]) ** 2 + (pos_view[1] - point_view[1]) ** 2
         return dist < effective_radius ** 2
 
-    def hit_test_polygon_point(self, point: IPolygonPoint, pos_view: Tuple[float, float]) -> bool:
+    def hit_test_polygon_point(self, point: PolygonPoint, pos_view: Tuple[float, float]) -> bool:
         p_keypoint_image01 = point.p
 
         if p_keypoint_image01 is None:
@@ -695,28 +691,22 @@ class PoseImage(QLabel):
         p_keypoint_view = self._camera_state.world_to_view(*p_keypoint_world)
         return self._hit_test_polygon_point(p_keypoint_view, pos_view)
 
-    def test_member(self, member: ILabellerObject, pos_view: Tuple[float, float]) -> bool:
-        if member.type == LabellerObjectType.KEYPOINT:
-            member = cast(IKeypoint, member)
+    def test_member(self, member: LabellerObject, pos_view: Tuple[float, float]) -> bool:
+        if isinstance(member, Keypoint):
             return self.hit_test_keypoint(member, pos_view)
-        elif member.type == LabellerObjectType.BOUNDING_BOX:
-            member = cast(IBoundingBox, member)
+        elif isinstance(member, BoundingBox):
             return self.hit_test_box(member, pos_view)
-        elif member.type == LabellerObjectType.BOUNDING_BOX_CORNER:
-            member = cast(IBoundingBoxCorner, member)
+        elif isinstance(member, BoundingBoxCorner):
             return self.hit_test_bounding_box_corner(member, pos_view)
-        elif member.type == LabellerObjectType.POLYGON_POINT:
-            member = cast(IPolygonPoint, member)
+        elif isinstance(member, PolygonPoint):
             return self.hit_test_polygon_point(member, pos_view)
-        elif member.type == LabellerObjectType.POLYGON:
-            member = cast(IPolygon, member)
+        elif isinstance(member, Polygon):
             return self.hit_test_polygon(member, pos_view)
-        elif member.type == LabellerObjectType.POLYLINE:
-            member = cast(IPolyline, member)
+        elif isinstance(member, Polyline):
             return self.hit_test_polyline(member, pos_view)
         return False
 
-    def _iter_members(self, members: Sequence[ILabellerObject], pos_view: Tuple[float, float], types: List[LabellerObjectType] = None, blacklist: bool = False) -> Iterator[ILabellerObject]:
+    def _iter_members(self, members: Sequence[LabellerObject], pos_view: Tuple[float, float], types: List[LabellerObjectType] = None, blacklist: bool = False) -> Iterator[LabellerObject]:
         for member in reversed(members):
             if hasattr(member, "members"):
                 for child in self._iter_members(member.members, pos_view, types, blacklist):
@@ -725,12 +715,12 @@ class PoseImage(QLabel):
                 if self.test_member(member, pos_view):
                     yield member
 
-    def find_member(self, pos_view: Tuple[float, float]) -> Optional[ILabellerObject]:
+    def find_member(self, pos_view: Tuple[float, float]) -> Optional[LabellerObject]:
         for member in self._iter_members(self._state.instances, pos_view, [LabellerObjectType.BOUNDING_BOX, LabellerObjectType.POLYGON], blacklist=True):
             return member
         for member in self._iter_members(self._state.instances, pos_view, [LabellerObjectType.BOUNDING_BOX, LabellerObjectType.POLYGON], blacklist=False):
             return member
         return None
 
-    def find_members(self, pos_view: Tuple[float, float], types: List[LabellerObjectType] = None) -> List[ILabellerObject]:
+    def find_members(self, pos_view: Tuple[float, float], types: List[LabellerObjectType] = None) -> List[LabellerObject]:
         return list(self._iter_members(self._state.instances, pos_view, types))

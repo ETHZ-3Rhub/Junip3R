@@ -3,11 +3,12 @@ from typing import Sequence
 
 from junip3r.common.labels.legacy import LegacyLabelLoader, InstanceType as LegacyInstanceType
 from junip3r.common.labels.serialization import LabelSerializer
-from junip3r.labeller.data.types.abc import IInstanceType, LabellerObjectType
+from junip3r.labeller.config.data import InstanceType
+from junip3r.labeller.data.types.abc import LabellerObjectType
 
 
 class LegacyLabelConverter:
-    def __init__(self, instance_types: Sequence[IInstanceType]):
+    def __init__(self, instance_types: Sequence[InstanceType]):
         legacy_instance_types = []
         for instance_type in instance_types:
             instance = instance_type.new_instance(None, "")

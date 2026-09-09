@@ -17,7 +17,8 @@ from junip3r.common.config.abc import ConfigMode
 from junip3r.common.labels.serialization import LabelSerializer
 from junip3r.labeller.config.parser import parse_config
 from junip3r.labeller.data.repository.label import InstanceMapper
-from junip3r.labeller.data.types.abc import IInstanceType, IInstance
+from junip3r.labeller.config.data import InstanceType
+from junip3r.labeller.data.types.data import Instance
 from junip3r.labeller.model.camera_model import CameraModel
 from junip3r.labeller.widgets.pose_image import PoseImage
 from junip3r.setup.preview.placeholder_image import load_image_rgb, load_placeholder_image
@@ -45,8 +46,8 @@ class Preset:
     name: str
     mode: Optional[str] = None
     image: Optional[np.ndarray] = None
-    instance_types: List[IInstanceType] = field(default_factory=list)
-    instances: List[IInstance] = field(default_factory=list)
+    instance_types: List[InstanceType] = field(default_factory=list)
+    instances: List[Instance] = field(default_factory=list)
 
     config_file: Optional[Path] = None
 
@@ -144,9 +145,9 @@ class InstanceTypeModel(QAbstractListModel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.instance_types: List[IInstanceType] = []
+        self.instance_types: List[InstanceType] = []
 
-    def set_instance_types(self, instance_types: List[IInstanceType]):
+    def set_instance_types(self, instance_types: List[InstanceType]):
         self.beginResetModel()
         self.instance_types = instance_types
         self.endResetModel()

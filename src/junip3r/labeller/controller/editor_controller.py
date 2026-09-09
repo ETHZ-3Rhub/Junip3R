@@ -5,8 +5,8 @@ from PySide6.QtCore import Qt, Slot, QObject, Signal
 
 from junip3r.labeller.controller.camera_navigation import CameraNavigation
 from junip3r.labeller.controller.geometry import clamp_to_image01, is_inside_image01
-from junip3r.labeller.data.types.abc import LabellerObjectType, IKeypoint, Point, IBoundingBox, IPolygon, \
-    ILabellerObject, IPolygonPoint, IBoundingBoxCorner, IPolyline
+from junip3r.labeller.data.types.abc import LabellerObject, Point
+from junip3r.labeller.data.types.data import Keypoint, BoundingBox, Polygon, Polyline, PolygonPoint, BoundingBoxCorner
 from junip3r.labeller.model.context_model import ContextModel
 from junip3r.labeller.model.camera_model import CameraModel
 from junip3r.labeller.model.image_state import OperationState
@@ -42,7 +42,7 @@ class EditorController(QObject):
         self._operation: Operation = Inspect()
         self._inspect_all: bool = False
 
-        self._selected_member: Optional[ILabellerObject] = None
+        self._selected_member: Optional[LabellerObject] = None
 
         self._model.image_state_changed.connect(self._set_image_state)
         self._set_image_state(self._model.image_state, ImageStateChangeFlags.ALL)
@@ -62,14 +62,11 @@ class EditorController(QObject):
             self._selected_member = selected_member
 
             if selected_member is not None:
-                if selected_member.type == LabellerObjectType.BOUNDING_BOX:
-                    selected_member = cast(IBoundingBox, selected_member)
+                if isinstance(selected_member, BoundingBox):
                     self._start_draw_bounding_box(selected_member)
-                elif selected_member.type == LabellerObjectType.POLYGON:
-                    selected_member = cast(IPolygon, selected_member)
+                elif isinstance(selected_member, Polygon):
                     self._start_draw_polygon(selected_member)
-                elif selected_member.type == LabellerObjectType.POLYLINE:
-                    selected_member = cast(IPolyline, selected_member)
+                elif isinstance(selected_member, Polyline):
                     self._start_draw_polyline(selected_member)
                 else:
                     self._set_operation(Inspect())
@@ -93,8 +90,7 @@ class EditorController(QObject):
         if event.button == Qt.MouseButton.RightButton:
             if event.modifiers & Qt.KeyboardModifier.ControlModifier:
                 hovered_member = event.hovered_member
-                if hovered_member is not None and hovered_member.type == LabellerObjectType.KEYPOINT:
-                    hovered_member = cast(IKeypoint, hovered_member)
+                if isinstance(hovered_member, Keypoint):
                     self._toggle_keypoint_visibility(hovered_member)
             else:
                 self._delete(event.hovered_member)
@@ -105,25 +101,21 @@ class EditorController(QObject):
             # If there is a point at the mouse position, start dragging it, otherwise place a new point
 
             if self._operation.allow_drag:
-                if event.hovered_member is not None:
-                    if event.hovered_member.type == LabellerObjectType.KEYPOINT:
-                        pos_view = event.position.pos_view
-                        if pos_view is not None:
-                            member = cast(IKeypoint, event.hovered_member)
-                            self._start_drag_keypoint(member, pos_view)
-                            dragged = True
-                    elif event.hovered_member.type == LabellerObjectType.BOUNDING_BOX_CORNER:
-                        pos_view = event.position.pos_view
-                        if pos_view is not None:
-                            member = cast(IBoundingBoxCorner, event.hovered_member)
-                            self._start_drag_bounding_box_corner(member, pos_view)
-                            dragged = True
-                    elif event.hovered_member.type == LabellerObjectType.POLYGON_POINT:
-                        pos_view = event.position.pos_view
-                        if pos_view is not None:
-                            member = cast(IPolygonPoint, event.hovered_member)
-                            self._start_drag_polygon_point(member, pos_view)
-                            dragged = True
+                if isinstance(event.hovered_member, Keypoint):
+                    pos_view = event.position.pos_view
+                    if pos_view is not None:
+                        self._start_drag_keypoint(event.hovered_member, pos_view)
+                        dragged = True
+                elif isinstance(event.hovered_member, BoundingBoxCorner):
+                    pos_view = event.position.pos_view
+                    if pos_view is not None:
+                        self._start_drag_bounding_box_corner(event.hovered_member, pos_view)
+                        dragged = True
+                elif isinstance(event.hovered_member, PolygonPoint):
+                    pos_view = event.position.pos_view
+                    if pos_view is not None:
+                        self._start_drag_polygon_point(event.hovered_member, pos_view)
+                        dragged = True
             if not dragged:
                 self._place(pos_image01, not event.modifiers & Qt.KeyboardModifier.ControlModifier)
             return
@@ -209,13 +201,13 @@ class EditorController(QObject):
         
     # --- Keypoint ---
 
-    def _place_keypoint(self, member: IKeypoint, pos_image01: Point, visible=True):
+    def _place_keypoint(self, member: Keypoint, pos_image01: Point, visible=True):
         if not is_inside_image01(pos_image01):
             return
         instance_id, member_id = member.path
         self._model.place_keypoint(instance_id, member_id, pos_image01, visibility=2 if visible else 1)
 
-    def _start_drag_keypoint(self, member: IKeypoint, pos_view: Point):
+    def _start_drag_keypoint(self, member: Keypoint, pos_view: Point):
         self._start_drag(pos_view)
         self._set_operation(DragPoint(member))
 
@@ -224,20 +216,20 @@ class EditorController(QObject):
         instance_id, member_id = operation.member.path
         self._model.move_keypoint(instance_id, member_id, clamp_to_image01(pos_image01))
 
-    def _toggle_keypoint_visibility(self, member: IKeypoint):
+    def _toggle_keypoint_visibility(self, member: Keypoint):
         p = member.p
         assert p is not None
         visible = member.visibility >= 1.5
         instance_id, member_id = member.path
         self._model.set_keypoint_visibility(instance_id, member_id, visibility=1 if visible else 2)
 
-    def _delete_keypoint(self, member: IKeypoint):
+    def _delete_keypoint(self, member: Keypoint):
         instance_id, member_id = member.path
         self._model.delete_keypoint(instance_id, member_id)
         
     # --- Bounding Box ---
 
-    def _start_draw_bounding_box(self, member: IBoundingBox):
+    def _start_draw_bounding_box(self, member: BoundingBox):
         self._set_operation(DrawBox(member))
 
     def _place_bounding_box_point(self, operation: DrawBox, pos_image01: Point):
@@ -257,12 +249,12 @@ class EditorController(QObject):
         self._set_operation(Inspect())
         self._model.place_bounding_box(instance_id, member_id, box)
 
-    def _start_drag_bounding_box_corner(self, member: IBoundingBoxCorner, pos_view: Point):
+    def _start_drag_bounding_box_corner(self, member: BoundingBoxCorner, pos_view: Point):
         instance_id, member_id, corner_index = member.path
         instance = self._image_state.get_instance(instance_id)
         if instance is None:
             return
-        bounding_box = cast(Optional[IBoundingBox], instance.get_member(member_id))
+        bounding_box = cast(Optional[BoundingBox], instance.get_member(member_id))
         if bounding_box is None or bounding_box.corners is None:
             return
         corners = bounding_box.corners
@@ -277,13 +269,13 @@ class EditorController(QObject):
         instance_id, member_id, corner_index = operation.corner.path
         self._model.move_bounding_box_corner(instance_id, member_id, corner_index, clamp_to_image01(pos_image01))
 
-    def _delete_bounding_box(self, member: IBoundingBox):
+    def _delete_bounding_box(self, member: BoundingBox):
         instance_id, member_id = member.path
         self._model.delete_bounding_box(instance_id, member_id)
         
     # --- Polygon ---
 
-    def _start_draw_polygon(self, member: IPolygon):
+    def _start_draw_polygon(self, member: Polygon):
         self._set_operation(DrawPolygon(member))
 
     def _place_polygon_point(self, operation: DrawPolygon, pos_image01: Point):
@@ -304,7 +296,7 @@ class EditorController(QObject):
         self._set_operation(Inspect())
         self._model.place_polygon(instance_id, member_id, points)
 
-    def _start_drag_polygon_point(self, member: IPolygonPoint, pos_view: Point):
+    def _start_drag_polygon_point(self, member: PolygonPoint, pos_view: Point):
         self._start_drag(pos_view)
         self._set_operation(DragPolygonPoint(member))
 
@@ -313,11 +305,11 @@ class EditorController(QObject):
         instance_id, member_id, point_index = operation.member.path
         self._model.move_polygon_point(instance_id, member_id, point_index, clamp_to_image01(pos_image01))
 
-    def _delete_polygon(self, member: IPolygon):
+    def _delete_polygon(self, member: Polygon):
         instance_id, member_id = member.path
         self._model.delete_polygon(instance_id, member_id)
 
-    def _start_draw_polyline(self, member: IPolyline):
+    def _start_draw_polyline(self, member: Polyline):
         self._set_operation(DrawPolyline(member))
 
     def _place_polyline_point(self, operation: DrawPolyline, pos_image01: Point):
@@ -338,7 +330,7 @@ class EditorController(QObject):
         self._set_operation(Inspect())
         self._model.place_polyline(instance_id, member_id, points)
 
-    def _delete_polyline(self, member: IPolyline):
+    def _delete_polyline(self, member: Polyline):
         instance_id, member_id = member.path
         self._model.delete_polyline(instance_id, member_id)
 
@@ -379,11 +371,10 @@ class EditorController(QObject):
         if member is None:
             return
 
-        if member.type == LabellerObjectType.KEYPOINT:
-            member = cast(IKeypoint, member)
+        if isinstance(member, Keypoint):
             self._place_keypoint(member, pos_image01, visible=visible)
 
-    def _delete(self, hovered_member: Optional[ILabellerObject]):
+    def _delete(self, hovered_member: Optional[LabellerObject]):
         if isinstance(self._operation, DrawBox):
             if self._operation.p1 is not None:
                 self._delete_bounding_box_point(self._operation)
@@ -400,36 +391,30 @@ class EditorController(QObject):
         if hovered_member is None:
             return
 
-        if hovered_member.type == LabellerObjectType.KEYPOINT:
-            hovered_member = cast(IKeypoint, hovered_member)
+        if isinstance(hovered_member, Keypoint):
             self._delete_keypoint(hovered_member)
-        elif hovered_member.type == LabellerObjectType.BOUNDING_BOX:
-            hovered_member = cast(IBoundingBox, hovered_member)
+        elif isinstance(hovered_member, BoundingBox):
             self._delete_bounding_box(hovered_member)
-        elif hovered_member.type == LabellerObjectType.POLYGON:
-            hovered_member = cast(IPolygon, hovered_member)
+        elif isinstance(hovered_member, Polygon):
             self._delete_polygon(hovered_member)
-        elif hovered_member.type == LabellerObjectType.POLYLINE:
-            hovered_member = cast(IPolyline, hovered_member)
+        elif isinstance(hovered_member, Polyline):
             self._delete_polyline(hovered_member)
-        elif hovered_member.type == LabellerObjectType.BOUNDING_BOX_CORNER:
+        elif isinstance(hovered_member, BoundingBoxCorner):
             instance_id, member_id, _ = hovered_member.path
             instance = self._image_state.get_instance(instance_id)
             if instance is None:
                 return
             member = instance.get_member(member_id)
-            if member is not None:
-                self._delete_bounding_box(cast(IBoundingBox, member))
-        elif hovered_member.type == LabellerObjectType.POLYGON_POINT:
+            if isinstance(member, BoundingBox):
+                self._delete_bounding_box(member)
+        elif isinstance(hovered_member, PolygonPoint):
             instance_id, member_id, _ = hovered_member.path
             instance = self._image_state.get_instance(instance_id)
             if instance is None:
                 return
             member = instance.get_member(member_id)
-            if member is None:
-                return
-            if member.type == LabellerObjectType.POLYGON:
-                self._delete_polygon(cast(IPolygon, member))
-            elif member.type == LabellerObjectType.POLYLINE:
-                self._delete_polyline(cast(IPolyline, member))
+            if isinstance(member, Polygon):
+                self._delete_polygon(member)
+            elif isinstance(member, Polyline):
+                self._delete_polyline(member)
         return

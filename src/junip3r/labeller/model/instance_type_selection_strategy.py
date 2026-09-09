@@ -1,14 +1,14 @@
 from typing import Protocol, Any, Dict, List, Optional, Sequence
 
-from junip3r.labeller.data.types.abc import IInstanceType
+from junip3r.labeller.config.data import InstanceType
 
 
 class InstanceTypeSelectionWorkflow(Protocol):
     def capture_state(self) -> Any: ...
     def restore_state(self, state: Any): ...
 
-    def manual_selection(self, existing: Sequence[IInstanceType], selected: IInstanceType) -> IInstanceType: ...
-    def automatic_selection(self, existing: Sequence[IInstanceType], current: IInstanceType) -> IInstanceType: ...
+    def manual_selection(self, existing: Sequence[InstanceType], selected: InstanceType) -> InstanceType: ...
+    def automatic_selection(self, existing: Sequence[InstanceType], current: InstanceType) -> InstanceType: ...
 
 
 def _ranks(names: Sequence[str]) -> List[int]:
@@ -27,7 +27,7 @@ def _ranks(names: Sequence[str]) -> List[int]:
 
 
 class EditorInstanceTypeWorkflow(InstanceTypeSelectionWorkflow):
-    def __init__(self, expected_instance_types: Sequence[IInstanceType]):
+    def __init__(self, expected_instance_types: Sequence[InstanceType]):
         self._expected_instance_types = expected_instance_types
         self._cursor = 0
 
@@ -37,7 +37,7 @@ class EditorInstanceTypeWorkflow(InstanceTypeSelectionWorkflow):
     def restore_state(self, state: Any):
         self._cursor = state
 
-    def manual_selection(self, existing: Sequence[IInstanceType], selected: IInstanceType) -> IInstanceType:
+    def manual_selection(self, existing: Sequence[InstanceType], selected: InstanceType) -> InstanceType:
         """
         User manually selects a type.
 
@@ -61,7 +61,7 @@ class EditorInstanceTypeWorkflow(InstanceTypeSelectionWorkflow):
 
         return selected
 
-    def automatic_selection(self, existing: Sequence[IInstanceType], current: IInstanceType) -> IInstanceType:
+    def automatic_selection(self, existing: Sequence[InstanceType], current: InstanceType) -> InstanceType:
         """
         Compute next suggestion and advance cursor if current slot is fulfilled.
 
@@ -88,7 +88,7 @@ class EditorInstanceTypeWorkflow(InstanceTypeSelectionWorkflow):
         self._cursor = idx
         return self._expected_instance_types[idx]
 
-    def _first_unfulfilled_slot(self, existing: Sequence[IInstanceType]) -> Optional[int]:
+    def _first_unfulfilled_slot(self, existing: Sequence[InstanceType]) -> Optional[int]:
         """Scan expected slots from the cursor forward (with wrap) for the first one
         not yet matched by an existing instance, one-to-one by position rather than by
         aggregate per-name count - a slot is fulfilled once the existing count for its

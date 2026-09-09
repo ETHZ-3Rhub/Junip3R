@@ -1,21 +1,22 @@
 from typing import Sequence, Optional, Protocol
 
-from junip3r.labeller.data.types.abc import IInstance, Selection, InstanceID, MemberID
+from junip3r.labeller.data.types.abc import Selection, InstanceID, MemberID
+from junip3r.labeller.data.types.data import Instance
 
 
 class MemberSelectionStrategy(Protocol):
-    def next_member_manual(self, instances: Sequence[IInstance], selection: Optional[Selection]) -> Optional[Selection]: ...
-    def prev_member_manual(self, instances: Sequence[IInstance], selection: Optional[Selection]) -> Optional[Selection]: ...
-    def auto_advance(self, instances: Sequence[IInstance], selection: Optional[Selection]) -> Optional[Selection]: ...
-    def next_instance(self, instances: Sequence[IInstance], selection: Optional[Selection]) -> Optional[Selection]: ...
-    def invalid_selection(self, instances: Sequence[IInstance], selection: Optional[Selection]) -> Optional[Selection]: ...
+    def next_member_manual(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]: ...
+    def prev_member_manual(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]: ...
+    def auto_advance(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]: ...
+    def next_instance(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]: ...
+    def invalid_selection(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]: ...
 
 
 class EditorMemberSelectionStrategy(MemberSelectionStrategy):
-    def _find_instance(self, instances: Sequence[IInstance], instance_id: InstanceID) -> Optional[IInstance]:
+    def _find_instance(self, instances: Sequence[Instance], instance_id: InstanceID) -> Optional[Instance]:
         return next((instance for instance in instances if instance.instance_id == instance_id), None)
 
-    def _next_instance(self, instances: Sequence[IInstance], instance_id: InstanceID) -> Optional[IInstance]:
+    def _next_instance(self, instances: Sequence[Instance], instance_id: InstanceID) -> Optional[Instance]:
         instance = self._find_instance(instances, instance_id)
         if instance is None:
             return None
@@ -24,7 +25,7 @@ class EditorMemberSelectionStrategy(MemberSelectionStrategy):
             return instances[instance_index + 1]
         return None
 
-    def _prev_instance(self, instances: Sequence[IInstance], instance_id: InstanceID) -> Optional[IInstance]:
+    def _prev_instance(self, instances: Sequence[Instance], instance_id: InstanceID) -> Optional[Instance]:
         instance = self._find_instance(instances, instance_id)
         if instance is None:
             return None
@@ -33,19 +34,19 @@ class EditorMemberSelectionStrategy(MemberSelectionStrategy):
             return instances[instance_index - 1]
         return None
 
-    def _member_index(self, instance: IInstance, member_id: MemberID) -> Optional[int]:
+    def _member_index(self, instance: Instance, member_id: MemberID) -> Optional[int]:
         # Position resolved fresh from the current member id, mirroring how
         # _next_instance/_prev_instance resolve an instance's position on demand -
         # never a cached/trusted raw index, since a config edit can reorder members
         # between two selections of the same gesture.
         return next((i for i, m in enumerate(instance.members) if m.id == member_id), None)
 
-    def _first_member_id(self, instance: Optional[IInstance]) -> Optional[MemberID]:
+    def _first_member_id(self, instance: Optional[Instance]) -> Optional[MemberID]:
         if instance is None or not instance.members:
             return None
         return instance.members[0].id
 
-    def next_member_manual(self, instances: Sequence[IInstance], selection: Optional[Selection]) -> Optional[Selection]:
+    def next_member_manual(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]:
         if selection is None:
             return None
 
@@ -74,7 +75,7 @@ class EditorMemberSelectionStrategy(MemberSelectionStrategy):
                 return instances[0].instance_id, first_member_id
         return None
 
-    def prev_member_manual(self, instances: Sequence[IInstance], selection: Optional[Selection]) -> Optional[Selection]:
+    def prev_member_manual(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]:
         if selection is not None:
             instance_id, member_id = selection
             instance = self._find_instance(instances, instance_id)
@@ -96,7 +97,7 @@ class EditorMemberSelectionStrategy(MemberSelectionStrategy):
                 return instances[0].instance_id, first_member_id
         return None
 
-    def auto_advance(self, instances: Sequence[IInstance], selection: Optional[Selection]) -> Optional[Selection]:
+    def auto_advance(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]:
         new_instance = self._find_instance(instances, None)
         new_member_id = self._first_member_id(new_instance)
 
@@ -114,7 +115,7 @@ class EditorMemberSelectionStrategy(MemberSelectionStrategy):
             return new_instance.instance_id, new_member_id
         return None
 
-    def next_instance(self, instances: Sequence[IInstance], selection: Optional[Selection]) -> Optional[Selection]:
+    def next_instance(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]:
         if selection is not None:
             next_instance = self._next_instance(instances, selection[0])
             next_member_id = self._first_member_id(next_instance)
@@ -126,7 +127,7 @@ class EditorMemberSelectionStrategy(MemberSelectionStrategy):
                 return new_instance.instance_id, new_member_id
         return None
 
-    def invalid_selection(self, instances: Sequence[IInstance], selection: Optional[Selection]) -> Optional[Selection]:
+    def invalid_selection(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]:
         new_instance = self._find_instance(instances, None)
         new_member_id = self._first_member_id(new_instance)
         if new_member_id is not None:

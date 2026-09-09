@@ -9,18 +9,19 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QFileDialog, QDialogButtonBox, QMessageBox, QListWidgetItem
 
 from junip3r.labeller.model.app_model import AppModel
-from junip3r.labeller.data.types.abc import IInstanceType, IInstance
+from junip3r.labeller.config.data import InstanceType
+from junip3r.labeller.data.types.data import Instance
 from junip3r.labeller.layout.yolo_export import Ui_DYOLOExport
 
 
 class YoloLabelWriter:
-    def __init__(self, instance_types: List[IInstanceType]):
+    def __init__(self, instance_types: List[InstanceType]):
         self._max_num_points = max((len(it.keypoints) for it in instance_types), default=0)
 
         self._instance_type_map = {instance_type.name: class_index for class_index, instance_type in enumerate(instance_types)}
         self._reverse_instance_type_map = {class_index: instance_type.name for class_index, instance_type in enumerate(instance_types)}
 
-    def save_instances(self, instances: List[IInstance], label_file: Path):
+    def save_instances(self, instances: List[Instance], label_file: Path):
         import csv
 
         if len(instances) == 0:
