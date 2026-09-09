@@ -8,7 +8,7 @@ from PySide6.QtGui import QUndoStack
 
 from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.data.types.abc import InstanceID, MemberID, Selection, Point, Box, InstanceMember
-from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox
+from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox, new_instance
 from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.model.image_state import ImageState, ImageNavigationState, ImageStateChangeFlags
 from junip3r.labeller.model.instance_type_selection_strategy import EditorInstanceTypeWorkflow
@@ -101,7 +101,7 @@ class PoseImageModel(QObject):
         new_instance_type = self._model.get_new_instance_type(self._image_index)
         if new_instance_type is None:
             return None
-        return new_instance_type.new_instance(None, "Add new instance")
+        return new_instance(new_instance_type, None, "Add new instance")
 
     def get_num_images(self) -> int:
         return self._model.get_num_images()
@@ -416,7 +416,7 @@ class PoseImageModel(QObject):
             new_instance_type = self._new_instance.instance_type
             instance_id = str(uuid.uuid4())
             instance_name = self._generate_new_instance_name(new_instance_type)
-            instance = new_instance_type.new_instance(instance_id, instance_name)
+            instance = new_instance(new_instance_type, instance_id, instance_name)
             self._add_instance(instance)
             self._advance_new_instance_type()
         return instance_id

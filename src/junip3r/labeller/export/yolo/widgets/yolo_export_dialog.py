@@ -359,15 +359,14 @@ class YoloExportDialog(QDialog):
         for instance_index, instance_type in enumerate(selected_instance_types):
             class_names.append(instance_type.name)
 
-            instance_example = instance_type.new_instance("", "")
             bounding_box_member = next(
-                (member for member in instance_example.members if member.type == LabellerObjectType.BOUNDING_BOX),
+                (member for member in instance_type.members if member.type == LabellerObjectType.BOUNDING_BOX),
                 None,
             )
             bounding_box_name = bounding_box_member.name if bounding_box_member is not None else None
 
             keypoint_mapping = {}
-            keypoint_members = (member for member in instance_example.members if member.type == LabellerObjectType.KEYPOINT)
+            keypoint_members = (member for member in instance_type.members if member.type == LabellerObjectType.KEYPOINT)
             for keypoint_index, keypoint in enumerate(keypoint_members):
                 keypoint_mapping[keypoint.name] = keypoint_index
 

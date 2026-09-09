@@ -1,15 +1,10 @@
 import uuid
 from dataclasses import dataclass, field, replace
-from typing import List, Optional, Tuple, Self, Sequence, TYPE_CHECKING, cast
+from typing import Optional, Tuple, Self, Sequence, cast
 
+from junip3r.labeller.config.data import InstanceType, MemberSpecs
 from junip3r.labeller.data.types.abc import LabellerParentObject, LabellerObjectType, Color, Point, Box, \
     LabellerObject, InstanceMember, InstanceID, MemberID
-
-if TYPE_CHECKING:
-    # labeller.config.data imports Keypoint/BoundingBox/.../Instance from this module to
-    # build InstanceType.new_instance()/MemberSpecs.new_instance() - importing InstanceType
-    # back here for real (not just for type checking) would be circular.
-    from junip3r.labeller.config.data import InstanceType
 
 
 def _normalize_box(box: Optional[Box]) -> Optional[Box]:
@@ -286,7 +281,7 @@ class Skeleton:
 class Instance(LabellerParentObject):
     instance_id: InstanceID
     name: str
-    instance_type: "InstanceType"
+    instance_type: InstanceType
     members: Tuple[InstanceMember, ...] = field(default_factory=tuple)
     skeleton: Skeleton = field(default_factory=Skeleton)
 
@@ -353,30 +348,52 @@ class Instance(LabellerParentObject):
         return self.replace_member(member_id, member)
 
 
-@dataclass
-class NewInstance:
-    instance_type: "InstanceType"
+def _new_member(member_specs: MemberSpecs, instance_id: InstanceID, member_index: int, name: str) -> InstanceMember:
+    if member_specs.type == LabellerObjectType.KEYPOINT:
+        return Keypoint(instance_id, member_index, name, member_specs.color, None, 2.0, id=member_specs.id)
+    elif member_specs.type == LabellerObjectType.BOUNDING_BOX:
+        return BoundingBox(instance_id, member_index, name, member_specs.color, None, id=member_specs.id)
+    elif member_specs.type == LabellerObjectType.POLYGON:
+        return Polygon(instance_id, member_index, name, member_specs.color, member_specs.size, [], id=member_specs.id)
+    elif member_specs.type == LabellerObjectType.POLYLINE:
+        return Polyline(instance_id, member_index, name, member_specs.color, member_specs.size, [], id=member_specs.id)
+    else:
+        raise ValueError(f"Invalid member type: {member_specs.type}")
 
-    @property
-    def parent(self) -> Optional[LabellerParentObject]:
-        return None
 
-    @property
-    def instance_id(self) -> InstanceID:
-        return None
+def new_instance(instance_type: InstanceType, instance_id: InstanceID, name: str) -> Instance:
+    """Builds a blank Instance of the given (purely descriptive) InstanceType - the
+    construction logic used to live on InstanceType/MemberSpecs themselves
+    (labeller/config/data.py), which forced that config-layer module to depend on this
+    one just to implement it. Relocated here instead, since this is the layer allowed to
+    depend on config, not the other way around.
+    """
+    members = [
+        _new_member(member_specs, instance_id, member_index, member_specs.name)
+        for member_index, member_specs in enumerate(instance_type.members)
+    ]
+    skeleton = Skeleton(instance_type.skeleton.lines, instance_type.skeleton.color)
+    return Instance(instance_id, name, instance_type, tuple(members), skeleton)
 
-    @property
-    def name(self) -> str:
-        return "New Instance"
 
-    @property
-    def members(self) -> List[InstanceMember]:
-        return []
+def change_instance_type(instance: Instance, instance_type: InstanceType) -> Instance:
+    """Builds a blank instance of instance_type (same instance_id, name defaulted to the
+    new type's own name), then carries old_member -> new_member field data over
+    position-by-position for as long as both sides' member types keep matching - stops
+    at the first mismatch, so a prefix of same-shaped members survives a type change
+    while the rest just take the new type's defaults.
+    """
+    new = new_instance(instance_type, instance_id=instance.instance_id, name=instance_type.name)
 
-    @property
-    def skeleton(self) -> Skeleton:
-        return Skeleton()
+    for old_member, new_member in zip(instance.members, new.members):
+        if type(old_member) is not type(new_member):
+            break
+        if isinstance(old_member, Keypoint) and isinstance(new_member, Keypoint):
+            new_member = new_member.with_p(old_member.p)
+        elif isinstance(old_member, BoundingBox) and isinstance(new_member, BoundingBox):
+            new_member = new_member.with_box(old_member.box)
+        elif isinstance(old_member, (Polygon, Polyline)) and isinstance(new_member, (Polygon, Polyline)):
+            new_member = new_member.with_points(old_member.points)
+        new = new.replace_member(new_member.id, new_member)
 
-    def with_instance_id(self, instance_id: InstanceID) -> Self:
-        members = [m.with_instance_id(instance_id) for m in self.members]
-        return replace(self, instance_id=instance_id, members=tuple(members))
+    return new

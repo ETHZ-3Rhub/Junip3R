@@ -11,7 +11,7 @@ class SelectionRepository(ISelectionRepository):
         self._new_instance_types: Dict[int, Optional[InstanceType]] = {}
 
     def get_selection(self, image_index: int) -> Optional[Selection]:
-        return self._selections.get(image_index, (None, 0))
+        return self._selections.get(image_index)
 
     def set_selection(self, image_index: int, selection: Optional[Selection]):
         self._selections[image_index] = selection

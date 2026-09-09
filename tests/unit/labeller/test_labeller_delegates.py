@@ -2,7 +2,6 @@ from junip3r.labeller.data.types.data import (
     BoundingBox,
     Instance,
     Keypoint,
-    NewInstance,
     Polygon,
     Polyline,
     Skeleton,
@@ -11,9 +10,6 @@ from junip3r.labeller.data.types.data import (
 
 class FakeInstanceType:
     name = "mouse"
-
-    def new_instance(self, instance_id, name):
-        raise NotImplementedError
 
 
 def test_bounding_box_normalizes_reversed_corners_on_construction():
@@ -171,15 +167,6 @@ def test_instance_replace_member_replaces_by_stable_id_not_position():
 
     assert updated.members == (kp0, replacement)
     assert instance.members == (kp0, kp1)  # original untouched
-
-
-def test_new_instance_defaults():
-    new_instance = NewInstance(instance_type=FakeInstanceType())
-
-    assert new_instance.instance_id is None
-    assert new_instance.name == "New Instance"
-    assert new_instance.members == []
-    assert isinstance(new_instance.skeleton, Skeleton)
 
 
 def test_skeleton_with_lines_replaces_lines():

@@ -11,7 +11,7 @@ class IMember(Protocol):
 
 @dataclass
 class Instance:
-    id: Optional[str]
+    id: str
     type: str
     name: str
     members: Sequence[IMember] = ()

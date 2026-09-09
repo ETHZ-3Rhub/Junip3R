@@ -7,7 +7,7 @@ from junip3r.common.labels.serialization import LabelSerializer
 from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.data.repository.abc import ILabelRepository
 from junip3r.labeller.data.types.abc import LabellerObject
-from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox, Polygon, Polyline
+from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox, Polygon, Polyline, new_instance
 
 
 class InstanceMapper:
@@ -58,6 +58,10 @@ class InstanceMapper:
             raise ValueError(f"Unsupported member type: {member.type}")
 
     def _instance_to_data(self, instance: Instance) -> DataInstance:
+        # InstanceMapper is only ever used on real, already-committed instances -
+        # PoseImageModel's synthesized "Add new instance" placeholder (instance_id=None)
+        # never reaches here.
+        assert instance.instance_id is not None, "Cannot serialize a placeholder instance (instance_id is None)"
         return DataInstance(
             id=instance.instance_id,
             type=instance.instance_type.name,
@@ -81,7 +85,7 @@ class InstanceMapper:
         instance_type = self._instance_types[data_instance.type]
         instance_id = data_instance.id
         name =  data_instance.name
-        instance = instance_type.new_instance(instance_id, name)
+        instance = new_instance(instance_type, instance_id, name)
 
         if len(instance.members) != len(data_instance.members):
             raise ValueError(
@@ -103,18 +107,15 @@ class InstanceMapper:
 
 
 class JuniperLabelRepository(ILabelRepository):
-    def __init__(self, instance_types: Iterable[InstanceType], label_files: Sequence[Path]):
+    def __init__(self, label_files: Sequence[Path]):
         self._label_files = label_files
         self._loader = LabelSerializer()
-        self._mapper = InstanceMapper(instance_types)
 
-    def get_instances(self, image_index: int) -> Sequence[Instance]:
+    def get_instances(self, image_index: int) -> Sequence[DataInstance]:
         label_file = self._label_files[image_index]
-        data = self._loader.load_instances(label_file)
-        return self._mapper.from_data(data)
+        return self._loader.load_instances(label_file)
 
-    def set_instances(self, image_index: int, instances: Iterable[Instance]):
+    def set_instances(self, image_index: int, instances: Sequence[DataInstance]) -> None:
         label_file = self._label_files[image_index]
-        data = self._mapper.to_data(instances)
-        self._loader.write_instances(label_file, data)
+        self._loader.write_instances(label_file, list(instances))
 

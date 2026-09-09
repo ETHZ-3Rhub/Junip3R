@@ -1,17 +1,14 @@
 import colorsys
-import logging
 from pathlib import Path
 from typing import List, cast, Sequence, Tuple, Union, Optional
 
+from junip3r.common.labels.data import Instance as DataInstance
 from junip3r.common.labels.serialization import LabelSerializer
 from junip3r.labeller.config.data import InstanceType, MemberSpecs, SkeletonSpecs
 from junip3r.labeller.data.repository.abc import ILabelRepository, IConfigRepository
-from junip3r.labeller.data.repository.label import InstanceMapper
 from junip3r.labeller.data.types.abc import LabellerObjectType, Color
-from junip3r.labeller.data.types.data import Keypoint, BoundingBox, Polygon, Polyline, Instance
+from junip3r.labeller.data.types.data import Keypoint, BoundingBox, Polygon, Polyline, Instance, new_instance
 from junip3r.setup.data.types.abc import ISetupInstanceType, ISetupMember, ISetupSkeleton
-
-logger = logging.getLogger(__name__)
 
 # The labeller's own member classes, which the setup preview uses directly (see
 # MemberSpecs/InstanceType's `id` field) instead of maintaining parallel ID-only
@@ -39,66 +36,35 @@ class SetupConfigRepository(IConfigRepository):
 
 
 class SetupPreviewLabelRepository(ILabelRepository):
-    """Writes through to a project's own _labeller/preview/labels.json on every change,
-    like JuniperLabelRepository (labeller/data/repository/label.py) does for a real
-    project's label files - except a separate implementation, not a subclass, because
-    the two don't actually share as much as they look like they should.
-    JuniperLabelRepository builds one InstanceMapper at construction time and never
-    changes it, which only works because a real project's config never changes
-    mid-session. Setup's does, continuously, so its instance types are updatable via
-    set_state instead of fixed at construction - see reconcile_instances below for how
-    already-placed instances get carried over to a changed config.
+    """Type-unaware DTO I/O, like JuniperLabelRepository (labeller/data/repository/
+    label.py) - except the label file is a settable path rather than a constructor
+    argument, since no project folder is known until SetupMainWindow.set_project_folder
+    runs (see set_label_file).
 
-    No project folder is known until SetupMainWindow.set_project_folder runs (unlike a
-    real project's label files, known upfront), so the label file is a settable path
-    rather than a constructor argument - see set_label_file.
-
-    AppModel only ever calls set_instances with the real committed instance list, never
-    with PoseImageModel's synthesized "Add new instance" placeholder (instance_id=None) -
-    so this repository, and what it persists, never needs to filter that out.
+    Resolving these DTOs against instance types (and reconciling already-placed
+    instances against a changed config, since unlike a real project's, setup's config
+    changes live, mid-session) is LabelModel's job now, not this repository's - see
+    SetupMainWindow.set_state, which currently just clears instances on a config change
+    instead of reconciling (reconciliation is a separate, deferred redesign - see
+    reconcile_instances below, currently unused).
     """
 
     def __init__(self):
         self._label_file: Optional[Path] = None
-        self._instance_types: Sequence[InstanceType] = []
         self._loader = LabelSerializer()
 
     def set_label_file(self, label_file: Optional[Path]):
         self._label_file = label_file
 
-    def get_instances(self, image_index: int) -> Sequence[Instance]:
-        return self._load()
+    def get_instances(self, image_index: int) -> Sequence[DataInstance]:
+        if self._label_file is None:
+            return []
+        return self._loader.load_instances(self._label_file)
 
-    def set_instances(self, image_index: int, instances: Sequence[Instance]):
+    def set_instances(self, image_index: int, instances: Sequence[DataInstance]) -> None:
         if self._label_file is None:
             return
-        data = InstanceMapper(self._instance_types).to_data(instances)
-        self._loader.write_instances(self._label_file, data)
-
-    def set_state(self, instance_types: Sequence[InstanceType]):
-        """Update the instance types this repository resolves stored data against,
-        carrying already-placed instances over to the new config by matching stable
-        member/instance ids (see reconcile_instances) and writing the result straight
-        back out - called whenever setup's config changes, since unlike a real project's,
-        this one changes live, mid-session.
-        """
-        old_instances = self._load()
-        self._instance_types = list(instance_types)
-        new_instances = reconcile_instances(old_instances, self._instance_types)
-        self.set_instances(0, new_instances)
-
-    def _load(self) -> List[Instance]:
-        if self._label_file is None:
-            return []
-        data = self._loader.load_instances(self._label_file)
-        try:
-            return InstanceMapper(self._instance_types).from_data(data)
-        except (KeyError, ValueError) as e:
-            # config.yaml is meant to be hand-editable, so a persisted preview that no
-            # longer matches it (renamed/removed instance type, member count changed) is
-            # a real possibility, not just a bug - degrade to empty rather than crash.
-            logger.warning(f"Could not restore the persisted preview for this project: {e}")
-            return []
+        self._loader.write_instances(self._label_file, list(instances))
 
 
 def _color_from_hue(hue: float) -> Color:
@@ -173,9 +139,11 @@ def reconcile_instances(old_instances: Sequence[Instance], instance_types: Seque
     continuously, so without this an already-placed preview instance would never pick up
     a recolor or a member-list edit and would just go stale.
 
-    Called by SetupPreviewLabelRepository.set_state, which loads old_instances itself
-    before swapping in the new instance_types - pure computation with no repository
-    access of its own.
+    Currently unused: SetupMainWindow.set_state clears the preview's instances on every
+    config change instead of calling this - reconciling now belongs at a
+    PoseImageModel-level (LabelModel/MutableInstance-aware), not here, and that redesign
+    hasn't happened yet. Left in place as a reference for that follow-up rather than
+    deleted outright, since it'll need reworking for the mutable layer anyway.
 
     This only reshapes what's already placed - it never seeds new instances. Seeding
     preview instances from `expected_instance_types` was a bug this replaced: expected
@@ -187,7 +155,7 @@ def reconcile_instances(old_instances: Sequence[Instance], instance_types: Seque
         instance_type = next((it for it in instance_types if it.id == instance.instance_type.id), None)
         if instance_type is None:
             continue  # the instance's type was deleted from the config
-        target_instance = instance_type.new_instance(instance.instance_id, instance.name)
+        target_instance = new_instance(instance_type, instance.instance_id, instance.name)
         new_instances.append(_copy_instance_data(instance, target_instance))
     return new_instances
 

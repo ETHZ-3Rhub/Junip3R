@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QMainWindow, QFrame, QVBoxLayout, QWidget, QSplitt
 from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.data.repository.selection import SelectionRepository
 from junip3r.labeller.model.app_model import AppModel
+from junip3r.labeller.model.label_model import LabelModel
 from junip3r.labeller.model.pose_image_model import PoseImageModel
 from junip3r.setup.data.repository.abc import ISetupConfigRepository
 from junip3r.setup.model.config_model import ConfigState, ConfigModel, ConfigStateChangeFlags
@@ -38,7 +39,8 @@ class SetupMainWindow(QMainWindow):
         self.label_repository = SetupPreviewLabelRepository()
         self.selection_repository = SelectionRepository()
 
-        self.preview_app_model = AppModel(self.image_repository, self.config_repository, self.label_repository, self.selection_repository)
+        self.label_model = LabelModel(self.config_repository, self.label_repository)
+        self.preview_app_model = AppModel(self.image_repository, self.label_model, self.selection_repository)
         self.preview_pose_image_model = PoseImageModel(self.preview_app_model)
 
         self._project_folder: Optional[Path] = None
@@ -160,7 +162,11 @@ class SetupMainWindow(QMainWindow):
             if (resolved := next((it for it in instance_types if it.id == setup_type.id), None)) is not None
         ]
         self.config_repository.set_state(instance_types, expected_instances)
-        self.label_repository.set_state(instance_types)
+        # Reconciling already-placed instances against the new instance types is a
+        # separate, deferred redesign (see reconcile_instances in
+        # setup_preview_label_repository.py) - clear instead of leaving stale/mismatched
+        # data behind.
+        self.preview_app_model.set_instances(0, [])
         self._resync_new_instance_type(instance_types)
         self.preview_pose_image_model.refresh()
 

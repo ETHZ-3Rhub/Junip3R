@@ -11,15 +11,14 @@ class LegacyLabelConverter:
     def __init__(self, instance_types: Sequence[InstanceType]):
         legacy_instance_types = []
         for instance_type in instance_types:
-            instance = instance_type.new_instance(None, "")
             name = instance_type.name
             bounding_box_type = "automatic"
             keypoint_names = []
-            for member in instance.members:
-                if member.type == LabellerObjectType.BOUNDING_BOX:
+            for member_specs in instance_type.members:
+                if member_specs.type == LabellerObjectType.BOUNDING_BOX:
                     bounding_box_type = "manual"
-                elif member.type == LabellerObjectType.KEYPOINT:
-                    keypoint_names.append(member.name)
+                elif member_specs.type == LabellerObjectType.KEYPOINT:
+                    keypoint_names.append(member_specs.name)
             legacy_instance_types.append(LegacyInstanceType(name, bounding_box_type, keypoint_names))
 
         self._legacy_loader = LegacyLabelLoader(legacy_instance_types)

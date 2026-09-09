@@ -3,10 +3,10 @@ from typing import Protocol, Tuple, Optional, Sequence
 
 import numpy as np
 
+from junip3r.common.labels.data import Instance as DataInstance
 from junip3r.common.tags.data import Tags
 from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.data.types.abc import TemporalContext, Selection
-from junip3r.labeller.data.types.data import Instance
 
 
 class IConfigRepository(Protocol):
@@ -16,8 +16,12 @@ class IConfigRepository(Protocol):
 
 
 class ILabelRepository(Protocol):
-    def get_instances(self, image_index: int) -> Sequence[Instance]: ...
-    def set_instances(self, image_index: int, instances: Sequence[Instance]): ...
+    """Type-unaware: pure DTO I/O. Type resolution into color/id-attached, mutable
+    working instances is LabelModel's job (labeller/model/label_model.py), not the
+    repository's - see JuniperLabelRepository for the concrete implementation.
+    """
+    def get_instances(self, image_index: int) -> Sequence[DataInstance]: ...
+    def set_instances(self, image_index: int, instances: Sequence[DataInstance]) -> None: ...
 
 
 class IImageRepository(Protocol):

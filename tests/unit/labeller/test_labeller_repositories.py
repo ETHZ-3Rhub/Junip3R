@@ -3,12 +3,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from junip3r.labeller.config.data import InstanceType, MemberSpecs, SkeletonSpecs
+from junip3r.common.labels.data import Instance as DataInstance, Keypoint as DataKeypoint, \
+    BoundingBox as DataBoundingBox
 from junip3r.labeller.data.repository.context import ContextRepository
 from junip3r.labeller.data.repository.image import ImageRepository
 from junip3r.labeller.data.repository.label import JuniperLabelRepository
 from junip3r.labeller.data.repository.tag import TagRepository
-from junip3r.labeller.data.types.abc import LabellerObjectType
 
 
 # --- ImageRepository -----------------------------------------------------------------
@@ -80,37 +80,35 @@ def test_context_repository_returns_none_when_file_missing(tmp_path: Path):
     assert repository.get_context(0) is None
 
 
-# --- JuniperLabelRepository / InstanceMapper -----------------------------------------
+# --- JuniperLabelRepository (type-unaware DTO I/O; type resolution is LabelModel's job,
+# see test_label_model.py) -------------------------------------------------------------
 
-def test_label_repository_round_trips_instances_through_real_instance_types(tmp_path: Path):
-    instance_type = InstanceType(
-        "mouse",
-        [
-            MemberSpecs("box", LabellerObjectType.BOUNDING_BOX, (0, 0, 255)),
-            MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0)),
+def test_label_repository_round_trips_dto_instances(tmp_path: Path):
+    instance = DataInstance(
+        id="i1",
+        type="mouse",
+        name="Mouse 1",
+        members=[
+            DataBoundingBox(name="box", box=((0.0, 0.0), (1.0, 1.0))),
+            DataKeypoint(name="nose", p=(0.5, 0.5)),
         ],
-        SkeletonSpecs([], (0, 0, 0)),
-        color=(0, 0, 255),
     )
-    instance = instance_type.new_instance("i1", "Mouse 1")
-    instance = instance.replace_member(instance.members[0].id, instance.members[0].with_box(((0.0, 0.0), (1.0, 1.0))))
-    instance = instance.replace_member(instance.members[1].id, instance.members[1].with_p((0.5, 0.5)))
 
     label_file = tmp_path / "a.json"
-    repository = JuniperLabelRepository([instance_type], [label_file])
+    repository = JuniperLabelRepository([label_file])
 
     repository.set_instances(0, [instance])
     loaded = repository.get_instances(0)
 
     assert len(loaded) == 1
-    assert loaded[0].instance_id == "i1"
-    assert loaded[0].instance_type is instance_type
+    assert loaded[0].id == "i1"
+    assert loaded[0].type == "mouse"
     assert loaded[0].members[0].box == ((0.0, 0.0), (1.0, 1.0))
     assert loaded[0].members[1].p == (0.5, 0.5)
 
 
 def test_label_repository_get_instances_on_missing_file_returns_empty(tmp_path: Path):
-    repository = JuniperLabelRepository([], [tmp_path / "missing.json"])
+    repository = JuniperLabelRepository([tmp_path / "missing.json"])
 
     assert repository.get_instances(0) == []
 

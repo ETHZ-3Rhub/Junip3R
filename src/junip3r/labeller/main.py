@@ -21,6 +21,7 @@ from junip3r.labeller.legacy.legacy_label_converter import LegacyLabelConverter
 from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.model.context_model import ContextModel
 from junip3r.labeller.model.image_settings_model import ImageSettingsModel
+from junip3r.labeller.model.label_model import LabelModel
 from junip3r.labeller.widgets.main_window import EditorMainWindow
 from junip3r.logging_setup import create_logging_manager
 
@@ -52,12 +53,13 @@ def from_config_file(config_file: Path, integrated: bool = False) -> EditorMainW
         if legacy_label_file.exists() and not i.label.exists():
             legacy_converter.convert_legacy_labels(legacy_label_file, i.label)
 
-    label_repository = JuniperLabelRepository(labeller_config.instance_types, [i.label for i in images])
+    label_repository = JuniperLabelRepository([i.label for i in images])
+    label_model = LabelModel(config_repository, label_repository)
     tag_repository = TagRepository(project_folder / "meta" / "tags", [i.image.stem for i in images])
 
     set_split_repository = SetSplitRepository(project_folder / "_labeller" / "set_split.yaml")
 
-    app_model = AppModel(image_repository, config_repository, label_repository, SelectionRepository(), tag_repository=tag_repository)
+    app_model = AppModel(image_repository, label_model, SelectionRepository(), tag_repository=tag_repository)
 
     editor = EditorMainWindow(show_frame_extractor=integrated)
     editor.set_model(app_model, context_model, image_settings_model)
