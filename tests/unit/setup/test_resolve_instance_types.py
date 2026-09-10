@@ -1,6 +1,6 @@
 from junip3r.labeller.data.types.abc import LabellerObjectType
 from junip3r.setup.data.types.data import SetupInstanceType, SetupMember, SetupSkeleton
-from junip3r.setup.preview.data.repository.setup_preview_label_repository import resolve_instance_types
+from junip3r.setup.widgets.setup_window import resolve_instance_types
 
 
 def _resolve(instance_types, mode="yolo_pose"):
@@ -52,7 +52,7 @@ def test_keypoint_auto_colors_are_unaffected_by_the_bounding_box():
     assert keypoint_colors_without_box == keypoint_colors_with_box
 
 
-def test_skeleton_lines_are_translated_from_member_ids_to_indices():
+def test_skeleton_lines_survive_the_round_trip_through_the_dto():
     instance_type = SetupInstanceType(
         id="it1", name="mouse",
         members=[
@@ -64,7 +64,9 @@ def test_skeleton_lines_are_translated_from_member_ids_to_indices():
 
     resolved = _resolve([instance_type])[0]
 
-    assert resolved.skeleton.lines == [(1, 0)]
+    # SkeletonConfig.lines is id-based too now, so this is a pure passthrough
+    # end to end - the original member ids should reappear unchanged.
+    assert resolved.skeleton.lines == [("m2", "m1")]
 
 
 def test_skeleton_color_defaults_to_black_when_unset():
@@ -95,7 +97,7 @@ def test_manual_bounding_box_is_resolved_as_the_first_member():
     assert [m.type for m in resolved.members] == [LabellerObjectType.BOUNDING_BOX, LabellerObjectType.KEYPOINT]
 
 
-def test_skeleton_indices_account_for_a_leading_bounding_box():
+def test_a_leading_bounding_box_does_not_shift_skeleton_member_ids():
     instance_type = SetupInstanceType(
         id="it1", name="mouse",
         members=[
@@ -108,8 +110,9 @@ def test_skeleton_indices_account_for_a_leading_bounding_box():
 
     resolved = _resolve([instance_type])[0]
 
-    # Bounding box occupies index 0, so the keypoints are 1 and 2.
-    assert resolved.skeleton.lines == [(1, 2)]
+    # The bounding box occupies index 0 in the final resolved member list, but
+    # skeleton lines are resolved by id, so that shift is invisible here.
+    assert resolved.skeleton.lines == [("m1", "m2")]
 
 
 def test_automatic_bounding_box_is_not_resolved_as_a_member():

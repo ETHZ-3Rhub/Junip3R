@@ -1,15 +1,15 @@
 import pytest
 
 from junip3r.common.labels.data import Instance, Keypoint, BoundingBox, Polygon
-from junip3r.labeller.config.data import InstanceType, MemberSpecs, SkeletonSpecs
+from junip3r.labeller.config.data import InstanceType, MemberType, SkeletonType
 from junip3r.labeller.data.repository.label import InstanceMapper
 from junip3r.labeller.data.types.abc import LabellerObjectType
 
 
 def _instance_type(name="mouse", members=None):
     if members is None:
-        members = [MemberSpecs(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))]
-    return InstanceType(name=name, members=members, skeleton=SkeletonSpecs([], (0, 0, 0)), color=(0, 0, 255))
+        members = [MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))]
+    return InstanceType(name=name, members=members, skeleton=SkeletonType([], (0, 0, 0)), color=(0, 0, 255))
 
 
 def test_from_data_resolves_the_instance_type_by_name_and_reuses_the_stored_instance_id():
@@ -51,8 +51,8 @@ def test_from_data_raises_on_member_count_mismatch():
 
 def test_from_data_copies_bounding_box_and_polygon_points_positionally():
     members = [
-        MemberSpecs(name="box", type=LabellerObjectType.BOUNDING_BOX, color=(255, 0, 0)),
-        MemberSpecs(name="outline", type=LabellerObjectType.POLYGON, color=(0, 255, 0)),
+        MemberType(name="box", type=LabellerObjectType.BOUNDING_BOX, color=(255, 0, 0)),
+        MemberType(name="outline", type=LabellerObjectType.POLYGON, color=(0, 255, 0)),
     ]
     instance_type = _instance_type(members=members)
     loaded = Instance(id="i1", type="mouse", name="Mouse 1", members=[

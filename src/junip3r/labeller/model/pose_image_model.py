@@ -328,6 +328,9 @@ class PoseImageModel(QObject):
         self._undo_stack.undo()
         self._flush()
 
+    def invalidate_undo_stack(self):
+        self._undo_stack.clear()
+
     def redo(self):
         self._undo_stack.redo()
         self._flush()

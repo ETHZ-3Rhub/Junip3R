@@ -25,8 +25,8 @@ def _string_to_color(color_string: str) -> Optional[Color]:
 
 
 def _serialize_skeleton(skeleton: SkeletonConfig, members: Sequence[MemberConfig]) -> Dict[str, Any] | List[Tuple[str, str]]:
-    member_names = [s.name for s in members]
-    lines = [(member_names[i1], member_names[i2]) for i1, i2 in skeleton.lines]
+    member_names = {m.id: m.name for m in members}
+    lines = [(member_names[id1], member_names[id2]) for id1, id2 in skeleton.lines]
     color = skeleton.color
     if color is not None:
         return {"lines": lines, "color": _color_to_hex(color)}
@@ -44,8 +44,8 @@ def _deserialize_skeleton(data: Dict[str, Any] | List[Tuple[str, str]], members:
         lines = data.get("lines", [])
         color_string = data.get("color")
 
-    member_indices = {m.name: i for i, m in enumerate(members)}
-    lines = [(member_indices[mn1], member_indices[mn2]) for mn1, mn2 in lines]
+    member_ids = {m.name: m.id for m in members}
+    lines = [(member_ids[mn1], member_ids[mn2]) for mn1, mn2 in lines]
 
     if color_string is not None:
         color = _string_to_color(color_string)
@@ -76,8 +76,9 @@ class YoloDetectInstanceTypeSerializer:
         if color_string is not None:
             color: Optional[Color] = _string_to_color(color_string)
 
-        members = [MemberConfig(name=name, type=LabellerObjectType.BOUNDING_BOX)]
-        return InstanceTypeConfig(name=name, members=members, color=color)
+        # A detect-mode instance type is fully described by name + color - no keypoints,
+        # no separate bounding-box toggle, nothing else to represent as a member.
+        return InstanceTypeConfig(name=name, color=color)
 
 
 class YoloPoseInstanceTypeSerializer:
@@ -85,16 +86,13 @@ class YoloPoseInstanceTypeSerializer:
     def serialize(cls, instance_type: InstanceTypeConfig) -> Dict[str, Any]:
         instance_dict: Dict[str, Any] = {"name": instance_type.name}
 
-        has_bounding_box = len(instance_type.members) > 0 and instance_type.members[0].type == LabellerObjectType.BOUNDING_BOX
-        instance_dict["bounding_box"] = "manual" if has_bounding_box else "automatic"
+        instance_dict["bounding_box"] = "manual" if instance_type.bounding_box else "automatic"
 
         if instance_type.color is not None:
             instance_dict["color"] = _color_to_hex(instance_type.color)
 
         keypoints = []
         for member in instance_type.members:
-            if member.type != LabellerObjectType.KEYPOINT:
-                continue
             color = member.color
             if color is not None:
                 keypoints.append({"name": member.name, "color": _color_to_hex(color)})
@@ -118,9 +116,7 @@ class YoloPoseInstanceTypeSerializer:
         else:
             bounding_box_mode = bounding_box_data.get("mode", "manual")
 
-        bounding_box = []
-        if bounding_box_mode == "manual":
-            bounding_box = [MemberConfig(name="Bounding Box", type=LabellerObjectType.BOUNDING_BOX)]
+        bounding_box = bounding_box_mode == "manual"
 
         color_string = data.get("color")
         color: Optional[Color] = _string_to_color(color_string) if color_string is not None else None
@@ -142,11 +138,9 @@ class YoloPoseInstanceTypeSerializer:
 
             keypoints.append(MemberConfig(name=keypoint_name, type=LabellerObjectType.KEYPOINT, color=keypoint_color))
 
-        members = bounding_box + keypoints
+        skeleton = _deserialize_skeleton(data.get("skeleton", {}), keypoints)
 
-        skeleton = _deserialize_skeleton(data.get("skeleton", {}), members)
-
-        return InstanceTypeConfig(name=name, members=members, skeleton=skeleton, color=color)
+        return InstanceTypeConfig(name=name, members=keypoints, skeleton=skeleton, color=color, bounding_box=bounding_box)
 
 
 class JuniperInstanceTypeSerializer:

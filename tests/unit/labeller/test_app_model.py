@@ -3,7 +3,7 @@ import numpy as np
 
 from junip3r.common.labels.data import Instance as DataInstance, Keypoint as DataKeypoint, \
     BoundingBox as DataBoundingBox
-from junip3r.labeller.config.data import InstanceType, MemberSpecs, SkeletonSpecs
+from junip3r.labeller.config.data import InstanceType, MemberType, SkeletonType
 from junip3r.labeller.data.types.abc import LabellerObjectType
 from junip3r.labeller.data.types.data import new_instance
 from junip3r.labeller.model.app_model import AppModel
@@ -72,8 +72,8 @@ class FakeSelectionRepository:
 
 def _instance_type(name="mouse", members=None, color=(0, 0, 255)):
     if members is None:
-        members = [MemberSpecs(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))]
-    return InstanceType(name=name, members=members, skeleton=SkeletonSpecs([], (0, 0, 0)), color=color)
+        members = [MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))]
+    return InstanceType(name=name, members=members, skeleton=SkeletonType([], (0, 0, 0)), color=color)
 
 
 def _build_model(instance_types=(), **kwargs):
@@ -117,8 +117,8 @@ def test_insert_and_remove_instance_round_trip():
 
 def test_set_keypoint_mutates_only_the_targeted_member():
     members = [
-        MemberSpecs(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0)),
-        MemberSpecs(name="tail", type=LabellerObjectType.KEYPOINT, color=(0, 255, 0)),
+        MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0)),
+        MemberType(name="tail", type=LabellerObjectType.KEYPOINT, color=(0, 255, 0)),
     ]
     instance_type = _instance_type(members=members)
     model, *_ = _build_model([instance_type])
@@ -135,7 +135,7 @@ def test_set_keypoint_mutates_only_the_targeted_member():
 
 
 def test_set_bounding_box_round_trips():
-    members = [MemberSpecs(name="box", type=LabellerObjectType.BOUNDING_BOX, color=(255, 0, 0))]
+    members = [MemberType(name="box", type=LabellerObjectType.BOUNDING_BOX, color=(255, 0, 0))]
     instance_type = _instance_type(members=members)
     model, *_ = _build_model([instance_type])
     instance = new_instance(instance_type, "i1", "Mouse 1")
@@ -168,19 +168,19 @@ def test_change_instance_type_carries_over_matching_member_data():
     old_type = InstanceType(
         "old",
         [
-            MemberSpecs("box", LabellerObjectType.BOUNDING_BOX, (0, 0, 255)),
-            MemberSpecs("nose", LabellerObjectType.KEYPOINT, (255, 0, 0)),
+            MemberType("box", LabellerObjectType.BOUNDING_BOX, (0, 0, 255)),
+            MemberType("nose", LabellerObjectType.KEYPOINT, (255, 0, 0)),
         ],
-        SkeletonSpecs([], (0, 0, 0)),
+        SkeletonType([], (0, 0, 0)),
         color=(0, 0, 255),
     )
     new_type = InstanceType(
         "new",
         [
-            MemberSpecs("box2", LabellerObjectType.BOUNDING_BOX, (0, 255, 0)),
-            MemberSpecs("nose2", LabellerObjectType.KEYPOINT, (0, 255, 0)),
+            MemberType("box2", LabellerObjectType.BOUNDING_BOX, (0, 255, 0)),
+            MemberType("nose2", LabellerObjectType.KEYPOINT, (0, 255, 0)),
         ],
-        SkeletonSpecs([], (0, 0, 0)),
+        SkeletonType([], (0, 0, 0)),
         color=(0, 255, 0),
     )
 

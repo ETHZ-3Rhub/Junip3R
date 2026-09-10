@@ -2,7 +2,7 @@ import uuid
 from dataclasses import dataclass, field, replace
 from typing import Optional, Tuple, Self, Sequence, cast
 
-from junip3r.labeller.config.data import InstanceType, MemberSpecs
+from junip3r.labeller.config.data import InstanceType, MemberType
 from junip3r.labeller.data.types.abc import LabellerParentObject, LabellerObjectType, Color, Point, Box, \
     LabellerObject, InstanceMember, InstanceID, MemberID
 
@@ -270,10 +270,11 @@ class Polyline(InstanceMember, LabellerParentObject):
 
 @dataclass
 class Skeleton:
-    lines: Sequence[Tuple[int, int]] = field(default_factory=list)
+    # (member_id, member_id) pairs, not positions - see SkeletonSpecs.
+    lines: Sequence[Tuple[str, str]] = field(default_factory=list)
     color: Color = (0, 0, 0)
 
-    def with_lines(self, lines: Sequence[Tuple[int, int]]) -> Self:
+    def with_lines(self, lines: Sequence[Tuple[str, str]]) -> Self:
         return replace(self, lines=tuple(lines))
 
 
@@ -348,7 +349,7 @@ class Instance(LabellerParentObject):
         return self.replace_member(member_id, member)
 
 
-def _new_member(member_specs: MemberSpecs, instance_id: InstanceID, member_index: int, name: str) -> InstanceMember:
+def _new_member(member_specs: MemberType, instance_id: InstanceID, member_index: int, name: str) -> InstanceMember:
     if member_specs.type == LabellerObjectType.KEYPOINT:
         return Keypoint(instance_id, member_index, name, member_specs.color, None, 2.0, id=member_specs.id)
     elif member_specs.type == LabellerObjectType.BOUNDING_BOX:

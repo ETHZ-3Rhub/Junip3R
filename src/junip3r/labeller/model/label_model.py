@@ -2,7 +2,7 @@ from typing import List, Sequence, cast
 
 from junip3r.common.labels.data import Instance as DataInstance, Keypoint as DataKeypoint, \
     BoundingBox as DataBoundingBox, Polygon as DataPolygon, Polyline as DataPolyline, IMember as IDataMember
-from junip3r.labeller.config.data import InstanceType, MemberSpecs
+from junip3r.labeller.config.data import InstanceType, MemberType
 from junip3r.labeller.data.repository.abc import IConfigRepository, ILabelRepository
 from junip3r.labeller.data.types.abc import LabellerObjectType
 from junip3r.labeller.data.types.data import Skeleton
@@ -42,7 +42,7 @@ class MutableInstanceMapper:
         skeleton = Skeleton(instance_type.skeleton.lines, instance_type.skeleton.color)
         return MutableInstance(data_instance.id, data_instance.name, instance_type, members, skeleton)
 
-    def _member_to_mutable(self, member_specs: MemberSpecs, member_data: IDataMember) -> MutableInstanceMember:
+    def _member_to_mutable(self, member_specs: MemberType, member_data: IDataMember) -> MutableInstanceMember:
         if member_specs.type == LabellerObjectType.KEYPOINT:
             member_data = cast(DataKeypoint, member_data)
             return MutableKeypoint(member_specs.id, member_specs.name, member_specs.color,
@@ -99,6 +99,12 @@ class LabelModel:
 
     def get_expected_instances(self, image_index: int) -> Sequence[InstanceType]:
         return self._config_repository.get_expected_instances(image_index)
+
+    def set_instance_types(self, image_index: int, instance_types: Sequence[InstanceType]) -> None:
+        self._config_repository.set_instance_types(image_index, instance_types)
+
+    def set_expected_instances(self, image_index: int, expected_instances: Sequence[InstanceType]) -> None:
+        self._config_repository.set_expected_instances(image_index, expected_instances)
 
     def get_instances(self, image_index: int) -> List[MutableInstance]:
         instance_types = self._config_repository.get_instance_types(image_index)

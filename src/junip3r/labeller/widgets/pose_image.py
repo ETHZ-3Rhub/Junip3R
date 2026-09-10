@@ -325,9 +325,9 @@ class PoseImage(QLabel):
     def _draw_skeleton(self, rc: RenderingContext, instance: Instance, opacity: float = 1.0):
         color = QtGui.QColor(*instance.skeleton.color)
 
-        for i1, i2 in instance.skeleton.lines:
-            member_1 = instance.members[i1]
-            member_2 = instance.members[i2]
+        for id1, id2 in instance.skeleton.lines:
+            member_1 = instance.get_member(id1)
+            member_2 = instance.get_member(id2)
 
             if not isinstance(member_1, Keypoint) or not isinstance(member_2, Keypoint):
                 continue

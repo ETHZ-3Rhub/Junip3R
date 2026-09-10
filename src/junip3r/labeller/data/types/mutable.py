@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Union, cast, Sequence
 
-from junip3r.labeller.config.data import InstanceType, MemberSpecs
+from junip3r.labeller.config.data import InstanceType, MemberType
 from junip3r.labeller.data.types.abc import Color, Point, Box, LabellerObjectType
 from junip3r.labeller.data.types.data import Skeleton
 
@@ -105,7 +105,7 @@ class MutableInstance:
         self.skeleton = new.skeleton
 
 
-def _new_member(member_specs: MemberSpecs) -> MutableInstanceMember:
+def _new_member(member_specs: MemberType) -> MutableInstanceMember:
     if member_specs.type == LabellerObjectType.KEYPOINT:
         return MutableKeypoint(member_specs.id, member_specs.name, member_specs.color)
     elif member_specs.type == LabellerObjectType.BOUNDING_BOX:

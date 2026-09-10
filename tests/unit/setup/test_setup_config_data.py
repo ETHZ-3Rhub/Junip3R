@@ -33,23 +33,21 @@ def test_member_with_methods_are_immutable_updates():
 
 # --- SetupSkeleton ------------------------------------------------------------------
 
-def test_skeleton_from_config_remaps_indices_to_member_ids():
-    members = [SetupMember(id="m0"), SetupMember(id="m1"), SetupMember(id="m2")]
-    config = SkeletonConfig(lines=[(0, 1), (1, 2)], color=(0, 0, 0))
+def test_skeleton_from_config_is_a_pure_passthrough():
+    config = SkeletonConfig(lines=[("m0", "m1"), ("m1", "m2")], color=(0, 0, 0))
 
-    skeleton = SetupSkeleton.from_config(config, members)
+    skeleton = SetupSkeleton.from_config(config)
 
     assert set(skeleton.lines) == {("m0", "m1"), ("m1", "m2")}
     assert skeleton.color == (0, 0, 0)
 
 
-def test_skeleton_to_config_remaps_member_ids_to_indices():
-    members = [SetupMember(id="m0"), SetupMember(id="m1")]
+def test_skeleton_to_config_is_a_pure_passthrough():
     skeleton = SetupSkeleton(lines=[("m0", "m1")], color=(1, 2, 3))
 
-    config = SetupSkeleton.to_config(skeleton, members)
+    config = SetupSkeleton.to_config(skeleton)
 
-    assert config == SkeletonConfig(lines=[(0, 1)], color=(1, 2, 3))
+    assert config == SkeletonConfig(lines=[("m0", "m1")], color=(1, 2, 3))
 
 
 def test_skeleton_with_lines_deduplicates():
@@ -86,8 +84,8 @@ def test_instance_type_from_config_to_config_round_trip():
         skeleton=SkeletonConfig(lines=[(0, 1)], color=(9, 9, 9)),
     )
 
-    instance_type = SetupInstanceType.from_config(config)
-    round_tripped = SetupInstanceType.to_config(instance_type)
+    instance_type = SetupInstanceType.from_config(config, ConfigMode.JUNIPER)
+    round_tripped = SetupInstanceType.to_config(instance_type, ConfigMode.JUNIPER)
 
     assert round_tripped.name == "mouse"
     assert [m.name for m in round_tripped.members] == ["nose", "tail"]
@@ -135,9 +133,11 @@ def test_instance_type_with_color_is_an_immutable_update():
     assert instance_type.color is None
 
 
-# --- SetupInstanceType bounding box <-> flat member list ------------------------------
+# --- SetupInstanceType for JUNIPER: fully freeform, no bounding-box sniffing ----------
 
-def test_instance_type_from_config_splits_off_a_leading_bounding_box_member():
+def test_junip3r_from_config_leaves_a_bounding_box_member_in_place():
+    # JUNIPER's UI never shows the manual/automatic toggle - a bounding-box-typed
+    # member is just a regular member, wherever the user put it, name and all.
     config = InstanceTypeConfig(
         name="mouse",
         members=[_member_config("box", LabellerObjectType.BOUNDING_BOX), _member_config("nose")],
@@ -145,23 +145,52 @@ def test_instance_type_from_config_splits_off_a_leading_bounding_box_member():
         color=(1, 2, 3),
     )
 
-    instance_type = SetupInstanceType.from_config(config)
-
-    assert instance_type.bounding_box is True
-    assert instance_type.color == (1, 2, 3)
-    assert [m.name for m in instance_type.members] == ["nose"]
-
-
-def test_instance_type_from_config_leaves_bounding_box_unset_without_a_leading_bbox_member():
-    config = InstanceTypeConfig(name="mouse", members=[_member_config("nose")], skeleton=SkeletonConfig())
-
-    instance_type = SetupInstanceType.from_config(config)
+    instance_type = SetupInstanceType.from_config(config, ConfigMode.JUNIPER)
 
     assert instance_type.bounding_box is False
-    assert [m.name for m in instance_type.members] == ["nose"]
+    assert instance_type.color == (1, 2, 3)
+    assert [(m.type, m.name) for m in instance_type.members] == [
+        (LabellerObjectType.BOUNDING_BOX, "box"), (LabellerObjectType.KEYPOINT, "nose"),
+    ]
 
 
-def test_instance_type_to_config_puts_the_bounding_box_first_and_carries_the_color():
+def test_junip3r_to_config_passes_members_through_unchanged():
+    instance_type = SetupInstanceType(
+        name="mouse",
+        members=[SetupMember(name="box", type=LabellerObjectType.BOUNDING_BOX), SetupMember(name="nose")],
+        color=(1, 2, 3),
+    )
+
+    config = SetupInstanceType.to_config(instance_type, ConfigMode.JUNIPER)
+
+    assert [(m.type, m.name) for m in config.members] == [
+        (LabellerObjectType.BOUNDING_BOX, "box"), (LabellerObjectType.KEYPOINT, "nose"),
+    ]
+    assert config.color == (1, 2, 3)
+
+
+def test_junip3r_bounding_box_member_round_trips_its_own_skeleton_position():
+    box = SetupMember(id="box", type=LabellerObjectType.BOUNDING_BOX)
+    nose = SetupMember(id="nose")
+    instance_type = SetupInstanceType(
+        name="mouse",
+        members=[box, nose],
+        skeleton=SetupSkeleton(lines=[("box", "nose")]),
+    )
+
+    config = SetupInstanceType.to_config(instance_type, ConfigMode.JUNIPER)
+    # Pure passthrough - no index/id translation, member ids are carried verbatim.
+    assert config.skeleton.lines == [("box", "nose")]
+
+    round_tripped = SetupInstanceType.from_config(config, ConfigMode.JUNIPER)
+    assert round_tripped.bounding_box is False
+    assert [m.id for m in round_tripped.members] == ["box", "nose"]
+    assert round_tripped.skeleton.lines == [("box", "nose")]
+
+
+# --- SetupInstanceType bounding box for YOLO_POSE: a flag, not a member ---------------
+
+def test_yolo_pose_to_config_writes_the_flag_without_synthesizing_a_member():
     instance_type = SetupInstanceType(
         name="mouse",
         members=[SetupMember(name="nose")],
@@ -169,21 +198,28 @@ def test_instance_type_to_config_puts_the_bounding_box_first_and_carries_the_col
         color=(1, 2, 3),
     )
 
-    config = SetupInstanceType.to_config(instance_type)
+    config = SetupInstanceType.to_config(instance_type, ConfigMode.YOLO_POSE)
 
-    assert [m.type for m in config.members] == [LabellerObjectType.BOUNDING_BOX, LabellerObjectType.KEYPOINT]
+    assert config.bounding_box is True
+    assert [m.type for m in config.members] == [LabellerObjectType.KEYPOINT]
     assert config.color == (1, 2, 3)
 
 
-def test_instance_type_without_bounding_box_omits_it_from_config_members():
-    instance_type = SetupInstanceType(name="mouse", members=[SetupMember(name="nose")], bounding_box=False)
+def test_yolo_pose_from_config_reads_the_flag_without_sniffing_members():
+    config = InstanceTypeConfig(
+        name="mouse",
+        members=[_member_config("nose")],
+        bounding_box=True,
+        color=(1, 2, 3),
+    )
 
-    config = SetupInstanceType.to_config(instance_type)
+    instance_type = SetupInstanceType.from_config(config, ConfigMode.YOLO_POSE)
 
-    assert [m.type for m in config.members] == [LabellerObjectType.KEYPOINT]
+    assert instance_type.bounding_box is True
+    assert [m.name for m in instance_type.members] == ["nose"]
 
 
-def test_instance_type_bounding_box_round_trip_preserves_skeleton_indices():
+def test_yolo_pose_bounding_box_round_trip_preserves_skeleton_indices():
     nose = SetupMember(id="nose")
     tail = SetupMember(id="tail")
     instance_type = SetupInstanceType(
@@ -193,13 +229,43 @@ def test_instance_type_bounding_box_round_trip_preserves_skeleton_indices():
         skeleton=SetupSkeleton(lines=[("nose", "tail")]),
     )
 
-    config = SetupInstanceType.to_config(instance_type)
-    # The bounding box occupies index 0, so the keypoint line must be (1, 2).
-    assert config.skeleton.lines == [(1, 2)]
+    config = SetupInstanceType.to_config(instance_type, ConfigMode.YOLO_POSE)
+    # Pure passthrough - no synthesized member for this mode, no id translation either.
+    assert config.skeleton.lines == [("nose", "tail")]
 
-    round_tripped = SetupInstanceType.from_config(config)
-    assert round_tripped.bounding_box is True
-    assert set(round_tripped.skeleton.lines) == {(round_tripped.members[0].id, round_tripped.members[1].id)}
+
+# --- SetupInstanceType for YOLO_DETECT: name + color only, no members at all ---------
+
+def test_yolo_detect_to_config_carries_only_name_and_color():
+    instance_type = SetupInstanceType(name="cat", color=(1, 2, 3))
+
+    config = SetupInstanceType.to_config(instance_type, ConfigMode.YOLO_DETECT)
+
+    assert config.name == "cat"
+    assert config.color == (1, 2, 3)
+    assert config.members == ()
+
+
+def test_yolo_detect_from_config_does_not_sniff_members():
+    config = InstanceTypeConfig(name="cat", color=(1, 2, 3))
+
+    instance_type = SetupInstanceType.from_config(config, ConfigMode.YOLO_DETECT)
+
+    assert instance_type.name == "cat"
+    assert instance_type.color == (1, 2, 3)
+    assert instance_type.members == ()
+
+
+def test_yolo_detect_from_config_always_sets_bounding_box():
+    # Matches instance_type_list.py's DETECT_INSTANCE_TEMPLATE (bounding_box=True for a
+    # freshly-created detect instance type) - a project loaded from disk should show the
+    # same bounding-box color icon (expected_instance_list.py) as one created live.
+    config = InstanceTypeConfig(name="cat", color=(1, 2, 3))
+
+    instance_type = SetupInstanceType.from_config(config, ConfigMode.YOLO_DETECT)
+
+    assert instance_type.bounding_box is True
+    assert instance_type.members == ()
 
 
 # --- SetupConfig ---------------------------------------------------------------------

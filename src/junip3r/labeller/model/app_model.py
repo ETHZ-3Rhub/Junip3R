@@ -110,6 +110,12 @@ class AppModel(IUndoModel, IReadOnlyAppModel):
     def get_expected_instances(self, image_index: int) -> Sequence[InstanceType]:
         return self._label_model.get_expected_instances(image_index)
 
+    def set_instance_types(self, image_index: int, instance_types: Sequence[InstanceType]) -> None:
+        self._label_model.set_instance_types(image_index, instance_types)
+
+    def set_expected_instances(self, image_index: int, expected_instances: Sequence[InstanceType]) -> None:
+        self._label_model.set_expected_instances(image_index, expected_instances)
+
     def get_instances(self, image_index: int) -> Sequence[Instance]:
         return [freeze(instance) for instance in self._label_model.get_instances(image_index)]
 

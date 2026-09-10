@@ -2,7 +2,7 @@ import pytest
 
 from junip3r.common.labels.data import Instance as DataInstance, Keypoint as DataKeypoint, \
     BoundingBox as DataBoundingBox, Polygon as DataPolygon
-from junip3r.labeller.config.data import InstanceType, MemberSpecs, SkeletonSpecs
+from junip3r.labeller.config.data import InstanceType, MemberType, SkeletonType
 from junip3r.labeller.data.types.abc import LabellerObjectType
 from junip3r.labeller.data.types.mutable import MutableKeypoint, MutableBoundingBox, MutablePolygon
 from junip3r.labeller.model.label_model import LabelModel, MutableInstanceMapper
@@ -10,8 +10,8 @@ from junip3r.labeller.model.label_model import LabelModel, MutableInstanceMapper
 
 def _instance_type(name="mouse", members=None, color=(0, 0, 255)):
     if members is None:
-        members = [MemberSpecs(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))]
-    return InstanceType(name=name, members=members, skeleton=SkeletonSpecs([], (0, 0, 0)), color=color)
+        members = [MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))]
+    return InstanceType(name=name, members=members, skeleton=SkeletonType([], (0, 0, 0)), color=color)
 
 
 class FakeConfigRepository:
@@ -46,7 +46,7 @@ class FakeRawLabelRepository:
 # --- MutableInstanceMapper ---
 
 def test_to_mutable_attaches_the_member_slots_id_and_color():
-    member_specs = MemberSpecs(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))
+    member_specs = MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))
     instance_type = _instance_type(members=[member_specs])
     data = DataInstance(id="i1", type="mouse", name="Mouse 1", members=[DataKeypoint(name="nose", p=(0.5, 0.5), visibility=1.0)])
 
@@ -79,8 +79,8 @@ def test_to_mutable_raises_on_member_count_mismatch():
 
 def test_to_mutable_copies_bounding_box_and_polygon_positionally():
     members = [
-        MemberSpecs(name="box", type=LabellerObjectType.BOUNDING_BOX, color=(255, 0, 0)),
-        MemberSpecs(name="outline", type=LabellerObjectType.POLYGON, color=(0, 255, 0)),
+        MemberType(name="box", type=LabellerObjectType.BOUNDING_BOX, color=(255, 0, 0)),
+        MemberType(name="outline", type=LabellerObjectType.POLYGON, color=(0, 255, 0)),
     ]
     instance_type = _instance_type(members=members)
     data = DataInstance(id="i1", type="mouse", name="Mouse 1", members=[
@@ -99,7 +99,7 @@ def test_to_mutable_copies_bounding_box_and_polygon_positionally():
 
 
 def test_to_data_round_trips_field_values():
-    member_specs = MemberSpecs(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))
+    member_specs = MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))
     instance_type = _instance_type(members=[member_specs])
     data = DataInstance(id="i1", type="mouse", name="Mouse 1", members=[DataKeypoint(name="nose", p=(0.5, 0.5), visibility=1.0)])
     mapper = MutableInstanceMapper([instance_type])

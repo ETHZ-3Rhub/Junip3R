@@ -5,16 +5,15 @@ from junip3r.labeller.data.types.abc import LabellerObjectType
 
 
 def test_serialize_junip3r_round_trips_through_deserialize():
+    nose = MemberConfig(id="nose", type=LabellerObjectType.KEYPOINT, name="nose", color=(255, 0, 0))
+    tail = MemberConfig(id="tail", type=LabellerObjectType.KEYPOINT, name="tail", color=(0, 255, 0))
     config = Config(
         mode=ConfigMode.JUNIPER,
         instance_types=[
             InstanceTypeConfig(
                 name="mouse",
-                members=[
-                    MemberConfig(type=LabellerObjectType.KEYPOINT, name="nose", color=(255, 0, 0)),
-                    MemberConfig(type=LabellerObjectType.KEYPOINT, name="tail", color=(0, 255, 0)),
-                ],
-                skeleton=SkeletonConfig(lines=[(0, 1)], color=(153, 153, 153)),
+                members=[nose, tail],
+                skeleton=SkeletonConfig(lines=[("nose", "tail")], color=(153, 153, 153)),
             )
         ],
     )
@@ -28,7 +27,9 @@ def test_serialize_junip3r_round_trips_through_deserialize():
     mouse = round_tripped.instance_types[0]
     assert [m.name for m in mouse.members] == ["nose", "tail"]
     assert [m.color for m in mouse.members] == [(255, 0, 0), (0, 255, 0)]
-    assert mouse.skeleton.lines == [(0, 1)]
+    # Ids are freshly assigned by deserialize(), not the ones passed in above.
+    new_nose, new_tail = mouse.members
+    assert mouse.skeleton.lines == [(new_nose.id, new_tail.id)]
     assert mouse.skeleton.color == (153, 153, 153)
     assert [it.name for it in round_tripped.expected_instance_types] == ["mouse"]
 
@@ -83,19 +84,18 @@ def test_serialize_yolo_pose_color_is_a_top_level_key_independent_of_bounding_bo
 
 
 def test_yolo_pose_color_round_trips_through_deserialize_for_both_bounding_box_modes():
-    for members in (
-        [MemberConfig(name="Bounding Box", type=LabellerObjectType.BOUNDING_BOX), MemberConfig(name="nose", type=LabellerObjectType.KEYPOINT)],
-        [MemberConfig(name="nose", type=LabellerObjectType.KEYPOINT)],
-    ):
+    keypoints = [MemberConfig(name="nose", type=LabellerObjectType.KEYPOINT)]
+    for bounding_box in (True, False):
         config = Config(
             mode=ConfigMode.YOLO_POSE,
-            instance_types=[InstanceTypeConfig(name="mouse", members=members, color=(255, 0, 0))],
+            instance_types=[InstanceTypeConfig(name="mouse", members=keypoints, bounding_box=bounding_box, color=(255, 0, 0))],
         )
 
         serializer = ConfigSerializer()
         round_tripped = serializer.deserialize(serializer.serialize(config))
 
         assert round_tripped.instance_types[0].color == (255, 0, 0)
+        assert round_tripped.instance_types[0].bounding_box == bounding_box
 
 
 def test_serialize_junip3r_includes_color_when_set():

@@ -1,22 +1,26 @@
 import shutil
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import List, Optional, Sequence
 
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QMainWindow, QFrame, QVBoxLayout, QWidget, QSplitter, QPushButton, \
     QFileDialog, QMessageBox, QInputDialog
 
+from junip3r.common.config.abc import ConfigMode
 from junip3r.labeller.config.data import InstanceType
+from junip3r.labeller.config.parser import InstanceTypeResolver
 from junip3r.labeller.data.repository.selection import SelectionRepository
 from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.model.label_model import LabelModel
-from junip3r.labeller.model.pose_image_model import PoseImageModel
 from junip3r.setup.data.repository.abc import ISetupConfigRepository
+from junip3r.setup.data.types.abc import ISetupInstanceType
+from junip3r.setup.data.types.data import SetupInstanceType
 from junip3r.setup.model.config_model import ConfigState, ConfigModel, ConfigStateChangeFlags
+from junip3r.setup.model.setup_preview_pose_image_model import SetupPreviewPoseImageModel
 from junip3r.setup.preview.data.repository.setup_preview_image_repository import SetupImageRepository
 from junip3r.setup.preview.data.repository.setup_preview_label_repository import SetupPreviewLabelRepository, \
-    SetupConfigRepository, resolve_instance_types
+    SetupPreviewConfigRepository
 from junip3r.setup.preview.placeholder_image import load_image_rgb
 from junip3r.setup.widgets.expected_instance_list import ExpectedInstanceList
 from junip3r.setup.widgets.new_project_window import DEFAULT_TEMPLATES_ROOT
@@ -27,6 +31,7 @@ from junip3r.setup.widgets.setup_controls import SetupControls
 class SetupMainWindow(QMainWindow):
     switch_to = Signal(str)
     closed = Signal()
+    resolved_config_changed = Signal(list, list)
 
     def __init__(self, config_repository: ISetupConfigRepository, integrated: bool = False, parent=None):
         super().__init__(parent)
@@ -35,13 +40,13 @@ class SetupMainWindow(QMainWindow):
         self._state: ConfigState = ConfigState()
 
         self.image_repository = SetupImageRepository()
-        self.config_repository = SetupConfigRepository()
+        self.config_repository = SetupPreviewConfigRepository()
         self.label_repository = SetupPreviewLabelRepository()
         self.selection_repository = SelectionRepository()
 
         self.label_model = LabelModel(self.config_repository, self.label_repository)
         self.preview_app_model = AppModel(self.image_repository, self.label_model, self.selection_repository)
-        self.preview_pose_image_model = PoseImageModel(self.preview_app_model)
+        self.preview_pose_image_model = SetupPreviewPoseImageModel(self.preview_app_model)
 
         self._project_folder: Optional[Path] = None
 
@@ -107,6 +112,7 @@ class SetupMainWindow(QMainWindow):
 
         self._model.changed.connect(self.setup_controls.set_state)
         self._model.changed.connect(self.set_state)
+        self.resolved_config_changed.connect(self.preview_pose_image_model.set_config)
 
         self.setup_controls.instance_type_selected.connect(self._model.select_instance_type)
 
@@ -161,28 +167,10 @@ class SetupMainWindow(QMainWindow):
             resolved for _, setup_type in state.expected_instance_types
             if (resolved := next((it for it in instance_types if it.id == setup_type.id), None)) is not None
         ]
-        self.config_repository.set_state(instance_types, expected_instances)
-        # Reconciling already-placed instances against the new instance types is a
-        # separate, deferred redesign (see reconcile_instances in
-        # setup_preview_label_repository.py) - clear instead of leaving stale/mismatched
-        # data behind.
-        self.preview_app_model.set_instances(0, [])
-        self._resync_new_instance_type(instance_types)
+        self.resolved_config_changed.emit(instance_types, expected_instances)
         self.preview_pose_image_model.refresh()
 
         self.expected_instance_list.set_state(state, flags)
-
-    def _resync_new_instance_type(self, instance_types: Sequence[InstanceType]):
-        """Keep the "next instance to place" type (see SelectionRepository) matched by
-        name across a config change - a type object bakes in its members/color at
-        construction time, so the old one would otherwise go stale (still placeable, but
-        with a shape/color that no longer matches what setup_controls now shows).
-        """
-        old_type = self.selection_repository.get_new_instance_type(0)
-        if old_type is None:
-            return
-        new_type = next((it for it in instance_types if it.name == old_type.name), None)
-        self.selection_repository.set_new_instance_type(0, new_type)
 
     def _open_preview(self):
         self.preview_window.show()
@@ -247,3 +235,16 @@ class SetupMainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self.closed.emit()
+
+
+_MODE_BY_STRING = {"junip3r": ConfigMode.JUNIPER, "yolo_pose": ConfigMode.YOLO_POSE, "yolo_detect": ConfigMode.YOLO_DETECT}
+
+
+def resolve_instance_types(instance_types: Sequence[ISetupInstanceType], mode: str) -> List[InstanceType]:
+    config_mode = _MODE_BY_STRING[mode]
+    resolver = InstanceTypeResolver(config_mode)
+    num_instance_types = len(instance_types)
+    return [
+        resolver.resolve_instance_type(SetupInstanceType.to_config(it, config_mode), index, num_instance_types)
+        for index, it in enumerate(instance_types)
+    ]

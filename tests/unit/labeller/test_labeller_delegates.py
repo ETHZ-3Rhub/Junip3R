@@ -170,9 +170,9 @@ def test_instance_replace_member_replaces_by_stable_id_not_position():
 
 
 def test_skeleton_with_lines_replaces_lines():
-    skeleton = Skeleton(lines=[(0, 1)])
+    skeleton = Skeleton(lines=[("m0", "m1")])
 
-    updated = skeleton.with_lines([(1, 2), (2, 3)])
+    updated = skeleton.with_lines([("m1", "m2"), ("m2", "m3")])
 
-    assert updated.lines == ((1, 2), (2, 3))
-    assert skeleton.lines == [(0, 1)]
+    assert updated.lines == (("m1", "m2"), ("m2", "m3"))
+    assert skeleton.lines == [("m0", "m1")]

@@ -35,7 +35,8 @@ def test_yolo_pose_bounding_box_and_keypoints_ordered_with_skeleton():
 
     mouse = config.instance_types[0]
     assert [m.type for m in mouse.members] == [LabellerObjectType.BOUNDING_BOX, LabellerObjectType.KEYPOINT, LabellerObjectType.KEYPOINT]
-    assert mouse.skeleton.lines == [(1, 2)]
+    nose, tail = mouse.members[1], mouse.members[2]
+    assert mouse.skeleton.lines == [(nose.id, tail.id)]
 
 
 def test_junip3r_explicit_member_colors_are_preserved():
