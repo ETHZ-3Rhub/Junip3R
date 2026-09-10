@@ -204,9 +204,19 @@ def test_editor_next_instance_falls_back_to_new_instance_for_unknown_selection()
     assert strategy.next_instance([new_instance], ("missing", "m0")) == (None, "m0")
 
 
-def test_editor_invalid_selection_returns_new_instance_slot_or_none():
+def test_editor_default_selection_returns_new_instance_slot_when_the_instance_is_gone():
     strategy = EditorMemberSelectionStrategy()
     new_instance = FakeInstance(None, 1)
 
-    assert strategy.invalid_selection([new_instance], ("anything", "m0")) == (None, "m0")
-    assert strategy.invalid_selection([FakeInstance("i1", 1)], None) is None
+    assert strategy.default_selection([new_instance], ("anything", "m0")) == (None, "m0")
+    assert strategy.default_selection([FakeInstance("i1", 1)], None) is None
+
+
+def test_editor_default_selection_prefers_the_same_instances_first_member():
+    strategy = EditorMemberSelectionStrategy()
+    instance = FakeInstance("i1", num_members=2)
+
+    # "stale" no longer resolves to a real member (e.g. after a type change), but
+    # the instance itself still exists - fall back to its first member, not the
+    # new-instance placeholder.
+    assert strategy.default_selection([instance], ("i1", "stale")) == ("i1", "m0")

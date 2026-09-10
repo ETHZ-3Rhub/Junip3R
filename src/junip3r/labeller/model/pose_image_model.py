@@ -292,7 +292,12 @@ class PoseImageModel(QObject):
             self._model.set_new_instance_type(self._image_index, instance_type)
             self.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)
         else:
-            self._undo_stack.push(ChangeInstanceType(self._model, self, self._image_index, instance_id, instance_type))
+            with self.macro("Change Instance Type"):
+                self._undo_stack.push(ChangeInstanceType(self._model, self, self._image_index, instance_id, instance_type))
+                # The new type's members are freshly-created (own ids), so the
+                # previously-selected member id is no longer valid - reset to the
+                # (same) instance's first member under its new type.
+                self._reset_selection()
         self._flush()
 
     def copy_instance(self):
@@ -387,7 +392,7 @@ class PoseImageModel(QObject):
         self._undo_stack.push(SetSelection(self._model, self, self._image_index, next_selection))
 
     def _reset_selection(self):
-        selection = self._member_selection_strategy.invalid_selection(self.get_instances(), self.get_selection())
+        selection = self._member_selection_strategy.default_selection(self.get_instances(), self.get_selection())
         self._undo_stack.push(SetSelection(self._model, self, self._image_index, selection))
 
     def _set_selection(self, selection: Optional[Selection]):

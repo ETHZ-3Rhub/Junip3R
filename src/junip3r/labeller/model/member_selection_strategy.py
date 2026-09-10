@@ -9,7 +9,7 @@ class MemberSelectionStrategy(Protocol):
     def prev_member_manual(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]: ...
     def auto_advance(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]: ...
     def next_instance(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]: ...
-    def invalid_selection(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]: ...
+    def default_selection(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]: ...
 
 
 class EditorMemberSelectionStrategy(MemberSelectionStrategy):
@@ -127,7 +127,17 @@ class EditorMemberSelectionStrategy(MemberSelectionStrategy):
                 return new_instance.instance_id, new_member_id
         return None
 
-    def invalid_selection(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]:
+    def default_selection(self, instances: Sequence[Instance], selection: Optional[Selection]) -> Optional[Selection]:
+        # Prefer staying on the same instance (e.g. after a type change invalidates
+        # its previously-selected member id) - its first member under whatever
+        # members it currently has. Only fall back to the new-instance placeholder
+        # when that instance is gone entirely (e.g. it was just deleted).
+        if selection is not None:
+            instance = self._find_instance(instances, selection[0])
+            first_member_id = self._first_member_id(instance)
+            if first_member_id is not None:
+                return instance.instance_id, first_member_id
+
         new_instance = self._find_instance(instances, None)
         new_member_id = self._first_member_id(new_instance)
         if new_member_id is not None:
