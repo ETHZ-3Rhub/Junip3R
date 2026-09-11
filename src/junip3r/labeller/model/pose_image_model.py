@@ -291,6 +291,10 @@ class PoseImageModel(QObject):
             self._workflow.manual_selection(existing_instance_types, instance_type)
             self._model.set_new_instance_type(self._image_index, instance_type)
             self.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)
+            # The "new instance" placeholder is rebuilt from the new type, so its
+            # previously-selected member id is stale too - not undo-tracked, since
+            # picking the next-instance-to-place type isn't itself undoable.
+            self._set_selection(self._default_selection())
         else:
             with self.macro("Change Instance Type"):
                 self._undo_stack.push(ChangeInstanceType(self._model, self, self._image_index, instance_id, instance_type))
@@ -391,9 +395,11 @@ class PoseImageModel(QObject):
         next_selection = self._member_selection_strategy.auto_advance(self.get_instances(), (instance_id, member_id))
         self._undo_stack.push(SetSelection(self._model, self, self._image_index, next_selection))
 
+    def _default_selection(self) -> Optional[Selection]:
+        return self._member_selection_strategy.default_selection(self.get_instances(), self.get_selection())
+
     def _reset_selection(self):
-        selection = self._member_selection_strategy.default_selection(self.get_instances(), self.get_selection())
-        self._undo_stack.push(SetSelection(self._model, self, self._image_index, selection))
+        self._undo_stack.push(SetSelection(self._model, self, self._image_index, self._default_selection()))
 
     def _set_selection(self, selection: Optional[Selection]):
         self._model.set_selection(self._image_index, selection)

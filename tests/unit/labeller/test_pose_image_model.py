@@ -97,6 +97,25 @@ def test_select_instance_type_resets_member_selection_to_the_new_first_member():
     assert member_id == updated_instance.members[0].id
 
 
+def test_select_instance_type_with_nothing_selected_resets_the_placeholder_selection():
+    type_a = _instance_type("mouse", [MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))])
+    type_b = _instance_type("cat", [
+        MemberType(name="a", type=LabellerObjectType.KEYPOINT, color=(0, 255, 0)),
+        MemberType(name="b", type=LabellerObjectType.KEYPOINT, color=(0, 0, 255)),
+    ])
+    model = _build_model([type_a, type_b])
+    instance_id, _ = model.get_selection()
+    assert instance_id is None  # nothing real selected - the "new instance" placeholder
+
+    model.select_instance_type(type_b)
+
+    instance_id, member_id = model.get_selection()
+    assert instance_id is None
+    placeholder = model.get_instances()[0]
+    assert placeholder.instance_type.name == "cat"
+    assert member_id == placeholder.members[0].id
+
+
 def test_select_instance_type_change_and_selection_reset_undo_as_one_step():
     old_type = _instance_type("mouse", [MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))])
     new_type = _instance_type("cat", [MemberType(name="a", type=LabellerObjectType.KEYPOINT, color=(0, 255, 0))])
