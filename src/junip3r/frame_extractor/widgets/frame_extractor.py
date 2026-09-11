@@ -316,5 +316,14 @@ class FrameExtractor(FrameExtractorLayout):
                 self.frame_extractor_model.add_video(Path(file_path))
 
     def closeEvent(self, event):
+        # Both worker threads run their own event loop indefinitely once started -
+        # without stopping them here, they'd get destroyed while still running when
+        # this widget is torn down, which PySide6 turns into a crash (an abrupt,
+        # non-zero process exit) rather than a clean shutdown.
+        self.selection_worker_thread.quit()
+        self.selection_worker_thread.wait()
+        self.extraction_worker_thread.quit()
+        self.extraction_worker_thread.wait()
+
         self.closed.emit()
         event.accept()

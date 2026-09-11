@@ -188,10 +188,10 @@ def main() -> int:
     controller.start()
 
     try:
-        app.exec()
+        return app.exec()
     finally:
         log_manager.close()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

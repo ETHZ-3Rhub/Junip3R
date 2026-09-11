@@ -3,6 +3,7 @@ from typing import Optional
 from PySide6.QtCore import Signal
 
 from junip3r.common.config.abc import ConfigMode
+from junip3r.labeller.data.repository.abc import IContextRepository
 from junip3r.labeller.export.yolo.set_split import ISetSplitRepository
 from junip3r.labeller.export.yolo.widgets.yolo_export_dialog import YoloExportDialog
 from junip3r.labeller.layout.labeller_layout import EditorMainWindowLayout
@@ -21,6 +22,7 @@ class EditorMainWindow(EditorMainWindowLayout):
 
         self.show_frame_extractor = show_frame_extractor
         self._model: Optional[AppModel] = None
+        self._context_model: Optional[ContextModel] = None
         self._set_split_repository: Optional[ISetSplitRepository] = None
 
         self.action_export_as_yolo_dataset.triggered.connect(self.export_yolo_dataset)
@@ -31,15 +33,17 @@ class EditorMainWindow(EditorMainWindowLayout):
         else:
             self.btn_open_frame_extractor.hide()
 
-    def set_model(self, model: AppModel, context_model: Optional[ContextModel] = None, image_settings_model: Optional[ImageSettingsModel] = None):
+    def set_model(self, model: AppModel, context_repository: Optional[IContextRepository] = None,
+                  image_settings_model: Optional[ImageSettingsModel] = None):
         self._model = model
+        self._context_model = ContextModel(context_repository) if context_repository is not None else None
 
         pose_image_model = PoseImageModel(model)
 
-        if context_model is not None:
-            pose_image_model.image_navigation_state_changed.connect(context_model.set_image_navigation_state)
+        if self._context_model is not None:
+            pose_image_model.image_navigation_state_changed.connect(self._context_model.set_image_navigation_state)
 
-        self.editor.set_model(pose_image_model, context_model, image_settings_model)
+        self.editor.set_model(pose_image_model, self._context_model, image_settings_model)
 
         if model.get_num_images() > 0:
             self.stk_content.setCurrentIndex(0)
@@ -62,4 +66,6 @@ class EditorMainWindow(EditorMainWindowLayout):
         dialog.exec_()
 
     def closeEvent(self, event):
+        if self._context_model is not None:
+            self._context_model.shutdown()
         self.closed.emit()

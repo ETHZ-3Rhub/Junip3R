@@ -101,3 +101,11 @@ class ContextModel(QObject):
 
         self._state = replace(self._state, loaded=True, context=context)
         self.changed.emit(self._state)
+
+    def shutdown(self):
+        # The worker thread runs its own event loop indefinitely once started -
+        # without stopping it here, it would get destroyed while still running when
+        # this model is torn down, which PySide6 turns into a crash rather than a
+        # clean shutdown.
+        self._context_load_worker_thread.quit()
+        self._context_load_worker_thread.wait()

@@ -19,7 +19,6 @@ from junip3r.labeller.data.repository.tag import TagRepository
 from junip3r.labeller.export.yolo.set_split import SetSplitRepository
 from junip3r.labeller.legacy.legacy_label_converter import LegacyLabelConverter
 from junip3r.labeller.model.app_model import AppModel
-from junip3r.labeller.model.context_model import ContextModel
 from junip3r.labeller.model.image_settings_model import ImageSettingsModel
 from junip3r.labeller.model.label_model import LabelModel
 from junip3r.labeller.widgets.main_window import EditorMainWindow
@@ -39,11 +38,7 @@ def from_config_file(config_file: Path, integrated: bool = False) -> EditorMainW
     image_repository = ImageRepository([i.image for i in images])
 
     context_files = [i.context for i in images]
-    if any(cf is not None for cf in context_files):
-        context_repository = ContextRepository(context_files)
-        context_model = ContextModel(context_repository)
-    else:
-        context_model = None
+    context_repository = ContextRepository(context_files) if any(cf is not None for cf in context_files) else None
 
     image_settings_model = ImageSettingsModel()
 
@@ -62,7 +57,7 @@ def from_config_file(config_file: Path, integrated: bool = False) -> EditorMainW
     app_model = AppModel(image_repository, label_model, SelectionRepository(), tag_repository=tag_repository)
 
     editor = EditorMainWindow(show_frame_extractor=integrated)
-    editor.set_model(app_model, context_model, image_settings_model)
+    editor.set_model(app_model, context_repository, image_settings_model)
     editor.set_mode(labeller_config.mode)
     editor.set_set_split_repository(set_split_repository)
 
