@@ -234,6 +234,11 @@ class SetupMainWindow(QMainWindow):
         self.switch_to.emit("labeller")
 
     def closeEvent(self, event):
+        # preview_window is a separate top-level window (parented to self only for
+        # ownership, never embedded in a layout) - Qt doesn't cascade close() to it,
+        # so it would otherwise keep floating after setup itself closes (standalone,
+        # or via AppController.switch_to() closing this window when leaving setup).
+        self.preview_window.close()
         self.closed.emit()
 
 
