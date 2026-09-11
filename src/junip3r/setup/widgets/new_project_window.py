@@ -21,7 +21,7 @@ from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.data.types.data import Instance
 from junip3r.labeller.model.camera_model import CameraModel
 from junip3r.labeller.widgets.pose_image import PoseImage
-from junip3r.setup.preview.placeholder_image import load_image_rgb, load_placeholder_image
+from junip3r.setup.preview.placeholder_image import load_image_rgb
 from junip3r.setup.widgets.preview_pose_image_controller import PreviewPoseImageController
 from junip3r.setup.model.preview_pose_image_model import PreviewPoseImageModel
 
@@ -275,6 +275,8 @@ class NewProjectWindow(QWidget):
         preview_pose_image_layout = QVBoxLayout(frm_preview_pose_image)
         preview_pose_image_layout.setContentsMargins(0, 0, 0, 0)
 
+        self.stk_preview_image = QStackedWidget()
+
         self.preview_pose_image = PoseImage(self)
         self.preview_pose_image.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
@@ -293,7 +295,13 @@ class NewProjectWindow(QWidget):
         self.preview_pose_image_model = PreviewPoseImageModel()
         self.preview_pose_image_model.image_state_changed.connect(self.preview_pose_image.set_image_state)
 
-        preview_pose_image_layout.addWidget(self.preview_pose_image)
+        self.stk_preview_image.addWidget(self.preview_pose_image)
+
+        lbl_no_preview_image = QLabel("No Preview Available")
+        lbl_no_preview_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.stk_preview_image.addWidget(lbl_no_preview_image)
+
+        preview_pose_image_layout.addWidget(self.stk_preview_image)
 
         preview_layout.addWidget(frm_preview_pose_image)
         self.stk_preview.addWidget(preview_page)
@@ -325,18 +333,14 @@ class NewProjectWindow(QWidget):
             self.stk_preview.setCurrentIndex(1)
         else:
             self.stk_preview.setCurrentIndex(0)
+            self.stk_preview_image.setCurrentIndex(0 if preset.image is not None else 1)
         if preset.mode:
             self.dpd_mode.setCurrentIndex(self.dpd_mode.findData(preset.mode))
             self.dpd_mode.setEnabled(False)
         else:
             self.dpd_mode.setEnabled(True)
         self.instance_type_model.set_instance_types(preset.instance_types)
-        # Fall back to the generic placeholder so the instance layout is still viewable
-        # for a preset/project with instance types but no preview image of its own.
-        image = preset.image
-        if image is None and len(preset.instance_types) > 0:
-            image = load_placeholder_image()
-        self.preview_pose_image_model._image = image
+        self.preview_pose_image_model._image = preset.image
         self.preview_pose_image_model._instance_types = preset.instance_types
         self.preview_pose_image_model._instances = preset.instances
         self.preview_pose_image_model.refresh()
