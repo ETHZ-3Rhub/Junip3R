@@ -42,7 +42,9 @@ including installing a specific branch or release.
 
 ```bash
 # Install in editable mode with dev dependencies (pytest, pyinstaller)
-pip install -e ".[dev]"
+uv sync
+# or, with pip >= 25.1:
+pip install -e . --group dev
 
 # Run the test suite
 pytest

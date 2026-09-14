@@ -11,10 +11,10 @@ project setup/config.
 ## Common commands
 
 ```bash
-# Install (editable, with dev deps: pytest, pyinstaller)
-pip install -e ".[dev]"
-# or, since a uv.lock is present:
+# Install (editable, with dev deps: pytest, pyinstaller), since a uv.lock is present:
 uv sync
+# or, with pip >= 25.1:
+pip install -e . --group dev
 
 # Run the full test suite (from repo root)
 pytest
