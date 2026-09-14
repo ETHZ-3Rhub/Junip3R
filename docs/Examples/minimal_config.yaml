@@ -1,16 +1,7 @@
+mode: yolo_pose
 instance_types:
 - name: mouse_top
-  points:
+  keypoints:
   - nose
-  - headcentre
-  - neck
-  - earl
-  - earr
   - bodycentre
-  - bcl
-  - bcr
-  - hipl
-  - hipr
   - tailbase
-  - tailcentre
-  - tailtip

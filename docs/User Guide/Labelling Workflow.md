@@ -1,63 +1,83 @@
-# Labelling workflow
+# Labelling Workflow
 
-Use the Labeller to create and edit instances, points, and bounding boxes for each image.
+Use the Labeller to create and edit instances and their members (keypoints, bounding
+boxes, polygons, polylines - whichever your instance types have) for each image.
 
 ## Opening the Labeller
 
-- When you start `Junip3R` and select a `config.yaml` file, the Labeller opens if image files are present in `images`.
-- From the Frame Extractor, open it by clicking **Start Labelling**.
+- From Setup: **Window -> Start Labelling** (if images are already in the project) or
+  **Add Video Frames -> ... -> Start Labelling** (to extract frames first).
+- Opening an existing project from the welcome screen also goes straight to the
+  Labeller - if the project has no images yet, it shows a prompt to add some via Frame
+  Extractor instead of the editor.
 
-## First state when the Labeller opens
-
-- The first image is loaded from `images` (alphabetical order).
-- In the instance list, **Add new instance** is selected by default.
-- If `instances` (expected instance types) are defined in `config.yaml`, the first expected type is preselected.
-- If no expected list is defined, the first configured instance type is selected.
+The first image (alphabetical order) loads with **Add new instance** selected in the
+Instances list, using the first expected instance type if any are configured (see
+[Project Setup](Project%20Setup.md#expected-instances)), otherwise the first configured
+instance type.
 
 ## Creating and deleting instances
 
-When **Add new instance** is selected:
+While **Add new instance** is selected in the Instances list:
 
-- A new instance is created automatically when you place its first point or bounding box.
-- The new instance uses the type shown in the instance type dropdown.
-- The instance receives a name and becomes the selected instance.
+- Placing a member (a keypoint, the two corners of a bounding box, ...) creates a new
+  instance of whatever type is shown in the Instance Type dropdown, names it, and
+  selects it.
 
-An instance is deleted automatically when its last point is deleted.
+An instance is deleted automatically once its last member is removed - right-clicking a
+member (see [Editing members](#editing-members) below) is usually the fastest way to
+get there. To delete a whole instance directly instead, select it in the Instances list
+and press `Delete`.
 
-You can also delete an entire instance by selecting it in the instance list and pressing the `Delete` key.
+`Ctrl+C` / `Ctrl+V` copies the selected instance and pastes a duplicate with a new id.
 
-## Point and type progression
+## Selection and type progression
 
-- After placing a point, selection advances to the next point of the same instance.
-- After placing the last point of an instance, selection moves to **Add new instance** again.
-- If expected instances are configured, the type dropdown advances to the next expected type.
+- `Up`/`Down` (or `Space`) move the current selection to the previous/next member,
+  crossing between instances and wrapping around to **Add new instance**.
+- After placing an instance's last member, selection returns to **Add new instance**;
+  if expected instances are configured, the Instance Type dropdown advances to the next
+  expected type automatically.
+- You can change the Instance Type dropdown manually at any time (normally only needed
+  when an expected instance is missing from the current image) - automatic advancing
+  picks back up from there for later instances.
+- Selecting an existing instance also lets you change *its* type from the dropdown.
+  Its members are rebuilt to match the new type: data carries over member-by-member for
+  as long as the corresponding members are still the same kind, and stops at the first
+  mismatch (or if the new type simply has fewer members) - so a type with completely
+  different members effectively starts that instance's members over. Selection resets
+  to the new type's first member.
 
-Placing the next point then creates a new instance of that currently selected type.
+## Editing members
 
-## Selecting and changing instances
+### Keypoints
 
-- Select any instance or point from the instance and point lists.
-- While **Add new instance** is selected, you can change the type for the next instance in the type dropdown.
-- If expected instances are configured, manual type changes are usually only needed when an expected instance is missing in the current frame.
-- After a manual type change, automatic type selection tries to continue following the expected list for later instances.
-
-When an existing instance is selected, you can also change its type in the dropdown.
-If the new type has fewer points, extra points at the end are removed.
-
-## Editing points and bounding boxes
-
-### Points
-
-- Place a point: left-click on the image.
-- Move a point: drag with left mouse button.
-- Delete a point: right-click the point.
+- Place: left-click. Hold `Ctrl` while clicking to place it already marked occluded.
+- Move: drag with the left mouse button.
+- Mark occluded / visible: `Ctrl` + right-click an existing keypoint to toggle it.
+- Delete: right-click the keypoint.
 
 ### Bounding boxes
 
-- Place a box: left-click once for the first corner, then left-click again for the opposite corner.
-- Delete a box: right-click inside the box area (but not on a point).
-- Move a box: not supported.
-- Replace a box: select it in the point list and place the two corners again.
+- Place: left-click for the first corner, left-click again for the opposite corner.
+- Resize/reposition: drag any corner.
+- Delete: right-click inside the box (not on a corner).
+
+### Polygons and polylines
+
+- Place: left-click each point in order.
+  - If the member has a fixed point count (set in Project Setup), it's completed
+    automatically after the last click.
+  - Otherwise, keep clicking to add points, then hold `Ctrl` and click to finish.
+- Remove the last point while still placing: right-click.
+- Delete an already-placed one: right-click it.
+
+## Other view controls
+
+- Hold `Shift` to show every member's label at once, instead of only the one under
+  your cursor.
+- If this project has video context (see [Frame Extraction](Frame%20Extraction.md)),
+  hold `Ctrl` to preview nearby frames.
 
 ## Undo and redo
 
@@ -68,12 +88,9 @@ Undo/redo history is tracked per image.
 
 ## Image navigation
 
-- Use **Next** and **Previous** buttons.
-- Or use `Left Arrow` and `Right Arrow` keys.
-- Jump to any image with the image slider.
+- Use the **Next**/**Previous** buttons, `Left`/`Right` arrow keys, or the image slider.
 
 ## Saving and output
 
-- All changes are saved automatically.
-- For each image, a matching JSON label file is written to `labels` (next to `images`).
-
+- All changes save automatically - one JSON label file per image, written to `labels`
+  (next to `images`).

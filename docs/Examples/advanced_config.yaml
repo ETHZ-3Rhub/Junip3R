@@ -1,96 +1,55 @@
+mode: yolo_pose
+
 instance_types:
-- bounding_box_type: automatic
-  name: epm
-  points:
-  - tl
-  - tr
-  - bl
-  - br
-  - lt
-  - lb
-  - rt
-  - rb
-  - ctl
-  - ctr
-  - cbl
-  - cbr
-- bounding_box_type: manual
-  name: mouse
-  points:
-  - nose
-  - headcentre
-  - neck
-  - earl
-  - earr
-  - bodycentre
-  - bcl
-  - bcr
-  - hipl
-  - hipr
-  - tailbase
-  - tailcentre
-  - tailtip
+# Automatic bounding box (the default when `bounding_box` is omitted is actually
+# "manual" - shown explicitly here for contrast with the mouse instance type below).
+# Keypoints with no explicit color are auto-assigned one, evenly spaced by hue.
+- name: epm
+  bounding_box: automatic
+  keypoints:
+  - open_arm_1
+  - open_arm_2
+  - closed_arm_1
+  - closed_arm_2
+  - center
+
+# Manual bounding box, explicit colors on the instance type, each keypoint, and the
+# skeleton.
+- name: mouse
+  bounding_box: manual
+  color: "#0000ff"
+  keypoints:
+  - name: nose
+    color: "#00ff4c"
+  - name: headcentre
+    color: "#00ff4c"
+  - name: neck
+    color: "#00ff4c"
+  - name: earl
+    color: "#0000ff"
+  - name: earr
+    color: "#ff0000"
+  - name: bodycentre
+    color: "#00ff4c"
+  - name: tailbase
+    color: "#00ff4c"
+  - name: tailtip
+    color: "#00ff4c"
   skeleton:
-  - - nose
-    - headcentre
-  - - nose
-    - earl
-  - - nose
-    - earr
-  - - earl
-    - neck
-  - - earr
-    - neck
-  - - headcentre
-    - neck
-  - - headcentre
-    - earl
-  - - headcentre
-    - earr
-  - - neck
-    - bodycentre
-  - - neck
-    - bcl
-  - - neck
-    - bcr
-  - - bodycentre
-    - bcl
-  - - bodycentre
-    - bcr
-  - - bcl
-    - hipl
-  - - bcr
-    - hipr
-  - - bodycentre
-    - hipl
-  - - bodycentre
-    - hipr
-  - - bodycentre
-    - tailbase
-  - - hipl
-    - tailbase
-  - - hipr
-    - tailbase
-  - - tailbase
-    - tailcentre
-  - - tailcentre
-    - tailtip
-  colors:
-  - "#00ff4c"
-  - "#00ff4c"
-  - "#00ff4c"
-  - "#0000ff"
-  - "#ff0000"
-  - "#00ff4c"
-  - "#0000ff"
-  - "#ff0000"
-  - "#0000ff"
-  - "#ff0000"
-  - "#00ff4c"
-  - "#00ff4c"
-  - "#00ff4c"
-  box_color: "#ff0000"
-  skeleton_color: "#999999"
+    color: "#999999"
+    lines:
+    - [nose, headcentre]
+    - [nose, earl]
+    - [nose, earr]
+    - [earl, neck]
+    - [earr, neck]
+    - [headcentre, neck]
+    - [neck, bodycentre]
+    - [bodycentre, tailbase]
+    - [tailbase, tailtip]
+
+# Expected instances per image, in order - drives the Labeller's automatic instance
+# type selection while placing instances. The same type can be listed more than once.
 instances:
 - epm
 - mouse

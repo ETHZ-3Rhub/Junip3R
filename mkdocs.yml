@@ -3,7 +3,7 @@ site_description: Multi-source video and data recording for scientific research
 site_url: https://ethz-3rhub.github.io/Junip3R
 repo_url: https://github.com/ETHZ-3Rhub/Junip3R
 repo_name: ETHZ-3Rhub/Junip3R
-edit_uri: edit/main/docs/
+edit_uri: edit/master/docs/
 
 theme:
   name: material
@@ -57,10 +57,11 @@ markdown_extensions:
 nav:
   - Home: index.md
   - User Guide:
-      - Overview: user-guide/index.md
-  - Plugin Development:
-      - Getting Started: plugin-dev/index.md
-  - Architecture: architecture/index.md
-  - API Reference: api-reference/index.md
-  - Changelog: ../CHANGELOG.md
+      - Installation: User Guide/Installation.md
+      - Quick Start: User Guide/Quick Start.md
+      - Project Setup: User Guide/Project Setup.md
+      - Frame Extraction: User Guide/Frame Extraction.md
+      - Labelling Workflow: User Guide/Labelling Workflow.md
+      - Exporting: User Guide/YOLO Export.md
+      - Troubleshooting: User Guide/Troubleshooting.md
 

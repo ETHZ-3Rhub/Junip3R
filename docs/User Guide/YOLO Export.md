@@ -4,57 +4,48 @@ Junip3R can export project data as a YOLO training dataset.
 
 ## Open the export dialog
 
-In the Labeller, open:
-
-**File -> Export as... -> YOLO Training Dataset**
+In the Labeller: **File -> Export as... -> Export as YOLO Dataset**.
 
 ## Choose the target folder
 
-- In the YOLO export dialog, click the folder button next to **Target Folder**.
-- Select the folder where the dataset should be created.
-
-## Choose how to split the dataset
-
-Use the **Train/Val split by:** dropdown to choose how data is grouped:
-
-- **Video**: all images from the same video stay in the same set
-- **Image**: each image is assigned independently
-
-Use the slider below the dropdown to choose how many videos or images go into each set.
+Click the folder button next to **Target Folder** and select where the dataset should
+be created. If the folder already has files in it, you'll be asked to confirm before
+they're overwritten.
 
 ## Choose which instance types to include
 
-In the instance type list, enable or disable types using the checkboxes.
+Check or uncheck instance types in the list - only checked types are included in the
+export.
 
-Only checked instance types are included in the exported dataset.
+By default, only images containing at least one instance of a checked type are
+exported at all. Check **Include empty images (no instances)** to export every image
+regardless.
+
+## Assign images to Train/Val
+
+The **Set Split** row shows how many images are currently assigned to each set. Click
+its icon button to open the split dialog:
+
+- **Group by** - keep entries together across the split, e.g. by video (if that's one
+  of your image tags) instead of assigning each image independently. `Image` assigns
+  every image on its own.
+- **Auto Split** - drag the slider to your target train/val ratio, then click
+  **Split Unassigned** to assign every still-unassigned group accordingly. This never
+  touches groups you've already assigned.
+- Assign a specific group by hand: change its **Set** column directly in the table
+  (Unassigned/Train/Val).
+- **Unassign All** clears every assignment and starts over.
+- **Import Set Split from File...** loads a `set_split.yaml` from elsewhere (e.g. from
+  another dataset's `meta` folder, see below) and replaces all current assignments with
+  it, after confirming.
+
+Click **OK** to save your split back to the project - it's reused automatically the
+next time you export this project, so re-exporting later (e.g. after labelling more
+images) keeps already-assigned images in the same set.
 
 ## Export the dataset
 
-Click **Export** to generate the YOLO dataset.
-
-The export uses the selected split settings and writes the dataset to the target folder.
-
-## Reusing an existing split
-
-The exported dataset includes a `set_split.txt` file that records which images or videos were assigned to each set.
-
-If you open the export dialog again and select the same target folder:
-
-- the existing split is loaded automatically
-- the same images or videos stay in the same sets
-- this helps keep training results consistent and comparable
-
-If new images or videos have been added, you can use the slider to assign the new items as well.
-
-If everything is already assigned, the slider is replaced with the message:
-
-`set is already fully split`
-
-## Using a split from another dataset folder
-
-When exporting to a different target folder, you can still reuse an older split.
-
-- Click the file button next to **Existing split file:**
-- Select the `set_split.txt` file from an existing dataset folder
-
-This applies the same split layout to the new export.
+Back in the export dialog, click **Export**. This writes the dataset to the target
+folder using your current instance type and split settings, including a `meta/set_split.yaml`
+file recording the split that was used - the same file you can point **Import Set Split
+from File...** at later, from this or another project, to reuse that exact split.

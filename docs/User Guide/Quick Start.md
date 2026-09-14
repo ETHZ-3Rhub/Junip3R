@@ -1,6 +1,8 @@
-# Quick start
+# Quick Start (Pose Estimation)
 
-This page walks through the fastest path from installation to labelled data.
+The fastest path from installing Junip3R to labelled pose-estimation data. Junip3R also
+supports object-detection-only and fully custom labelling - see
+[Project Setup](Project%20Setup.md) for those.
 
 ## 1) Install and launch Junip3R
 
@@ -8,51 +10,50 @@ Install Junip3R (portable ZIP or Python package), then start the app.
 
 - See: [Installation](Installation.md)
 
-## 2) Create a new project folder
+## 2) Create a project
 
-1. Create an empty folder for your project.
-2. Add a `config.yaml` file with at least one instance type and point list.
+On the welcome screen, click **Create a new project**.
 
-- See: [Project Setup](Project%20setup.md)
-- Example config files: [`docs/Examples/minimal_config.yaml`](../Examples/minimal_config.yaml), [`docs/Examples/advanced_config.yaml`](../Examples/advanced_config.yaml)
+- Pick `Empty`, set a **Location**, and choose **YOLO Pose Estimation** as the **Mode**.
+- Click **OK** - this opens the Setup window.
+- Add an instance type and give it a few keypoints (and a bounding box, if you want
+  one) - see [Project Setup](Project%20Setup.md#the-setup-window) for every option
+  (colors, skeleton lines, expected instances per image, previewing your layout).
 
-## 3) Open the project
+Already have a similar project? Pick **Load Existing Project...** or a saved template
+instead of `Empty`, to start from an existing config rather than from scratch.
 
-Start Junip3R and select your `config.yaml` file.
+## 3) Get images into the project
 
-- If `images` already contains image files, the Labeller opens directly.
-- If no images are present, Frame Extractor opens.
+### Path A: Extract frames from video
 
-## 4) Add images (two common paths)
-
-### Path A: Extract from videos in Frame Extractor
-
-1. Add videos.
-2. Select frames manually or automatically.
+1. From the Setup window, click **Add Video Frames**.
+2. Click **Add Videos**, then select frames manually or automatically.
 3. Click **Extract Frames**.
 4. Click **Start Labelling**.
 
-- See: [Frame extraction](Frame%20extraction.md)
+- See: [Frame Extraction](Frame%20Extraction.md)
 
-### Path B: Use existing images
+### Path B: Use images you already have
 
-1. Create an `images` folder next to `config.yaml`.
-2. Copy your image files into `images`.
-3. Open `config.yaml` in Junip3R.
+1. Copy your image files into the project's `images` folder yourself.
+2. From the Setup window, use **Window -> Start Labelling** to go straight to
+   labelling, skipping Frame Extractor.
 
-## 5) Label your data
+## 4) Label your data
 
-1. Place points and bounding boxes.
-2. Navigate through images and continue labelling.
-3. Changes are saved automatically to `labels` as JSON.
+- Click on the image to place a keypoint (or the two corners of a bounding box).
+- Navigate between images with **Next**/**Previous**, the arrow keys, or the slider.
+- Everything saves automatically to `labels` as you go.
 
-- See: [Labelling workflow](Labelling%20workflow.md)
+- See: [Labelling Workflow](Labelling%20Workflow.md) for the rest of the interactions
+  (dragging, deleting, undo/redo, changing an instance's type, and more).
 
-## 6) Export
+## 5) Export
 
-When labelling is complete, export in your target format.
+In the Labeller: **File -> Export as... -> Export as YOLO Dataset**.
 
-- See: [Exporting](YOLO Export.md)
+- See: [Exporting](YOLO%20Export.md)
 
 ## Where to go next
 
