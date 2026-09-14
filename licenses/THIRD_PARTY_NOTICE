@@ -1,0 +1,19 @@
+This application (Junip3R) is built on several third-party open-source packages, each
+under a permissive license that requires their copyright notice and license text to be
+reproduced in any distribution. The exact license text shipped by each package is
+included alongside this notice:
+
+- NumPy - BSD 3-Clause. See NUMPY_LICENSE.txt (also covers OpenBLAS, bundled by NumPy's
+  own binary distribution).
+- PyYAML - MIT. See PYYAML_LICENSE.txt.
+- scikit-learn - BSD 3-Clause. See SCIKIT_LEARN_LICENSE.txt.
+- opencv-python - MIT (the Python packaging itself). See OPENCV_PYTHON_LICENSE.txt.
+  opencv-python also redistributes a compiled OpenCV binary, itself Apache License 2.0
+  and bundling further third-party components under their own licenses (zlib, libjpeg,
+  libpng, and others). See OPENCV_THIRD_PARTY_LICENSES.txt for the complete set.
+
+PySide6 (LGPLv3) has its own notice - see PYSIDE6_NOTICE.
+
+These files reflect the license text shipped with the package versions currently
+pinned in pyproject.toml; update them if a dependency's license terms change on
+upgrade.
