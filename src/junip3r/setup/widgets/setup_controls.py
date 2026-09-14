@@ -100,7 +100,7 @@ class SetupControls(QWidget):
         self._state = state
 
         if flags & ConfigStateChangeFlags.MODE:
-            if self._state.mode == "junip3r":
+            if self._state.mode == "freeform":
                 self.tab_instance_config.setVisible(True)
             elif self._state.mode == "yolo_detect":
                 self.tab_instance_config.setVisible(False)

@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Matches the QComboBox item data set up in NewProjectWindow's mode dropdown below.
 _MODE_NAMES = {
-    ConfigMode.JUNIPER: "junip3r",
+    ConfigMode.FREEFORM: "freeform",
     ConfigMode.YOLO_DETECT: "yolo_detect",
     ConfigMode.YOLO_POSE: "yolo_pose",
 }
@@ -237,7 +237,7 @@ class NewProjectWindow(QWidget):
         self.dpd_mode = QComboBox()
         self.dpd_mode.addItem("YOLO Pose Estimation", "yolo_pose")
         self.dpd_mode.addItem("YOLO Object Detection", "yolo_detect")
-        self.dpd_mode.addItem("Junip3R", "junip3r")
+        self.dpd_mode.addItem("Freeform", "freeform")
 
         form_layout.addRow("Mode:", self.dpd_mode)
 

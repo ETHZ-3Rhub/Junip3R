@@ -41,7 +41,7 @@ def test_yolo_pose_bounding_box_and_keypoints_ordered_with_skeleton():
 
 def test_junip3r_explicit_member_colors_are_preserved():
     raw_config = {
-        "mode": "junip3r",
+        "mode": "freeform",
         "instance_types": [
             {"name": "mouse", "members": [{"name": "nose", "type": "keypoint", "color": "#ff0000"}]}
         ],
@@ -119,7 +119,7 @@ def test_yolo_pose_automatic_bounding_box_still_resolves_an_instance_type_color(
 
 def test_junip3r_instance_type_color_is_parsed():
     raw_config = {
-        "mode": "junip3r",
+        "mode": "freeform",
         "instance_types": [
             {"name": "mouse", "members": [{"name": "nose", "type": "keypoint"}], "color": "#00ff00"}
         ],

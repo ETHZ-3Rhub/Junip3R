@@ -40,7 +40,7 @@ window:
   focuses on it.
 - **YOLO Object Detection** (`yolo_detect`) - bounding boxes only, no keypoints. Each
   instance type is just a name and a color.
-- **Junip3R** (`junip3r`) - the native, unconstrained format: a freeform list of
+- **Freeform** (`freeform`) - the native, unconstrained format: a freeform list of
   members per instance type (keypoints, bounding boxes, polygons, or polylines, in any
   combination and order), for labelling tasks that don't fit the YOLO shapes above.
 
@@ -60,20 +60,20 @@ Changes here take effect immediately in the preview.
 - Drag rows to reorder them.
 - Select a row and click **Remove** to delete it.
 
-### Members (YOLO Pose Estimation and Junip3R modes)
+### Members (YOLO Pose Estimation and Freeform modes)
 
 Select an instance type to edit its members:
 
 - **YOLO Pose Estimation**: click **Add Keypoint** to add a keypoint, and use the
   **Bounding Box Mode** dropdown (**Manual** or **Automatic**) to control whether this
   instance type also has a bounding box.
-- **Junip3R**: click **Add Member** and choose **Keypoint**, **Bounding Box**,
+- **Freeform**: click **Add Member** and choose **Keypoint**, **Bounding Box**,
   **Polygon**, or **Polyline** - any combination, in any order.
 - Double-click a member's name to rename it, click its color cell to set a color (same
   Automatic/Select Color... choice as instance types), drag to reorder, and select +
   **Remove** to delete one.
 
-### Skeleton (YOLO Pose Estimation and Junip3R modes)
+### Skeleton (YOLO Pose Estimation and Freeform modes)
 
 The Skeleton tab lists connections between the selected instance type's keypoints
 (used for visualization, in the preview and in the real Labeller):
@@ -162,10 +162,10 @@ instances:
 - dog
 ```
 
-### Junip3R
+### Freeform
 
 ```yaml
-mode: junip3r
+mode: freeform
 instance_types:
 - name: mouse
   color: "#0000ff"

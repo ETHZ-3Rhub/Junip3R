@@ -143,7 +143,7 @@ class YoloPoseInstanceTypeSerializer:
         return InstanceTypeConfig(name=name, members=keypoints, skeleton=skeleton, color=color, bounding_box=bounding_box)
 
 
-class JuniperInstanceTypeSerializer:
+class FreeformInstanceTypeSerializer:
     @classmethod
     def serialize(cls, instance_type: InstanceTypeConfig) -> Dict[str, Any]:
         instance_dict: Dict[str, Any] = {"name": instance_type.name}
@@ -241,8 +241,8 @@ class ConfigSerializer:
                 instance_type_serializer = YoloDetectInstanceTypeSerializer
             case ConfigMode.YOLO_POSE:
                 instance_type_serializer = YoloPoseInstanceTypeSerializer
-            case ConfigMode.JUNIPER:
-                instance_type_serializer = JuniperInstanceTypeSerializer
+            case ConfigMode.FREEFORM:
+                instance_type_serializer = FreeformInstanceTypeSerializer
             case _:
                 raise Exception(f"Unknown mode: {mode}")
 
@@ -266,8 +266,8 @@ class ConfigSerializer:
                 instance_type_serializer = YoloDetectInstanceTypeSerializer
             case ConfigMode.YOLO_POSE:
                 instance_type_serializer = YoloPoseInstanceTypeSerializer
-            case ConfigMode.JUNIPER:
-                instance_type_serializer = JuniperInstanceTypeSerializer
+            case ConfigMode.FREEFORM:
+                instance_type_serializer = FreeformInstanceTypeSerializer
             case _:
                 raise Exception(f"Unknown mode: {mode}")
 
@@ -295,7 +295,7 @@ class ConfigSerializer:
                 break
 
         if mode is None:
-            mode = "junip3r"
+            mode = "freeform"
 
         return mode
 
@@ -333,8 +333,8 @@ class ConfigSerializer:
             return "yolo_detect"
         elif mode == ConfigMode.YOLO_POSE:
             return "yolo_pose"
-        elif mode == ConfigMode.JUNIPER:
-            return "junip3r"
+        elif mode == ConfigMode.FREEFORM:
+            return "freeform"
         else:
             raise Exception(f"Unknown mode: {mode}")
 
@@ -344,7 +344,7 @@ class ConfigSerializer:
                 return ConfigMode.YOLO_DETECT
             case "yolo_pose":
                 return ConfigMode.YOLO_POSE
-            case "junip3r":
-                return ConfigMode.JUNIPER
+            case "freeform":
+                return ConfigMode.FREEFORM
             case _:
                 raise Exception(f"Unknown mode: {mode_name}")

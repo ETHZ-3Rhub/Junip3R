@@ -16,7 +16,7 @@ class ConfigStateChangeFlags(IntFlag):
 
 @dataclass(frozen=True)
 class ConfigState:
-    mode: str = "junip3r"
+    mode: str = "freeform"
     instance_types: Sequence[SetupInstanceType] = ()
     selection: Optional[str] = None
 

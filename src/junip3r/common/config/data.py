@@ -31,13 +31,13 @@ class InstanceTypeConfig:
     color: Optional[Color] = None
 
     # YOLO_POSE only ("manual" vs "automatic" in that mode's wire format) - ignored for
-    # JUNIPER (a bounding box there is just a freeform member, arbitrary position/name/
+    # FREEFORM (a bounding box there is just a freeform member, arbitrary position/name/
     # count) and YOLO_DETECT (unconditional single bbox member, no flag needed).
     bounding_box: bool = False
 
 
 @dataclass(frozen=True)
 class Config:
-    mode: ConfigMode = ConfigMode.JUNIPER
+    mode: ConfigMode = ConfigMode.FREEFORM
     instance_types: Sequence[InstanceTypeConfig] = ()
     expected_instance_types: Sequence[InstanceTypeConfig] = ()

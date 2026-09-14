@@ -25,8 +25,8 @@ class InstanceTypeResolver:
     def resolve_instance_type(self, instance_type: InstanceTypeConfig, index: int, num_instance_types: int) -> InstanceType:
         color = self._resolve_instance_type_color(instance_type, index, num_instance_types)
 
-        if self._mode == ConfigMode.JUNIPER:
-            members = self._build_members_junip3r(instance_type.members)
+        if self._mode == ConfigMode.FREEFORM:
+            members = self._build_members_freeform(instance_type.members)
         elif self._mode == ConfigMode.YOLO_POSE:
             members = self._build_members_yolo_pose(instance_type.members, instance_type.bounding_box, color, instance_type.id)
         elif self._mode == ConfigMode.YOLO_DETECT:
@@ -44,7 +44,7 @@ class InstanceTypeResolver:
     def _resolve_color(self, member: MemberConfig, default: Color) -> Color:
         return member.color if member.color is not None else default
 
-    def _build_members_junip3r(self, members: Sequence[MemberConfig]) -> List[MemberType]:
+    def _build_members_freeform(self, members: Sequence[MemberConfig]) -> List[MemberType]:
         num_members = len(members)
         return [
             MemberType(

@@ -119,11 +119,11 @@ class SetupInstanceType:
             # icon (expected_instance_list.py) as one just created in this session.
             return cls(id=config.id, name=config.name, color=config.color, bounding_box=True)
 
-        # JUNIPER: fully freeform - a bounding-box-typed member (if any) is just a
+        # FREEFORM: fully freeform - a bounding-box-typed member (if any) is just a
         # regular member, at whatever position/name the user gave it. No sniffing: the
-        # manual/automatic `bounding_box` flag is a YOLO_POSE-only concept - JUNIPER's
+        # manual/automatic `bounding_box` flag is a YOLO_POSE-only concept - FREEFORM's
         # own UI never shows or sets it (setup_member_list.py hides that toggle for
-        # this mode), so it stays at its default, unused, for every JUNIPER instance.
+        # this mode), so it stays at its default, unused, for every FREEFORM instance.
         members = [SetupMember.from_config(m) for m in config.members]
         skeleton = SetupSkeleton.from_config(config.skeleton)
         return cls(id=config.id, name=config.name, members=members, skeleton=skeleton, color=config.color)
@@ -140,7 +140,7 @@ class SetupInstanceType:
         if mode == ConfigMode.YOLO_DETECT:
             return InstanceTypeConfig(name=instance_type.name, color=instance_type.color, id=instance_type.id)
 
-        # JUNIPER: pure passthrough - see the matching comment in from_config.
+        # FREEFORM: pure passthrough - see the matching comment in from_config.
         members = [SetupMember.to_config(m) for m in instance_type.members]
         skeleton = SetupSkeleton.to_config(instance_type.skeleton)
         return InstanceTypeConfig(name=instance_type.name, members=members, skeleton=skeleton,
@@ -188,7 +188,7 @@ class SetupInstanceType:
 
 @dataclass(frozen=True)
 class SetupConfig:
-    mode: ConfigMode = ConfigMode.JUNIPER
+    mode: ConfigMode = ConfigMode.FREEFORM
     instance_types: Sequence[SetupInstanceType] = ()
     expected_instance_types: Sequence[Tuple[str, SetupInstanceType]] = ()
 

@@ -296,7 +296,7 @@ class InstanceTypeList(QWidget):
         self._state = state
 
         if flags & ConfigStateChangeFlags.MODE:
-            if self._state.mode == "junip3r":
+            if self._state.mode == "freeform":
                 self.btn_add_instance_type.setVisible(False)
                 self.btn_add_instance_type_detect.setVisible(True)
             elif self._state.mode == "yolo_detect":

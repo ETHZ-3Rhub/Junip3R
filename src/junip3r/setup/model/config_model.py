@@ -35,8 +35,8 @@ class ConfigModel(QObject):
     @property
     def state(self) -> ConfigState:
         match self._mode:
-            case ConfigMode.JUNIPER:
-                mode = "junip3r"
+            case ConfigMode.FREEFORM:
+                mode = "freeform"
             case ConfigMode.YOLO_DETECT:
                 mode = "yolo_detect"
             case ConfigMode.YOLO_POSE:

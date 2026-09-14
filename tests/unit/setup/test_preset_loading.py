@@ -4,7 +4,7 @@ import yaml
 from junip3r.setup.widgets.new_project_window import load_preset, load_project_as_preset, load_saved_preset
 
 
-def _write_config(path, mode="junip3r"):
+def _write_config(path, mode="freeform"):
     path.write_text(yaml.dump({"mode": mode, "instance_types": [], "instances": []}))
 
 

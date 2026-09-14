@@ -84,8 +84,8 @@ def test_instance_type_from_config_to_config_round_trip():
         skeleton=SkeletonConfig(lines=[(0, 1)], color=(9, 9, 9)),
     )
 
-    instance_type = SetupInstanceType.from_config(config, ConfigMode.JUNIPER)
-    round_tripped = SetupInstanceType.to_config(instance_type, ConfigMode.JUNIPER)
+    instance_type = SetupInstanceType.from_config(config, ConfigMode.FREEFORM)
+    round_tripped = SetupInstanceType.to_config(instance_type, ConfigMode.FREEFORM)
 
     assert round_tripped.name == "mouse"
     assert [m.name for m in round_tripped.members] == ["nose", "tail"]
@@ -133,10 +133,10 @@ def test_instance_type_with_color_is_an_immutable_update():
     assert instance_type.color is None
 
 
-# --- SetupInstanceType for JUNIPER: fully freeform, no bounding-box sniffing ----------
+# --- SetupInstanceType for FREEFORM: fully freeform, no bounding-box sniffing ----------
 
 def test_junip3r_from_config_leaves_a_bounding_box_member_in_place():
-    # JUNIPER's UI never shows the manual/automatic toggle - a bounding-box-typed
+    # FREEFORM's UI never shows the manual/automatic toggle - a bounding-box-typed
     # member is just a regular member, wherever the user put it, name and all.
     config = InstanceTypeConfig(
         name="mouse",
@@ -145,7 +145,7 @@ def test_junip3r_from_config_leaves_a_bounding_box_member_in_place():
         color=(1, 2, 3),
     )
 
-    instance_type = SetupInstanceType.from_config(config, ConfigMode.JUNIPER)
+    instance_type = SetupInstanceType.from_config(config, ConfigMode.FREEFORM)
 
     assert instance_type.bounding_box is False
     assert instance_type.color == (1, 2, 3)
@@ -161,7 +161,7 @@ def test_junip3r_to_config_passes_members_through_unchanged():
         color=(1, 2, 3),
     )
 
-    config = SetupInstanceType.to_config(instance_type, ConfigMode.JUNIPER)
+    config = SetupInstanceType.to_config(instance_type, ConfigMode.FREEFORM)
 
     assert [(m.type, m.name) for m in config.members] == [
         (LabellerObjectType.BOUNDING_BOX, "box"), (LabellerObjectType.KEYPOINT, "nose"),
@@ -178,11 +178,11 @@ def test_junip3r_bounding_box_member_round_trips_its_own_skeleton_position():
         skeleton=SetupSkeleton(lines=[("box", "nose")]),
     )
 
-    config = SetupInstanceType.to_config(instance_type, ConfigMode.JUNIPER)
+    config = SetupInstanceType.to_config(instance_type, ConfigMode.FREEFORM)
     # Pure passthrough - no index/id translation, member ids are carried verbatim.
     assert config.skeleton.lines == [("box", "nose")]
 
-    round_tripped = SetupInstanceType.from_config(config, ConfigMode.JUNIPER)
+    round_tripped = SetupInstanceType.from_config(config, ConfigMode.FREEFORM)
     assert round_tripped.bounding_box is False
     assert [m.id for m in round_tripped.members] == ["box", "nose"]
     assert round_tripped.skeleton.lines == [("box", "nose")]
@@ -273,17 +273,17 @@ def test_yolo_detect_from_config_always_sets_bounding_box():
 def test_setup_config_from_config_to_config_round_trip():
     mouse = InstanceTypeConfig(name="mouse", members=[_member_config("nose")], skeleton=SkeletonConfig())
     cat = InstanceTypeConfig(name="cat", members=[_member_config("ear")], skeleton=SkeletonConfig())
-    config = Config(mode=ConfigMode.JUNIPER, instance_types=[mouse, cat], expected_instance_types=[mouse])
+    config = Config(mode=ConfigMode.FREEFORM, instance_types=[mouse, cat], expected_instance_types=[mouse])
 
     setup_config = SetupConfig.from_config(config)
 
-    assert setup_config.mode == ConfigMode.JUNIPER
+    assert setup_config.mode == ConfigMode.FREEFORM
     assert [it.name for it in setup_config.instance_types] == ["mouse", "cat"]
     assert len(setup_config.expected_instance_types) == 1
     expected_id, expected_instance_type = setup_config.expected_instance_types[0]
     assert expected_instance_type.name == "mouse"
 
     round_tripped = SetupConfig.to_config(setup_config)
-    assert round_tripped.mode == ConfigMode.JUNIPER
+    assert round_tripped.mode == ConfigMode.FREEFORM
     assert [it.name for it in round_tripped.instance_types] == ["mouse", "cat"]
     assert [it.name for it in round_tripped.expected_instance_types] == ["mouse"]

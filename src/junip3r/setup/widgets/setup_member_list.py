@@ -336,7 +336,7 @@ class MemberList(QWidget):
         self._state = state
 
         if flags & ConfigStateChangeFlags.MODE:
-            if self._state.mode == "junip3r":
+            if self._state.mode == "freeform":
                 self.frm_bounding_box.setVisible(False)
                 self.btn_add_member.setVisible(True)
                 self.btn_add_keypoint.setVisible(False)

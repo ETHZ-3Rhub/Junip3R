@@ -242,7 +242,7 @@ class SetupMainWindow(QMainWindow):
         self.closed.emit()
 
 
-_MODE_BY_STRING = {"junip3r": ConfigMode.JUNIPER, "yolo_pose": ConfigMode.YOLO_POSE, "yolo_detect": ConfigMode.YOLO_DETECT}
+_MODE_BY_STRING = {"freeform": ConfigMode.FREEFORM, "yolo_pose": ConfigMode.YOLO_POSE, "yolo_detect": ConfigMode.YOLO_DETECT}
 
 
 def resolve_instance_types(instance_types: Sequence[ISetupInstanceType], mode: str) -> List[InstanceType]:

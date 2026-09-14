@@ -8,7 +8,7 @@ def test_serialize_junip3r_round_trips_through_deserialize():
     nose = MemberConfig(id="nose", type=LabellerObjectType.KEYPOINT, name="nose", color=(255, 0, 0))
     tail = MemberConfig(id="tail", type=LabellerObjectType.KEYPOINT, name="tail", color=(0, 255, 0))
     config = Config(
-        mode=ConfigMode.JUNIPER,
+        mode=ConfigMode.FREEFORM,
         instance_types=[
             InstanceTypeConfig(
                 name="mouse",
@@ -23,7 +23,7 @@ def test_serialize_junip3r_round_trips_through_deserialize():
     config_dict = serializer.serialize(config)
     round_tripped = serializer.deserialize(config_dict)
 
-    assert round_tripped.mode == ConfigMode.JUNIPER
+    assert round_tripped.mode == ConfigMode.FREEFORM
     mouse = round_tripped.instance_types[0]
     assert [m.name for m in mouse.members] == ["nose", "tail"]
     assert [m.color for m in mouse.members] == [(255, 0, 0), (0, 255, 0)]
@@ -100,7 +100,7 @@ def test_yolo_pose_color_round_trips_through_deserialize_for_both_bounding_box_m
 
 def test_serialize_junip3r_includes_color_when_set():
     config = Config(
-        mode=ConfigMode.JUNIPER,
+        mode=ConfigMode.FREEFORM,
         instance_types=[InstanceTypeConfig(name="mouse", color=(0, 255, 0))],
     )
 
