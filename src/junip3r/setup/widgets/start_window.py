@@ -4,7 +4,6 @@ from PySide6 import QtWidgets
 from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
-    QApplication,
     QCommandLinkButton,
     QFrame,
     QLabel,
@@ -178,17 +177,3 @@ class StartWindow(QWidget):
         if dialog.exec():
             config_file = dialog.selectedFiles()[0]
             self.open_project_requested.emit(config_file)
-
-
-if __name__ == "__main__":
-    app = QApplication([])
-
-    window = StartWindow(
-        recent_projects=[
-            r"C:\Projects\MousePoseStudy",
-            r"C:\Projects\PilotDataset",
-        ]
-    )
-    window.show()
-
-    app.exec()

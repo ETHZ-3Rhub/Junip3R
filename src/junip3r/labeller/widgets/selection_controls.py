@@ -3,7 +3,7 @@ from typing import Dict, Optional, Sequence, Hashable
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, Signal
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QSplitter, QLabel, \
-    QListView, QComboBox, QApplication, QSizePolicy
+    QListView, QComboBox, QSizePolicy
 
 from junip3r.common.config.abc import ConfigMode
 from junip3r.common.icons import ColorIcon, make_keypoint_icon, make_bounding_box_icon, make_polygon_icon, make_polyline_icon
@@ -331,13 +331,3 @@ class SelectionControls(QWidget):
                 event.ignore()
                 return True
         return False
-
-
-if __name__ == "__main__":
-    app = QApplication([])
-    icon = make_polygon_icon((255, 0, 0), size=16, num_points=5)
-    image = QLabel()
-    image.setPixmap(icon.pixmap(320, 320))
-    image.show()
-
-    app.exec_()

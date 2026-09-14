@@ -137,10 +137,3 @@ class LabelSerializer:
                 raise ValueError(f"Unsupported member type: {member_type}")
             members.append(member)
         return Instance(instance_id, instance_type, name, members)
-
-
-if __name__ == "__main__":
-    loader = LabelSerializer()
-    label_file = Path("C:/Users/Me/Projects/Py3RPose/homecage_test_4_tracked/group1_right.mp4")
-    instances = loader.load_instances(label_file)
-    print(instances)

@@ -1,6 +1,5 @@
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List, Mapping
+from typing import Optional, List
 
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, QTimer, Signal, QObject
 from PySide6.QtGui import QIcon
@@ -580,53 +579,3 @@ class SetSplitDialog(QDialog):
 
         self._model.set_config(config)
         self.dpd_grouping.setCurrentIndex(self.dpd_grouping.findData(self._model.grouping))
-
-
-if __name__ == "__main__":
-    import sys
-    from PySide6.QtWidgets import QApplication
-
-    @dataclass
-    class TaggedImage:
-        name: str
-        tags: Mapping[str, str]
-
-
-    images = [
-        TaggedImage("video1_frame1.jpg", {"video": "video1", "animal": "a123"}),
-        TaggedImage("video1_frame2.jpg", {"video": "video1", "animal": "a123"}),
-        TaggedImage("video2_frame1.jpg", {"video": "video2", "animal": "a123"}),
-        TaggedImage("video2_frame2.jpg", {"video": "video2", "animal": "a123"}),
-        TaggedImage("video3_frame1.jpg", {"video": "video3", "animal": "a223"}),
-        TaggedImage("video3_frame2.jpg", {"video": "video3", "animal": "a223"}),
-        TaggedImage("video4_frame1.jpg", {"video": "video4", "animal": "a223"}),
-        TaggedImage("video4_frame2.jpg", {"video": "video4", "animal": "a223"}),
-        TaggedImage("img1.jpg", {}),
-        TaggedImage("img2.jpg", {"animal": "a123"}),
-    ]
-
-    class MyButton(QPushButton):
-        def __init__(self, parent=None):
-            super().__init__(parent)
-            self.clicked.connect(self._open_split_dialog)
-
-            self._config = None
-
-        def _open_split_dialog(self):
-            dialog = SetSplitDialog(images, self._config)
-            dialog.exec()
-
-            self._config = dialog._model.config
-            print(self._config)
-
-    app = QApplication(sys.argv)
-    #dialog = SetSplitDialog(images)
-    #dialog.show()
-
-    main = MyButton("Test")
-
-    main.show()
-
-
-
-    sys.exit(app.exec_())

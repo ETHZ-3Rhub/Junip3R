@@ -457,30 +457,3 @@ class YoloExportDialog(QDialog):
     @Slot()
     def _on_export_canceled(self):
         self._cleanup_export_progress()
-
-
-if __name__ == "__main__":
-    import sys
-    from PySide6.QtWidgets import QApplication
-
-    class _DemoModel:
-        def get_num_images(self):
-            return 0
-
-        def get_image_name(self, image_index):
-            raise IndexError(image_index)
-
-        def get_instance_types(self, image_index):
-            return []
-
-    class _DemoSetSplitRepository:
-        def get(self):
-            return SetSplitConfig()
-
-        def set(self, config):
-            pass
-
-    app = QApplication(sys.argv)
-    dialog = YoloExportDialog(_DemoModel(), _DemoSetSplitRepository())
-    dialog.show()
-    sys.exit(app.exec_())
