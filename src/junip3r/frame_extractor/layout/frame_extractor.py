@@ -11,12 +11,12 @@ from junip3r.frame_extractor.widgets.video_player import VideoPlayer
 
 
 class FrameExtractorLayout(QMainWindow):
+    action_open_setup: QAction
     action_open_labeller: QAction
 
     btn_add_videos: QPushButton
     video_list: VideoList
     selection_controls: SelectionControls
-    btn_open_setup: QPushButton
 
     video_player: VideoPlayer
 
@@ -35,7 +35,8 @@ class FrameExtractorLayout(QMainWindow):
         self.setAcceptDrops(True)
         self.setWindowTitle("Junip3R Frame Extractor")
 
-        self.action_open_labeller = QAction("Start Labelling", self)
+        self.action_open_setup = QAction("Open Project Setup", self)
+        self.action_open_labeller = QAction("Open Labeller", self)
 
         central_widget = QWidget(self)
         horizontal_layout = QHBoxLayout(central_widget)
@@ -55,6 +56,7 @@ class FrameExtractorLayout(QMainWindow):
 
         self.menubar = self.menuBar()
         self.menu_window = self.menubar.addMenu("Window")
+        self.menu_window.addAction(self.action_open_setup)
         self.menu_window.addAction(self.action_open_labeller)
 
         self.statusbar = QStatusBar(self)
@@ -82,9 +84,6 @@ class FrameExtractorLayout(QMainWindow):
         self.selection_controls = SelectionControls(frame)
         layout.addWidget(self.selection_controls)
 
-        self.btn_open_setup = QPushButton("⬅ Return to Setup", frame)
-        layout.addWidget(self.btn_open_setup)
-
         return frame
 
     def _build_frame_pane(self, parent: QWidget) -> QFrame:
@@ -107,7 +106,7 @@ class FrameExtractorLayout(QMainWindow):
         self.extraction_controls = ExtractionControls(frame)
         layout.addWidget(self.extraction_controls)
 
-        self.btn_open_labeller = QPushButton("Start Labelling ⮕", frame)
+        self.btn_open_labeller = QPushButton("Next: Start Labelling \u2b95", frame)
         layout.addWidget(self.btn_open_labeller)
 
         return frame

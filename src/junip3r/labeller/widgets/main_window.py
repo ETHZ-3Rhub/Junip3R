@@ -17,10 +17,10 @@ class EditorMainWindow(EditorMainWindowLayout):
     switch_to = Signal(str)
     closed = Signal()
 
-    def __init__(self, show_frame_extractor: bool = False, parent=None):
-        super().__init__(show_frame_extractor, parent)
+    def __init__(self, integrated: bool = False, parent=None):
+        super().__init__(integrated, parent)
 
-        self.show_frame_extractor = show_frame_extractor
+        self.show_frame_extractor = integrated
         self._model: Optional[AppModel] = None
         self._context_model: Optional[ContextModel] = None
         self._set_split_repository: Optional[ISetSplitRepository] = None
@@ -28,7 +28,7 @@ class EditorMainWindow(EditorMainWindowLayout):
         self.action_export_as_yolo_dataset.triggered.connect(self.export_yolo_dataset)
 
         if self.show_frame_extractor:
-            self.action_switch_to_frame_extractor.triggered.connect(self.switch_to_frame_extractor)
+            self.action_open_frame_extractor.triggered.connect(self.switch_to_frame_extractor)
             self.btn_open_frame_extractor.clicked.connect(self.switch_to_frame_extractor)
         else:
             self.btn_open_frame_extractor.hide()

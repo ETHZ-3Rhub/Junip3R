@@ -12,7 +12,7 @@ class EditorMainWindowLayout(QMainWindow):
     btn_open_frame_extractor: QPushButton
 
     action_export_as_yolo_dataset: QAction
-    action_switch_to_frame_extractor: QAction
+    action_open_frame_extractor: QAction
 
     def __init__(self, show_frame_extractor: bool = False, parent=None):
         super().__init__(parent)
@@ -28,10 +28,10 @@ class EditorMainWindowLayout(QMainWindow):
         self.action_export_as_yolo_dataset = QAction("Export as YOLO Dataset", self)
         export_menu.addAction(self.action_export_as_yolo_dataset)
 
-        self.action_switch_to_frame_extractor = QAction("Add Video Frames", self)
+        self.action_open_frame_extractor = QAction("Add Video Frames", self)
         if show_frame_extractor:
             window_menu = menu_bar.addMenu("Window")
-            window_menu.addAction(self.action_switch_to_frame_extractor)
+            window_menu.addAction(self.action_open_frame_extractor)
 
         self.stk_content = QStackedWidget(self)
 

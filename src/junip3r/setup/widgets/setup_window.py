@@ -57,13 +57,13 @@ class SetupMainWindow(QMainWindow):
         self.file_menu = menu_bar.addMenu("File")
         self.action_save_as_template = self.file_menu.addAction("Save as Template...")
 
-        self.action_switch_to_frame_extractor = QAction("Add Video Frames", self)
-        self.action_switch_to_labeller = QAction("Start Labelling", self)
+        self.action_open_frame_extractor = QAction("Add Video Frames", self)
+        self.action_open_labeller = QAction("Start Labelling", self)
 
         if integrated:
             self.window_menu = menu_bar.addMenu("Window")
-            self.window_menu.addAction(self.action_switch_to_frame_extractor)
-            self.window_menu.addAction(self.action_switch_to_labeller)
+            self.window_menu.addAction(self.action_open_frame_extractor)
+            self.window_menu.addAction(self.action_open_labeller)
 
         content = QWidget()
         content_layout = QVBoxLayout(content)
@@ -88,11 +88,11 @@ class SetupMainWindow(QMainWindow):
         self.btn_choose_preview_image.clicked.connect(self._choose_preview_image)
         right_layout.addWidget(self.btn_choose_preview_image)
 
-        self.btn_open_preview = QPushButton("Open Preview \u2b95")
+        self.btn_open_preview = QPushButton("Open Preview...")
         self.btn_open_preview.clicked.connect(self._open_preview)
         right_layout.addWidget(self.btn_open_preview)
 
-        self.btn_open_frame_extractor = QPushButton(u"Add Video Frames \u2b95")
+        self.btn_open_frame_extractor = QPushButton(u"Next: Add Video Frames \u2b95")
         self.btn_open_frame_extractor.clicked.connect(self._switch_to_frame_extractor)
         right_layout.addWidget(self.btn_open_frame_extractor)
 
@@ -106,8 +106,8 @@ class SetupMainWindow(QMainWindow):
         self.preview_window.set_model(self.preview_pose_image_model)
         self.preview_window.set_mode(self._model.mode)
 
-        self.action_switch_to_frame_extractor.triggered.connect(self._switch_to_frame_extractor)
-        self.action_switch_to_labeller.triggered.connect(self._switch_to_labeller)
+        self.action_open_frame_extractor.triggered.connect(self._switch_to_frame_extractor)
+        self.action_open_labeller.triggered.connect(self._switch_to_labeller)
         self.action_save_as_template.triggered.connect(self._save_as_template)
 
         self._model.changed.connect(self.setup_controls.set_state)

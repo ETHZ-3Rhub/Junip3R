@@ -56,7 +56,7 @@ def from_config_file(config_file: Path, integrated: bool = False) -> EditorMainW
 
     app_model = AppModel(image_repository, label_model, SelectionRepository(), tag_repository=tag_repository)
 
-    editor = EditorMainWindow(show_frame_extractor=integrated)
+    editor = EditorMainWindow(integrated=integrated)
     editor.set_model(app_model, context_repository, image_settings_model)
     editor.set_mode(labeller_config.mode)
     editor.set_set_split_repository(set_split_repository)

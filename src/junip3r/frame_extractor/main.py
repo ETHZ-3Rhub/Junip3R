@@ -27,7 +27,7 @@ def from_config_file(config_file: Path, integrated: bool = False, parent=None) -
 
     model = FrameExtractorModel(video_repository, frame_repository, tag_repository)
 
-    frame_extractor = FrameExtractor(show_labeller=integrated, parent=parent)
+    frame_extractor = FrameExtractor(integrated=integrated, parent=parent)
     frame_extractor.set_model(model)
     frame_extractor.set_project_folder(project_folder)
 

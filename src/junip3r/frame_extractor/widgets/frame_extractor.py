@@ -22,18 +22,19 @@ class FrameExtractor(FrameExtractorLayout):
     selection_requested = Signal(SelectionJob)
     extraction_requested = Signal(ExtractionJob)
 
-    def __init__(self, show_labeller: bool = False, parent=None):
+    def __init__(self, integrated: bool = False, parent=None):
         super().__init__(parent)
 
         self.window_action = next(a for a in self.menubar.actions() if a.menu() and a.menu().title() == "Window")
-        self.window_action.setVisible(show_labeller)
-        self.action_open_labeller.setVisible(show_labeller)
+        self.window_action.setVisible(integrated)
+
+        self.action_open_setup.setVisible(integrated)
+        self.action_open_setup.triggered.connect(self.open_setup)
+
+        self.action_open_labeller.setVisible(integrated)
         self.action_open_labeller.triggered.connect(self.open_labeller)
 
-        self.btn_open_setup.setVisible(show_labeller)
-        self.btn_open_setup.clicked.connect(self.open_setup)
-
-        self.btn_open_labeller.setVisible(show_labeller)
+        self.btn_open_labeller.setVisible(integrated)
         self.btn_open_labeller.clicked.connect(self.open_labeller)
 
         self.project_folder: Optional[Path] = None
