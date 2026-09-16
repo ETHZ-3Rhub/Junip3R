@@ -156,3 +156,20 @@ def test_read_only_model_blocks_mutations_but_allows_navigation_and_selection():
 
     # No synthesized "Add new instance" placeholder in read-only mode.
     assert [i.instance_id for i in model.get_instances()] == ["i1"]
+
+
+def test_read_only_model_defaults_selection_to_first_real_instance_on_load():
+    type_a = _instance_type("mouse", [MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))])
+    config = FakeConfigRepository([type_a])
+    raw_labels = FakeRawLabelRepository()
+    label_model = LabelModel(config, raw_labels)
+    app_model = AppModel(FakeImageRepository(), label_model, FakeSelectionRepository())
+    instance = new_instance(type_a, "i1", "Mouse 1")
+    app_model.insert_instance(0, instance)
+
+    # There's no "new instance" placeholder to default to in read-only mode (see
+    # PoseImageModel._new_instance) - without a fallback, nothing would be selected on
+    # load and the member/instance-type panels would show empty despite real data.
+    model = PoseImageModel(app_model, read_only=True)
+
+    assert model.get_selection() == ("i1", instance.members[0].id)

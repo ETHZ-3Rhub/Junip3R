@@ -412,9 +412,15 @@ class PoseImageModel(QObject):
             self._model.set_new_instance_type(image_index, new_instance_type)
 
         selection = self.get_selection()
-        if selection is None and self._new_instance is not None and self._new_instance.members:
-            selection = (self._new_instance.instance_id, self._new_instance.members[0].id)
-            self._model.set_selection(self._image_index, selection)
+        if selection is None:
+            # Normally defaults to the "new instance" placeholder, so there's always a
+            # sensible default focus ready to draw into. Read-only mode never has one
+            # (_new_instance is always None there - see its property), so fall back to
+            # the image's first real instance instead of leaving nothing selected.
+            default_target = self._new_instance or next(iter(self._model.get_instances(self._image_index)), None)
+            if default_target is not None and default_target.members:
+                selection = (default_target.instance_id, default_target.members[0].id)
+                self._model.set_selection(self._image_index, selection)
 
         self.set_flags(self._image_index, ImageStateChangeFlags.ALL)
         self._flush()
