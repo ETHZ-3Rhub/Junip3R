@@ -132,3 +132,27 @@ def test_select_instance_type_change_and_selection_reset_undo_as_one_step():
 
     assert model.get_selection() == old_selection
     assert model.get_instance("i1").instance_type.name == "mouse"
+
+
+def test_read_only_model_blocks_mutations_but_allows_navigation_and_selection():
+    type_a = _instance_type("mouse", [MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))])
+    config = FakeConfigRepository([type_a])
+    raw_labels = FakeRawLabelRepository()
+    label_model = LabelModel(config, raw_labels)
+    app_model = AppModel(FakeImageRepository(), label_model, FakeSelectionRepository())
+    instance = new_instance(type_a, "i1", "Mouse 1")
+    app_model.insert_instance(0, instance)
+
+    model = PoseImageModel(app_model, read_only=True)
+
+    model.place_keypoint("i1", instance.members[0].id, (0.5, 0.5))
+    assert app_model.get_instance(0, "i1").members[0].p is None  # mutation was blocked
+
+    model.select_instance("i1")
+    assert model.get_selection() == ("i1", instance.members[0].id)  # selection still works
+
+    model.rename_instance("i1", "New Name")
+    assert app_model.get_instance(0, "i1").name == "Mouse 1"  # rename was blocked
+
+    # No synthesized "Add new instance" placeholder in read-only mode.
+    assert [i.instance_id for i in model.get_instances()] == ["i1"]

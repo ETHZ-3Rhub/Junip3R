@@ -21,10 +21,11 @@ class PoseImageModel(QObject):
     image_state_changed = Signal(ImageState, ImageStateChangeFlags)
     image_navigation_state_changed = Signal(ImageNavigationState)
 
-    def __init__(self, model: AppModel, parent=None):
+    def __init__(self, model: AppModel, read_only: bool = False, parent=None):
         super().__init__(parent)
 
         self._model = model
+        self._read_only = read_only
 
         self._member_selection_strategy = EditorMemberSelectionStrategy()
 
@@ -97,7 +98,13 @@ class PoseImageModel(QObject):
         return self._cached_image
 
     @property
+    def read_only(self) -> bool:
+        return self._read_only
+
+    @property
     def _new_instance(self) -> Instance | None:
+        if self._read_only:
+            return None
         new_instance_type = self._model.get_new_instance_type(self._image_index)
         if new_instance_type is None:
             return None
@@ -144,6 +151,8 @@ class PoseImageModel(QObject):
         return self.get_member(instance_id, member_id)
 
     def place_keypoint(self, instance_id: InstanceID, member_id: MemberID, p: Point, visibility: float = 2.0):
+        if self._read_only:
+            return
         with self.macro("Place Keypoint"):
             if instance_id is None:
                 instance_id = self._create_new_instance()
@@ -153,6 +162,8 @@ class PoseImageModel(QObject):
         self._flush()
 
     def move_keypoint(self, instance_id: InstanceID, member_id: MemberID, p: Point):
+        if self._read_only:
+            return
         assert instance_id is not None, "Instance ID should not be None"
         member = cast(Optional[Keypoint], self.get_member(instance_id, member_id))
         if member is None:
@@ -162,6 +173,8 @@ class PoseImageModel(QObject):
         self._flush()
 
     def set_keypoint_visibility(self, instance_id: InstanceID, member_id: MemberID, visibility: float):
+        if self._read_only:
+            return
         assert instance_id is not None, "Instance ID should not be None"
         member = cast(Optional[Keypoint], self.get_member(instance_id, member_id))
         if member is None or member.p is None:
@@ -170,6 +183,8 @@ class PoseImageModel(QObject):
         self._flush()
 
     def delete_keypoint(self, instance_id: InstanceID, member_id: MemberID):
+        if self._read_only:
+            return
         assert instance_id is not None, "Instance ID should not be None"
         with self.macro("Delete Keypoint"):
             self._set_keypoint(instance_id, member_id, None, 0.0)
@@ -177,6 +192,8 @@ class PoseImageModel(QObject):
         self._flush()
 
     def _place_bounding_box(self, instance_id: InstanceID, member_id: MemberID, box: Optional[Box]):
+        if self._read_only:
+            return
         with self.macro("Place Bounding Box"):
             if instance_id is None:
                 instance_id = self._create_new_instance()
@@ -199,10 +216,14 @@ class PoseImageModel(QObject):
         self._set_bounding_box(instance_id, member_id, (p, opposing_corner.p))
 
     def move_bounding_box_corner(self, instance_id: InstanceID, member_id: MemberID, corner_index: int, p: Point):
+        if self._read_only:
+            return
         self._move_bounding_box_corner(instance_id, member_id, corner_index, p)
         self._flush()
 
     def delete_bounding_box(self, instance_id: InstanceID, member_id: MemberID):
+        if self._read_only:
+            return
         assert instance_id is not None, "Instance ID should not be None"
         with self.macro("Delete Bounding Box"):
             self._set_bounding_box(instance_id, member_id, None)
@@ -210,6 +231,8 @@ class PoseImageModel(QObject):
         self._flush()
 
     def _place_polygon(self, instance_id: InstanceID, member_id: MemberID, points: List[Point]):
+        if self._read_only:
+            return
         with self.macro("Place Polygon"):
             if instance_id is None:
                 instance_id = self._create_new_instance()
@@ -223,6 +246,8 @@ class PoseImageModel(QObject):
         self._flush()
 
     def delete_polygon(self, instance_id: InstanceID, member_id: MemberID):
+        if self._read_only:
+            return
         assert instance_id is not None, "Instance ID should not be None"
         with self.macro("Delete Polygon"):
             self._set_polygon(instance_id, member_id, [])
@@ -230,6 +255,8 @@ class PoseImageModel(QObject):
         self._flush()
 
     def _place_polyline(self, instance_id: InstanceID, member_id: MemberID, points: List[Point]):
+        if self._read_only:
+            return
         with self.macro("Place Polyline"):
             if instance_id is None:
                 instance_id = self._create_new_instance()
@@ -243,6 +270,8 @@ class PoseImageModel(QObject):
         self._flush()
 
     def delete_polyline(self, instance_id: InstanceID, member_id: MemberID):
+        if self._read_only:
+            return
         assert instance_id is not None, "Instance ID should not be None"
         with self.macro("Delete Polyline"):
             self._set_polyline(instance_id, member_id, [])
@@ -250,6 +279,8 @@ class PoseImageModel(QObject):
         self._flush()
 
     def move_polygon_point(self, instance_id: InstanceID, member_id: MemberID, point_index: int, p: Point):
+        if self._read_only:
+            return
         self._set_polygon_point(instance_id, member_id, point_index, p)
         self._flush()
 
@@ -284,6 +315,8 @@ class PoseImageModel(QObject):
         self._flush()
 
     def select_instance_type(self, instance_type: InstanceType):
+        if self._read_only:
+            return
         instance_id, _ = self._model.get_selection(self._image_index)
         if instance_id is None:
             instances = self._model.get_instances(self._image_index)
@@ -311,6 +344,8 @@ class PoseImageModel(QObject):
         self._copied_instance = instance
 
     def paste_instance(self):
+        if self._read_only:
+            return
         if self._copied_instance is None:
             return
         instance = self._copied_instance.with_instance_id(str(uuid.uuid4()))
@@ -318,6 +353,8 @@ class PoseImageModel(QObject):
         self._flush()
 
     def delete_instance(self):
+        if self._read_only:
+            return
         selected_instance = self.get_selected_instance()
         if selected_instance is None:
             return
@@ -329,6 +366,8 @@ class PoseImageModel(QObject):
         self._flush()
 
     def rename_instance(self, instance_id: InstanceID, name: str):
+        if self._read_only:
+            return
         assert instance_id is not None, "Instance ID should not be None"
         self._undo_stack.push(RenameInstance(self._model, self, self._image_index, instance_id, name))
         self._flush()

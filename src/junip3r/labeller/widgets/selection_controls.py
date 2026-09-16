@@ -23,6 +23,7 @@ class InstanceListModel(QAbstractListModel):
         self._instances: Sequence[Instance] = ()
         self._icon_cache: Dict[Hashable, QIcon] = {}
         self._mode: Optional[ConfigMode] = None
+        self._read_only: bool = False
 
     def set_instances(self, instances: Sequence[Instance]):
         self.beginResetModel()
@@ -32,8 +33,11 @@ class InstanceListModel(QAbstractListModel):
     def set_mode(self, mode: ConfigMode):
         self._mode = mode
 
+    def set_read_only(self, read_only: bool):
+        self._read_only = read_only
+
     def flags(self, index):
-        if index.row() == len(self._instances):
+        if index.row() == len(self._instances) or self._read_only:
             return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
         return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
 
@@ -252,6 +256,10 @@ class SelectionControls(QWidget):
         # is a one-time call, not part of ImageState.
         self.frm_members.setVisible(mode != ConfigMode.YOLO_DETECT)
         self.instance_list_model.set_mode(mode)
+
+    def set_read_only(self, read_only: bool):
+        self.instance_list_model.set_read_only(read_only)
+        self.dpd_instance_type.setEnabled(not read_only)
 
     def _has_instance_type_changed(self, image_state: ImageState, flags: ImageStateChangeFlags) -> bool:
         if flags & ImageStateChangeFlags.INSTANCES or flags & ImageStateChangeFlags.SELECTION:

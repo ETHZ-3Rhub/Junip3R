@@ -16,6 +16,9 @@ from junip3r.labeller.data.repository.image import ImageRepository
 from junip3r.labeller.data.repository.label import JuniperLabelRepository
 from junip3r.labeller.data.repository.selection import SelectionRepository
 from junip3r.labeller.data.repository.tag import TagRepository
+from junip3r.labeller.data.yolo.config_repository import YoloConfigRepository, build_yolo_dataset_schema
+from junip3r.labeller.data.yolo.discovery import discover_yolo_dataset_images, yolo_dataset_root
+from junip3r.labeller.data.yolo.label_repository import YoloLabelRepository
 from junip3r.labeller.export.yolo.set_split import SetSplitRepository
 from junip3r.labeller.legacy.legacy_label_converter import LegacyLabelConverter
 from junip3r.labeller.model.app_model import AppModel
@@ -28,8 +31,41 @@ logger = logging.getLogger(__name__)
 
 
 def from_config_file(config_file: Path, integrated: bool = False) -> EditorMainWindow:
+    raw = yaml.safe_load(open(config_file, 'r'))
+
+    if _is_yolo_data_yaml(raw):
+        return _from_yolo_dataset(config_file, raw, integrated)
+
+    return _from_junip3r_project(config_file, raw, integrated)
+
+
+def _is_yolo_data_yaml(raw: dict) -> bool:
+    # A real project's config.yaml always has an "instance_types" key (see
+    # ConfigSerializer.deserialize); a YOLO data.yaml never does, and always has "names".
+    return "instance_types" not in raw and "names" in raw
+
+
+def _from_yolo_dataset(data_yaml_file: Path, raw: dict, integrated: bool) -> EditorMainWindow:
+    dataset_root = yolo_dataset_root(data_yaml_file, raw)
+    images = discover_yolo_dataset_images(data_yaml_file, raw)
+    schema = build_yolo_dataset_schema(dataset_root, raw)
+
+    image_repository = ImageRepository([i.image for i in images])
+    config_repository = YoloConfigRepository(schema)
+    label_repository = YoloLabelRepository([i.label for i in images], schema)
+    label_model = LabelModel(config_repository, label_repository)
+
+    app_model = AppModel(image_repository, label_model, SelectionRepository())
+
+    editor = EditorMainWindow(integrated=integrated)
+    editor.set_model(app_model, read_only=True)
+    editor.set_mode(schema.mode)
+
+    return editor
+
+
+def _from_junip3r_project(config_file: Path, config: dict, integrated: bool = False) -> EditorMainWindow:
     project_folder = config_file.parent
-    config = yaml.safe_load(open(config_file, 'r'))
 
     labeller_config = parse_config(config)
     config_repository = ConfigRepository(labeller_config)

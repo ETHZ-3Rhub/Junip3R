@@ -35,7 +35,7 @@ class YoloPoseInstanceTypeSerializer:
             keypoints.append(keypoint_dict)
 
         instance_dict["keypoints"] = keypoints
-        instance_dict["skeleton"] = instance_type.skeleton
+        instance_dict["skeleton"] = [list(pair) for pair in instance_type.skeleton]
 
         return instance_dict
 
@@ -53,7 +53,7 @@ class YoloPoseDatasetMetadataWriter:
             instance_type_data = YoloPoseInstanceTypeSerializer.serialize(instance_type)
 
             with instance_type_file.open("w") as f:
-                yaml.dump(instance_type_data, f)
+                yaml.safe_dump(instance_type_data, f)
 
         output_mapping_file = metadata_folder / "output_mapping.csv"
         with output_mapping_file.open("w") as f:
