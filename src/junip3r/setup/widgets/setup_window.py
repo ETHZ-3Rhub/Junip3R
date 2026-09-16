@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List, Optional, Sequence
 
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QMainWindow, QFrame, QVBoxLayout, QWidget, QSplitter, QPushButton, \
     QFileDialog, QMessageBox, QInputDialog
 
@@ -83,11 +83,6 @@ class SetupMainWindow(QMainWindow):
         self.expected_instance_list = ExpectedInstanceList()
         right_layout.addWidget(self.expected_instance_list)
 
-        self.btn_choose_preview_image = QPushButton("Choose Preview Image...")
-        self.btn_choose_preview_image.setIcon(QIcon.fromTheme("emblem-photos"))
-        self.btn_choose_preview_image.clicked.connect(self._choose_preview_image)
-        right_layout.addWidget(self.btn_choose_preview_image)
-
         self.btn_open_preview = QPushButton("Open Preview...")
         self.btn_open_preview.clicked.connect(self._open_preview)
         right_layout.addWidget(self.btn_open_preview)
@@ -105,6 +100,7 @@ class SetupMainWindow(QMainWindow):
         self.preview_window = PreviewWindow(self)
         self.preview_window.set_model(self.preview_pose_image_model)
         self.preview_window.set_mode(self._model.mode)
+        self.preview_window.preview_image_requested.connect(self._choose_preview_image)
 
         self.action_open_frame_extractor.triggered.connect(self._switch_to_frame_extractor)
         self.action_open_labeller.triggered.connect(self._switch_to_labeller)

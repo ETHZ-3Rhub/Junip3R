@@ -72,6 +72,9 @@ class Editor(QWidget):
         self.image_navigation = ImageNavigation(left)
         left_layout.addWidget(self.image_navigation)
 
+        self._left_layout = left_layout
+        self._footer_widget: QWidget = self.image_navigation
+
         splitter.addWidget(left)
 
         self.selection_controls = SelectionControls(splitter)
@@ -139,6 +142,21 @@ class Editor(QWidget):
 
     def set_mode(self, mode: ConfigMode):
         self.selection_controls.set_mode(mode)
+
+    def set_footer_widget(self, widget: Optional[QWidget]) -> None:
+        """Replace the image-navigation bar below the canvas with `widget`, or
+        restore the image-navigation bar if `widget` is None.
+        """
+        new_footer = widget if widget is not None else self.image_navigation
+        if new_footer is self._footer_widget:
+            return
+
+        self._left_layout.removeWidget(self._footer_widget)
+        self._footer_widget.setVisible(False)
+
+        self._left_layout.addWidget(new_footer)
+        new_footer.setVisible(True)
+        self._footer_widget = new_footer
 
     def set_model(self, model: PoseImageModel, context_model: Optional[ContextModel] = None, image_settings_model: Optional[ImageSettingsModel] = None):
         self.model = model
