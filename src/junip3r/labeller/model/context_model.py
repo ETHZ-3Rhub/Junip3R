@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from dataclasses import dataclass, replace
 from typing import Optional
 
@@ -54,11 +55,16 @@ class ContextModel(QObject):
 
     _context_load_requested = Signal(int)
 
+    _CACHE_SIZE = 3
+
     def __init__(self, context_repository: IContextRepository):
         super().__init__()
 
         self._state = ContextState()
         self._image_index = 0
+        self._load_in_progress = False
+        self._pending_load_index: Optional[int] = None
+        self._context_cache: "OrderedDict[int, Optional[TemporalContext]]" = OrderedDict()
 
         self._context_load_worker = ContextLoadWorker(context_repository)
         self._context_load_worker_thread = QThread()
@@ -68,7 +74,7 @@ class ContextModel(QObject):
         self._context_load_requested.connect(self._context_load_worker.load_context)
 
         self._context_load_worker_thread.start()
-        self._context_load_requested.emit(self._image_index)
+        self._request_context_load(self._image_index)
 
     def get_state(self) -> ContextState:
         return self._state
@@ -91,16 +97,49 @@ class ContextModel(QObject):
 
     def set_image_navigation_state(self, state: ImageNavigationState):
         self._image_index = state.image_index
-        self._state = replace(self._state, loaded=False, pos=0, context=None)
-        self._context_load_requested.emit(self._image_index)
+
+        if self._image_index in self._context_cache:
+            context = self._context_cache[self._image_index]
+            self._context_cache.move_to_end(self._image_index)
+            self._pending_load_index = None
+            self._state = replace(self._state, loaded=True, pos=0, context=context)
+        else:
+            self._state = replace(self._state, loaded=False, pos=0, context=None)
+            self._request_context_load(self._image_index)
+
         self.changed.emit(self._state)
 
+    def _request_context_load(self, image_index: int):
+        if self._load_in_progress:
+            # A load is already running on the worker thread; remember only the
+            # latest request instead of queuing another one behind it - anything
+            # queued would be stale by the time the worker got to it anyway.
+            self._pending_load_index = image_index
+            return
+
+        self._load_in_progress = True
+        self._context_load_requested.emit(image_index)
+
     def _context_loaded(self, image_index: int, context: Optional[TemporalContext]):
+        self._load_in_progress = False
+        self._cache_context(image_index, context)
+
+        if self._pending_load_index is not None:
+            next_index = self._pending_load_index
+            self._pending_load_index = None
+            self._request_context_load(next_index)
+
         if image_index != self._image_index:
             return
 
         self._state = replace(self._state, loaded=True, context=context)
         self.changed.emit(self._state)
+
+    def _cache_context(self, image_index: int, context: Optional[TemporalContext]) -> None:
+        self._context_cache[image_index] = context
+        self._context_cache.move_to_end(image_index)
+        while len(self._context_cache) > self._CACHE_SIZE:
+            self._context_cache.popitem(last=False)
 
     def shutdown(self):
         # The worker thread runs its own event loop indefinitely once started -
