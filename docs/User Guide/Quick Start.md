@@ -20,7 +20,7 @@ On the welcome screen, click **Create a new project**.
   one) - see [Project Setup](Project%20Setup.md#the-setup-window) for every option
   (colors, skeleton lines, expected instances per image, previewing your layout).
 
-Already have a similar project? Pick **Load Existing Project...** or a saved template
+Already have a similar project? Pick **Use Project as Template...** or a saved template
 instead of `Empty`, to start from an existing config rather than from scratch.
 
 ## 3) Get images into the project

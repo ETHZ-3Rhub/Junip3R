@@ -17,7 +17,7 @@ When you launch Junip3R you land on a welcome screen with two choices:
 
 - Pick a preset from the list, or `Empty` to start from scratch. Presets include any
   templates you've saved before (see [Saving as a template](#saving-as-a-template)).
-- No preset fits? Click **Load Existing Project...** to pull in another project's
+- No preset fits? Click **Use Project as Template...** to pull in another project's
   config (and preview image/instances, if any) as a starting point, without saving it
   as a template first.
 - Set the **Location** for the new project's folder.

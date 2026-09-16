@@ -201,7 +201,7 @@ class NewProjectWindow(QWidget):
         self.lst_presets.selectionModel().currentChanged.connect(self._set_preset)
         presets_layout.addWidget(self.lst_presets)
 
-        self.btn_load_project = QPushButton("Load Existing Project...")
+        self.btn_load_project = QPushButton("Use Project as Template...")
         self.btn_load_project.clicked.connect(self._load_project_as_template)
         presets_layout.addWidget(self.btn_load_project)
 
