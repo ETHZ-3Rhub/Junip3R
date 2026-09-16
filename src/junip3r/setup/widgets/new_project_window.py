@@ -22,6 +22,7 @@ from junip3r.labeller.data.types.data import Instance
 from junip3r.labeller.model.camera_model import CameraModel
 from junip3r.labeller.widgets.pose_image import PoseImage
 from junip3r.setup.preview.placeholder_image import load_image_rgb
+from junip3r.setup.widgets.preset_list import PresetList, PresetListEntry
 from junip3r.setup.widgets.preview_pose_image_controller import PreviewPoseImageController
 from junip3r.setup.model.preview_pose_image_model import PreviewPoseImageModel
 
@@ -116,28 +117,15 @@ def discover_saved_presets(templates_root: Path = DEFAULT_TEMPLATES_ROOT) -> Lis
     return presets
 
 
-class PresetModel(QAbstractListModel):
-    PresetRole = Qt.ItemDataRole.UserRole + 1
+def _preset_key(preset: Preset) -> str:
+    # config_file is None only for EMPTY_PRESET, which is a singleton - every
+    # other preset (saved template or imported project) has a config file of
+    # its own, unique and stable across a refresh.
+    return "empty" if preset.config_file is None else str(preset.config_file)
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.presets: List[Preset] = []
 
-    def set_presets(self, presets: List[Preset]):
-        self.beginResetModel()
-        self.presets = presets
-        self.endResetModel()
-
-    def rowCount(self, parent=None):
-        return len(self.presets)
-
-    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
-        preset = self.presets[index.row()]
-        if role == Qt.ItemDataRole.DisplayRole:
-            return preset.name
-        elif role == PresetModel.PresetRole:
-            return preset
-        return None
+def _preset_entry(preset: Preset) -> PresetListEntry:
+    return PresetListEntry(key=_preset_key(preset), name=preset.name, payload=preset)
 
 
 class InstanceTypeModel(QAbstractListModel):
@@ -174,10 +162,8 @@ class NewProjectWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        presets = [EMPTY_PRESET] + discover_saved_presets()
-
-        self.preset_model = PresetModel()
-        self.preset_model.set_presets(presets)
+        self._imported_presets: List[Preset] = []
+        self._current_preset: Optional[Preset] = None
 
         self.instance_type_model = InstanceTypeModel()
 
@@ -192,14 +178,12 @@ class NewProjectWindow(QWidget):
         frm_presets.setFrameShape(QFrame.Shape.StyledPanel)
         frm_presets.setFrameShadow(QFrame.Shadow.Raised)
         presets_layout = QVBoxLayout(frm_presets)
-        lbl_presets = QLabel("Presets")
-        presets_layout.addWidget(lbl_presets)
-        self.lst_presets = QListView()
         self.setStyleSheet("QListView { border: none; }")
-        self.lst_presets.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Expanding)
-        self.lst_presets.setModel(self.preset_model)
-        self.lst_presets.selectionModel().currentChanged.connect(self._set_preset)
-        presets_layout.addWidget(self.lst_presets)
+        self.preset_list = PresetList()
+        self.preset_list.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Expanding)
+        self.preset_list.preset_selected.connect(self._set_preset)
+        self.preset_list.refresh_requested.connect(self._refresh_presets)
+        presets_layout.addWidget(self.preset_list)
 
         self.btn_load_project = QPushButton("Use Project as Template...")
         self.btn_load_project.clicked.connect(self._load_project_as_template)
@@ -323,12 +307,27 @@ class NewProjectWindow(QWidget):
 
         self.act_select_folder.triggered.connect(self._select_folder)
 
-        self.lst_presets.setCurrentIndex(self.preset_model.index(0, 0))
+        self._refresh_presets()
 
         self.preview_camera_model.refresh()
 
-    def _set_preset(self):
-        preset = self.lst_presets.currentIndex().data(PresetModel.PresetRole)
+    def _refresh_presets(self, select_key: Optional[str] = None):
+        if select_key is None:
+            select_key = self.preset_list.selected_key()
+
+        sections = [
+            (None, [_preset_entry(EMPTY_PRESET)]),
+            ("Local Presets", [_preset_entry(p) for p in discover_saved_presets()]),
+            ("Imported Projects", [_preset_entry(p) for p in self._imported_presets]),
+        ]
+        self.preset_list.set_sections(sections, select_key=select_key)
+
+    def _set_preset(self, preset: Optional[Preset]):
+        if preset is None:
+            return
+
+        self._current_preset = preset
+
         if preset.image is None and len(preset.instance_types) == 0:
             self.stk_preview.setCurrentIndex(1)
         else:
@@ -364,9 +363,8 @@ class NewProjectWindow(QWidget):
             QMessageBox.critical(self, "Could Not Load Project", str(e))
             return
 
-        presets = self.preset_model.presets + [preset]
-        self.preset_model.set_presets(presets)
-        self.lst_presets.setCurrentIndex(self.preset_model.index(len(presets) - 1, 0))
+        self._imported_presets.append(preset)
+        self._refresh_presets(select_key=_preset_key(preset))
 
     def _select_folder(self):
         from PySide6.QtWidgets import QFileDialog
@@ -401,7 +399,9 @@ class NewProjectWindow(QWidget):
             return
 
         location = Path(self.txt_location.text())
-        preset = self.lst_presets.currentIndex().data(PresetModel.PresetRole)
+        preset = self._current_preset
+        if preset is None:
+            return
 
         if location.exists() and list(location.iterdir()):
             if not self._confirm_overwrite(location):
