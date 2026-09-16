@@ -1,4 +1,3 @@
-import uuid
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
@@ -15,7 +14,7 @@ def _yolo_box_to_corners(cx: float, cy: float, w: float, h: float) -> Box:
     return (cx - half_w, cy - half_h), (cx + half_w, cy + half_h)
 
 
-def _parse_line(line: str, schema: YoloDatasetSchema, name: str) -> DataInstance:
+def _parse_line(line: str, schema: YoloDatasetSchema, instance_id: str, name: str) -> DataInstance:
     tokens = line.split()
     class_index = int(tokens[0])
     instance_type = schema.class_index_to_instance_type.get(class_index)
@@ -38,14 +37,19 @@ def _parse_line(line: str, schema: YoloDatasetSchema, name: str) -> DataInstance
             p = (x, y) if visibility >= 0.5 else None
             members.append(DataKeypoint(name=member.name, p=p, visibility=visibility))
 
-    return DataInstance(id=str(uuid.uuid4()), type=instance_type.name, name=name, members=members)
+    return DataInstance(id=instance_id, type=instance_type.name, name=name, members=members)
 
 
 def parse_yolo_label_file(label_file: Path, schema: YoloDatasetSchema) -> List[DataInstance]:
     instances: List[DataInstance] = []
     counts: Dict[str, int] = {}
 
-    for line in label_file.read_text().splitlines():
+    # Ids must be stable across repeated calls, not freshly random each time -
+    # LabelModel is deliberately stateless and re-parses on every read (see its
+    # docstring), and PoseImageModel matches selection/undo state by instance id
+    # across those re-parses. A line's position in the file is a stable, unique-per-
+    # image identity to key off - there's nothing else in a plain YOLO label line to use.
+    for line_index, line in enumerate(label_file.read_text().splitlines()):
         line = line.strip()
         if not line:
             continue
@@ -55,7 +59,7 @@ def parse_yolo_label_file(label_file: Path, schema: YoloDatasetSchema) -> List[D
         type_name = instance_type.name if instance_type is not None else str(class_index)
         counts[type_name] = counts.get(type_name, 0) + 1
 
-        instances.append(_parse_line(line, schema, f"{type_name} {counts[type_name]}"))
+        instances.append(_parse_line(line, schema, f"line-{line_index}", f"{type_name} {counts[type_name]}"))
 
     return instances
 

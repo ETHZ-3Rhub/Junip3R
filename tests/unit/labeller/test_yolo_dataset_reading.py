@@ -148,6 +148,22 @@ def test_parse_yolo_label_file_maps_box_and_keypoints(tmp_path):
     assert kp1.p is None  # visibility below 0.5 -> treated as unset
 
 
+def test_parse_yolo_label_file_produces_stable_ids_across_repeated_calls(tmp_path):
+    # LabelModel is stateless and re-parses on every read (see its docstring) - if ids
+    # were regenerated each call, PoseImageModel's selection would silently stop
+    # matching any instance moments after being set, since it's keyed by instance id.
+    raw = {"names": {0: "mouse"}}
+    schema = build_yolo_dataset_schema(tmp_path, raw)
+
+    label_file = tmp_path / "a.txt"
+    label_file.write_text("0 0.1 0.1 0.1 0.1\n0 0.2 0.2 0.1 0.1\n")
+
+    first = parse_yolo_label_file(label_file, schema)
+    second = parse_yolo_label_file(label_file, schema)
+
+    assert [i.id for i in first] == [i.id for i in second]
+
+
 def test_parse_yolo_label_file_skips_blank_lines_and_numbers_repeated_types(tmp_path):
     raw = {"names": {0: "mouse"}}
     schema = build_yolo_dataset_schema(tmp_path, raw)
@@ -179,7 +195,7 @@ class _FakeImageRepository:
         return 1
 
     def get_image(self, image_index):
-        raise NotImplementedError
+        return np.zeros((1, 1, 3), dtype=np.uint8)
 
     def get_image_name(self, image_index):
         return "a"
@@ -189,11 +205,14 @@ class _FakeImageRepository:
 
 
 class _FakeSelectionRepository:
+    def __init__(self):
+        self._selection = None
+
     def get_selection(self, image_index):
-        return None
+        return self._selection
 
     def set_selection(self, image_index, selection):
-        pass
+        self._selection = selection
 
     def get_new_instance_type(self, image_index):
         return None
@@ -221,6 +240,30 @@ def test_yolo_repositories_produce_resolved_instances_through_app_model(tmp_path
     assert instances[0].instance_type.name == "mouse"
     assert instances[0].members[0].box is not None
     assert instances[0].members[1].p == pytest.approx((0.5, 0.5))
+
+
+def test_selection_survives_repeated_image_state_recomputation(tmp_path):
+    # Reproduces the read-only viewer's real failure mode: PoseImageModel.__init__
+    # selects the first instance off one get_instances() call, then get_selected_instance
+    # re-resolves it off a second, independent call - if YoloLabelRepository generated a
+    # fresh id each parse, this lookup would silently return None (empty member list).
+    from junip3r.labeller.data.yolo.config_repository import YoloConfigRepository
+    from junip3r.labeller.data.yolo.label_repository import YoloLabelRepository
+    from junip3r.labeller.model.pose_image_model import PoseImageModel
+
+    raw = {"names": {0: "mouse"}}
+    schema = build_yolo_dataset_schema(tmp_path, raw)
+    label_file = tmp_path / "a.txt"
+    label_file.write_text("0 0.5 0.5 0.2 0.2\n")
+
+    label_model = LabelModel(YoloConfigRepository(schema), YoloLabelRepository([label_file], schema))
+    app_model = AppModel(_FakeImageRepository(), label_model, _FakeSelectionRepository())
+
+    model = PoseImageModel(app_model, read_only=True)
+
+    selected = model.get_selected_instance()
+    assert selected is not None
+    assert selected.instance_type.name == "mouse"
 
 
 def test_round_trips_a_real_junip3r_exported_dataset(tmp_path):
