@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 def from_config_file(config_file: Path, integrated: bool = False) -> EditorMainWindow:
-    raw = yaml.safe_load(open(config_file, 'r'))
+    raw = yaml.safe_load(open(config_file, 'r', encoding='utf-8'))
 
     if _is_yolo_data_yaml(raw):
         return _from_yolo_dataset(config_file, raw, integrated)
