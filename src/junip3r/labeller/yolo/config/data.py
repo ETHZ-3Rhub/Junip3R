@@ -4,13 +4,13 @@ from typing import Any, Dict, List, Optional, Union
 
 @dataclass
 class YoloDataYaml:
+    # Training images: an image directory, a .txt file of image paths, or a list of either.
+    train: Union[str, List[str]]
+    # Validation images, same forms as train.
+    val: Union[str, List[str]]
     # Dataset root. Relative paths (including train/val/test below) resolve relative to
     # this file's location, with Ultralytics falling back to its own dataset directory.
     path: Optional[str] = None
-    # Training images: an image directory, a .txt file of image paths, or a list of either.
-    train: Union[str, List[str]] = ""
-    # Validation images, same forms as train.
-    val: Union[str, List[str]] = ""
     # Test images, same forms as train.
     test: Optional[Union[str, List[str]]] = None
 
