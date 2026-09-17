@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Union
 
-from junip3r.labeller.yolo.config.data import YoloDataYaml
+from junip3r.labeller.yolo.data_yaml.data import YoloDataYaml
 
 # Keys consumed into a typed field below - everything else round-trips through `extras`
 # (this is how a niche/undocumented key like "minival" survives a read-modify-write

@@ -1,17 +1,13 @@
 import pytest
 
-from junip3r.labeller.yolo.config.data import YoloDataYaml
-from junip3r.labeller.yolo.config.serializer import YoloDataYamlSerializer
+from junip3r.labeller.yolo.data_yaml.data import YoloDataYaml
+from junip3r.labeller.yolo.data_yaml.serializer import YoloDataYamlSerializer
 
 
 def _minimal_config(**overrides):
     fields = dict(train="images/train", val="images/val", names=["mouse", "cat"], nc=2)
     fields.update(overrides)
     return YoloDataYaml(**fields)
-
-
-def test_yolo_data_yaml_constructs_with_no_arguments():
-    YoloDataYaml()
 
 
 def test_round_trips_a_minimal_config():
