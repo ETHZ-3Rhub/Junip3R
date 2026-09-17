@@ -34,16 +34,20 @@ class EditorMainWindow(EditorMainWindowLayout):
             self.btn_open_frame_extractor.hide()
 
     def set_model(self, model: AppModel, context_repository: Optional[IContextRepository] = None,
-                  image_settings_model: Optional[ImageSettingsModel] = None):
+                  image_settings_model: Optional[ImageSettingsModel] = None, read_only: bool = False):
         self._model = model
         self._context_model = ContextModel(context_repository) if context_repository is not None else None
 
-        pose_image_model = PoseImageModel(model)
+        pose_image_model = PoseImageModel(model, read_only=read_only)
 
         if self._context_model is not None:
             pose_image_model.image_navigation_state_changed.connect(self._context_model.set_image_navigation_state)
 
         self.editor.set_model(pose_image_model, self._context_model, image_settings_model)
+        self.editor.set_read_only(read_only)
+
+        self.action_export_as_yolo_dataset.setVisible(not read_only)
+        self.setWindowTitle("Junip3r Labeller (Read-only)" if read_only else "Junip3r Labeller")
 
         if model.get_num_images() > 0:
             self.stk_content.setCurrentIndex(0)

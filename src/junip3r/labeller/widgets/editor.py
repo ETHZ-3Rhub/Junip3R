@@ -143,6 +143,13 @@ class Editor(QWidget):
     def set_mode(self, mode: ConfigMode):
         self.selection_controls.set_mode(mode)
 
+    def set_read_only(self, read_only: bool):
+        self.selection_controls.set_read_only(read_only)
+        self.delete_action.setEnabled(not read_only)
+        self.paste_action.setEnabled(not read_only)
+        self.undo_action.setEnabled(not read_only)
+        self.redo_action.setEnabled(not read_only)
+
     def set_footer_widget(self, widget: Optional[QWidget]) -> None:
         """Replace the image-navigation bar below the canvas with `widget`, or
         restore the image-navigation bar if `widget` is None.
