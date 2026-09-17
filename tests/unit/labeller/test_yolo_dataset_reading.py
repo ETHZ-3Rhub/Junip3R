@@ -4,10 +4,11 @@ import yaml
 
 from junip3r.common.config.abc import ConfigMode
 from junip3r.labeller.data.yolo.config_repository import build_yolo_dataset_schema
-from junip3r.labeller.data.yolo.discovery import DuplicateImageNameError, discover_yolo_dataset_images, yolo_dataset_root
+from junip3r.labeller.data.yolo.discovery import discover_yolo_dataset_images, yolo_dataset_root
 from junip3r.labeller.data.yolo.label_repository import parse_yolo_label_file
 from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.model.label_model import LabelModel
+from junip3r.labeller.yolo.config.yolo_dataset_config import YoloDatasetConfig
 
 
 # --- discovery --------------------------------------------------------------------------
@@ -23,37 +24,71 @@ def test_yolo_dataset_root_resolves_relative_path(tmp_path):
     assert yolo_dataset_root(data_yaml, {"path": ".."}) == tmp_path
 
 
-def test_discover_yolo_dataset_images_merges_sets_in_data_yaml_order(tmp_path):
+def test_discover_yolo_dataset_images_merges_sets_in_train_val_test_order(tmp_path):
     _touch(tmp_path / "images" / "train" / "b.jpg")
     _touch(tmp_path / "images" / "train" / "a.jpg")
     _touch(tmp_path / "labels" / "train" / "a.txt")
     _touch(tmp_path / "images" / "val" / "c.jpg")
 
-    raw = {"names": {0: "mouse"}, "train": "images/train", "val": "images/val"}
-    images = discover_yolo_dataset_images(tmp_path / "data.yaml", raw)
+    config = YoloDatasetConfig(train=[tmp_path / "images" / "train"], val=[tmp_path / "images" / "val"])
+    images = discover_yolo_dataset_images(config)
 
     assert [i.image.name for i in images] == ["a.jpg", "b.jpg", "c.jpg"]
-    assert [i.set_name for i in images] == ["train", "train", "val"]
     assert images[0].label == tmp_path / "labels" / "train" / "a.txt"
     assert images[1].label is None  # no b.txt on disk
     assert images[2].label is None  # no labels/val dir at all
 
 
-def test_discover_yolo_dataset_images_raises_on_duplicate_stem_across_sets(tmp_path):
+def test_discover_yolo_dataset_images_scans_directories_recursively(tmp_path):
+    _touch(tmp_path / "images" / "train" / "sub" / "a.jpg")
+
+    config = YoloDatasetConfig(train=[tmp_path / "images" / "train"], val=[])
+    images = discover_yolo_dataset_images(config)
+
+    assert [i.image for i in images] == [tmp_path / "images" / "train" / "sub" / "a.jpg"]
+
+
+def test_discover_yolo_dataset_images_reads_paths_from_a_list_file(tmp_path):
+    _touch(tmp_path / "images" / "train" / "a.jpg")
+    list_file = tmp_path / "train.txt"
+    list_file.write_text("./images/train/a.jpg\n")
+
+    config = YoloDatasetConfig(train=[list_file], val=[])
+    images = discover_yolo_dataset_images(config)
+
+    assert [i.image for i in images] == [tmp_path / "images" / "train" / "a.jpg"]
+
+
+def test_discover_yolo_dataset_images_raises_when_an_entry_does_not_exist(tmp_path):
+    config = YoloDatasetConfig(train=[tmp_path / "images" / "train"], val=[])
+
+    with pytest.raises(FileNotFoundError):
+        discover_yolo_dataset_images(config)
+
+
+def test_discover_yolo_dataset_images_allows_duplicate_stems_across_sets(tmp_path):
+    # Nothing downstream keys images by name (they're addressed by list index), so a
+    # stem appearing in more than one set is fine - both entries are just kept.
     _touch(tmp_path / "images" / "train" / "a.jpg")
     _touch(tmp_path / "images" / "val" / "a.jpg")
 
-    raw = {"names": {0: "mouse"}, "train": "images/train", "val": "images/val"}
+    config = YoloDatasetConfig(train=[tmp_path / "images" / "train"], val=[tmp_path / "images" / "val"])
+    images = discover_yolo_dataset_images(config)
 
-    with pytest.raises(DuplicateImageNameError):
-        discover_yolo_dataset_images(tmp_path / "data.yaml", raw)
+    assert [i.image for i in images] == [tmp_path / "images" / "train" / "a.jpg", tmp_path / "images" / "val" / "a.jpg"]
 
 
 # --- config_repository: generic fallback -------------------------------------------------
 
+def _dataset_config(**overrides):
+    fields = dict(train=[], val=[])
+    fields.update(overrides)
+    return YoloDatasetConfig(**fields)
+
+
 def test_generic_schema_builds_pose_instance_types_from_kpt_shape(tmp_path):
-    raw = {"names": {0: "mouse", 1: "cat"}, "kpt_shape": [2, 3]}
-    schema = build_yolo_dataset_schema(tmp_path, raw)
+    config = _dataset_config(names={0: "mouse", 1: "cat"}, kpt_shape=[2, 3])
+    schema = build_yolo_dataset_schema(tmp_path, config)
 
     assert schema.mode == ConfigMode.YOLO_POSE
     assert [it.name for it in schema.instance_types] == ["mouse", "cat"]
@@ -66,12 +101,26 @@ def test_generic_schema_builds_pose_instance_types_from_kpt_shape(tmp_path):
 
 
 def test_generic_schema_without_kpt_shape_is_detect_mode(tmp_path):
-    raw = {"names": ["mouse"]}
-    schema = build_yolo_dataset_schema(tmp_path, raw)
+    config = _dataset_config(names={0: "mouse"})
+    schema = build_yolo_dataset_schema(tmp_path, config)
 
     assert schema.mode == ConfigMode.YOLO_DETECT
     assert [m.name for m in schema.instance_types[0].members] == ["mouse"]
     assert schema.keypoint_output_indices == {}
+
+
+def test_generic_schema_uses_kpt_names_when_present(tmp_path):
+    config = _dataset_config(
+        names={0: "mouse", 1: "cat"},
+        kpt_shape=[2, 3],
+        kpt_names={0: ["nose", "tail"], 1: ["ear"]},  # cat's list deliberately wrong length
+    )
+    schema = build_yolo_dataset_schema(tmp_path, config)
+
+    mouse, cat = schema.instance_types
+    assert [m.name for m in mouse.members] == ["Bounding Box", "nose", "tail"]
+    # Falls back to generic names when the given list doesn't match kpt_shape's count.
+    assert [m.name for m in cat.members] == ["Bounding Box", "kp_0", "kp_1"]
 
 
 # --- config_repository: rich (Junip3R-exported meta/) -------------------------------------
@@ -97,9 +146,9 @@ def _write_rich_meta(dataset_root):
 
 def test_rich_schema_reconstructs_names_colors_and_skeleton(tmp_path):
     _write_rich_meta(tmp_path)
-    raw = {"names": {0: "mouse"}}
+    config = _dataset_config(names={0: "mouse"})
 
-    schema = build_yolo_dataset_schema(tmp_path, raw)
+    schema = build_yolo_dataset_schema(tmp_path, config)
 
     assert schema.mode == ConfigMode.YOLO_POSE
     mouse = schema.instance_types[0]
@@ -114,10 +163,10 @@ def test_rich_schema_reconstructs_names_colors_and_skeleton(tmp_path):
 
 
 def test_rich_schema_falls_back_to_generic_when_meta_is_incomplete(tmp_path):
-    raw = {"names": {0: "mouse", 1: "cat"}, "kpt_shape": [0, 3]}
+    config = _dataset_config(names={0: "mouse", 1: "cat"}, kpt_shape=[0, 3])
     _write_rich_meta(tmp_path)  # only covers "mouse", not "cat"
 
-    schema = build_yolo_dataset_schema(tmp_path, raw)
+    schema = build_yolo_dataset_schema(tmp_path, config)
 
     # Falls back to the fully generic reading, so "cat" doesn't need its own meta file.
     assert schema.mode == ConfigMode.YOLO_DETECT
@@ -127,8 +176,8 @@ def test_rich_schema_falls_back_to_generic_when_meta_is_incomplete(tmp_path):
 # --- label_repository ---------------------------------------------------------------------
 
 def test_parse_yolo_label_file_maps_box_and_keypoints(tmp_path):
-    raw = {"names": {0: "mouse"}, "kpt_shape": [2, 3]}
-    schema = build_yolo_dataset_schema(tmp_path, raw)
+    config = _dataset_config(names={0: "mouse"}, kpt_shape=[2, 3])
+    schema = build_yolo_dataset_schema(tmp_path, config)
 
     label_file = tmp_path / "a.txt"
     label_file.write_text("0 0.5 0.5 0.2 0.4 0.3 0.3 1.0 0.0 0.0 0.0\n")
@@ -152,8 +201,8 @@ def test_parse_yolo_label_file_produces_stable_ids_across_repeated_calls(tmp_pat
     # LabelModel is stateless and re-parses on every read (see its docstring) - if ids
     # were regenerated each call, PoseImageModel's selection would silently stop
     # matching any instance moments after being set, since it's keyed by instance id.
-    raw = {"names": {0: "mouse"}}
-    schema = build_yolo_dataset_schema(tmp_path, raw)
+    config = _dataset_config(names={0: "mouse"})
+    schema = build_yolo_dataset_schema(tmp_path, config)
 
     label_file = tmp_path / "a.txt"
     label_file.write_text("0 0.1 0.1 0.1 0.1\n0 0.2 0.2 0.1 0.1\n")
@@ -165,8 +214,8 @@ def test_parse_yolo_label_file_produces_stable_ids_across_repeated_calls(tmp_pat
 
 
 def test_parse_yolo_label_file_skips_blank_lines_and_numbers_repeated_types(tmp_path):
-    raw = {"names": {0: "mouse"}}
-    schema = build_yolo_dataset_schema(tmp_path, raw)
+    config = _dataset_config(names={0: "mouse"})
+    schema = build_yolo_dataset_schema(tmp_path, config)
 
     label_file = tmp_path / "a.txt"
     label_file.write_text("0 0.1 0.1 0.1 0.1\n\n0 0.2 0.2 0.1 0.1\n")
@@ -179,8 +228,8 @@ def test_parse_yolo_label_file_skips_blank_lines_and_numbers_repeated_types(tmp_
 def test_yolo_label_repository_set_instances_is_read_only(tmp_path):
     from junip3r.labeller.data.yolo.label_repository import YoloLabelRepository
 
-    raw = {"names": {0: "mouse"}}
-    schema = build_yolo_dataset_schema(tmp_path, raw)
+    config = _dataset_config(names={0: "mouse"})
+    schema = build_yolo_dataset_schema(tmp_path, config)
     repository = YoloLabelRepository([None], schema)
 
     assert repository.get_instances(0) == []
@@ -225,8 +274,8 @@ def test_yolo_repositories_produce_resolved_instances_through_app_model(tmp_path
     from junip3r.labeller.data.yolo.config_repository import YoloConfigRepository
     from junip3r.labeller.data.yolo.label_repository import YoloLabelRepository
 
-    raw = {"names": {0: "mouse"}, "kpt_shape": [1, 3]}
-    schema = build_yolo_dataset_schema(tmp_path, raw)
+    config = _dataset_config(names={0: "mouse"}, kpt_shape=[1, 3])
+    schema = build_yolo_dataset_schema(tmp_path, config)
 
     label_file = tmp_path / "a.txt"
     label_file.write_text("0 0.5 0.5 0.2 0.2 0.5 0.5 2.0\n")
@@ -251,8 +300,8 @@ def test_selection_survives_repeated_image_state_recomputation(tmp_path):
     from junip3r.labeller.data.yolo.label_repository import YoloLabelRepository
     from junip3r.labeller.model.pose_image_model import PoseImageModel
 
-    raw = {"names": {0: "mouse"}}
-    schema = build_yolo_dataset_schema(tmp_path, raw)
+    config = _dataset_config(names={0: "mouse"})
+    schema = build_yolo_dataset_schema(tmp_path, config)
     label_file = tmp_path / "a.txt"
     label_file.write_text("0 0.5 0.5 0.2 0.2\n")
 
@@ -273,6 +322,8 @@ def test_round_trips_a_real_junip3r_exported_dataset(tmp_path):
     )
     from junip3r.labeller.export.yolo.serialization.yolo_dataset_metadata_writer import YoloPoseDatasetMetadataWriter
     from junip3r.labeller.export.yolo.serialization.yolo_dataset_writer import YoloDatasetWriter
+    from junip3r.labeller.yolo.config.yolo_dataset_config import resolve_yolo_data_yaml
+    from junip3r.labeller.yolo.data_yaml.serializer import YoloDataYamlSerializer
 
     config = YoloDatasetConfig(
         class_names=["mouse"],
@@ -285,6 +336,8 @@ def test_round_trips_a_real_junip3r_exported_dataset(tmp_path):
         instances=[YoloPoseInstance(class_index=0, box=(0.5, 0.5, 0.2, 0.4), keypoints=[(0.3, 0.3, 2.0), (0.7, 0.7, 1.0)])],
         image=np.zeros((2, 2, 3), dtype=np.uint8),
     )
+    # No val images at all - YoloDatasetWriter is expected to still emit a (empty)
+    # val set on its own, since YoloDataYaml requires one.
     dataset = YoloDataset(sets=[("train", [image])], class_names=["mouse"], num_keypoints=2)
 
     target = tmp_path / "export"
@@ -294,8 +347,10 @@ def test_round_trips_a_real_junip3r_exported_dataset(tmp_path):
     data_yaml_file = target / "data.yaml"
     raw = yaml.safe_load(data_yaml_file.read_text())
     dataset_root = yolo_dataset_root(data_yaml_file, raw)
-    images = discover_yolo_dataset_images(data_yaml_file, raw)
-    schema = build_yolo_dataset_schema(dataset_root, raw)
+    data_yaml = YoloDataYamlSerializer().deserialize(raw)
+    resolved = resolve_yolo_data_yaml(data_yaml, data_yaml_file.parent)
+    images = discover_yolo_dataset_images(resolved)
+    schema = build_yolo_dataset_schema(dataset_root, resolved)
 
     assert schema.mode == ConfigMode.YOLO_POSE
     instances = parse_yolo_label_file(images[0].label, schema)
