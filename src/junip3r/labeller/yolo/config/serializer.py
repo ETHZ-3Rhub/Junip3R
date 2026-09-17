@@ -8,10 +8,7 @@ from junip3r.labeller.yolo.config.data import YoloDataYaml
 _KNOWN_KEYS = {
     "path", "train", "val", "validation", "test",
     "names", "nc", "channels",
-    "download",
     "kpt_shape", "flip_idx", "kpt_names", "kpt_oks_sigmas",
-    "masks_dir", "label_mapping",
-    "depth_scale", "max_depth",
 }
 
 
@@ -34,18 +31,10 @@ class YoloDataYamlSerializer:
         self._set(data, "nc", config.nc)
         self._set(data, "channels", config.channels)
 
-        self._set(data, "download", config.download)
-
         self._set(data, "kpt_shape", config.kpt_shape)
         self._set(data, "flip_idx", config.flip_idx)
         self._set(data, "kpt_names", config.kpt_names)
         self._set(data, "kpt_oks_sigmas", config.kpt_oks_sigmas)
-
-        self._set(data, "masks_dir", config.masks_dir)
-        self._set(data, "label_mapping", config.label_mapping)
-
-        self._set(data, "depth_scale", config.depth_scale)
-        self._set(data, "max_depth", config.max_depth)
 
         data.update(config.extras)
 
@@ -78,15 +67,10 @@ class YoloDataYamlSerializer:
             names=names,
             nc=nc,
             channels=data.get("channels", 3),
-            download=data.get("download"),
             kpt_shape=data.get("kpt_shape"),
             flip_idx=data.get("flip_idx"),
             kpt_names=_normalize_int_keys(data.get("kpt_names")),
             kpt_oks_sigmas=data.get("kpt_oks_sigmas"),
-            masks_dir=data.get("masks_dir"),
-            label_mapping=_normalize_int_keys(data.get("label_mapping")),
-            depth_scale=data.get("depth_scale"),
-            max_depth=data.get("max_depth"),
             extras=extras,
         )
 

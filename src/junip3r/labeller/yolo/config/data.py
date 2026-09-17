@@ -21,10 +21,6 @@ class YoloDataYaml:
     # Number of image channels (3 = RGB, 1 = grayscale).
     channels: Optional[int] = 3
 
-    # Where/how to fetch the dataset: a ZIP URL, a shell command, or Python source -
-    # opaque to us, never executed.
-    download: Optional[str] = None
-
     # [num_keypoints, dims_per_keypoint] for pose datasets.
     kpt_shape: Optional[List[int]] = None
     # Per-keypoint index to swap with under a horizontal flip (pose datasets).
@@ -34,16 +30,8 @@ class YoloDataYaml:
     # Per-keypoint OKS sigma, used for pose evaluation.
     kpt_oks_sigmas: Optional[List[float]] = None
 
-    # Directory of segmentation masks (segmentation datasets).
-    masks_dir: Optional[str] = None
-    # Remaps a label file's class index to the dataset's class index.
-    label_mapping: Optional[Dict[int, Optional[Union[int, str]]]] = None
-
-    # Scale factor from raw depth values to real-world units (depth datasets).
-    depth_scale: Optional[float] = None
-    # Maximum valid depth value (depth datasets).
-    max_depth: Optional[float] = None
-
-    # Any other top-level keys, preserved as-is for round-tripping - see
+    # Any other top-level keys, preserved as-is for round-tripping - notably "download",
+    # and segmentation ("masks_dir", "label_mapping") and depth ("depth_scale",
+    # "max_depth") datasets' keys, none of which we support as a typed field. See
     # YoloDataYamlSerializer, which is what actually splits/merges these two.
     extras: Dict[str, Any] = field(default_factory=dict)

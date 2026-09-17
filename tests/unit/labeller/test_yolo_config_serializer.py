@@ -29,7 +29,6 @@ def test_serialize_omits_unset_optional_fields():
     data = YoloDataYamlSerializer().serialize(config)
 
     assert "test" not in data
-    assert "download" not in data
     assert "kpt_shape" not in data
     assert set(data.keys()) == {"train", "val", "names", "nc", "channels"}
 
@@ -117,12 +116,32 @@ def test_extras_round_trip_back_into_the_output():
     assert data["minival"] == "images/minival"
 
 
-def test_deserialize_normalizes_kpt_names_and_label_mapping_int_keys():
+def test_deserialize_normalizes_kpt_names_int_keys():
     config = YoloDataYamlSerializer().deserialize({
         "train": "images/train", "val": "images/val", "names": ["mouse"],
         "kpt_names": {"0": ["nose", "tail"]},
-        "label_mapping": {"0": 1, "1": None},
     })
 
     assert config.kpt_names == {0: ["nose", "tail"]}
-    assert config.label_mapping == {0: 1, 1: None}
+
+
+def test_deserialize_routes_unsupported_dataset_keys_into_extras():
+    # download, and the segmentation/depth-dataset keys, aren't supported as typed
+    # fields - they fall through to extras untouched (no int-key normalization, unlike
+    # kpt_names above).
+    config = YoloDataYamlSerializer().deserialize({
+        "train": "images/train", "val": "images/val", "names": ["mouse"],
+        "download": "https://example.com/dataset.zip",
+        "masks_dir": "masks",
+        "label_mapping": {"0": 1, "1": None},
+        "depth_scale": 0.001,
+        "max_depth": 10.0,
+    })
+
+    assert config.extras == {
+        "download": "https://example.com/dataset.zip",
+        "masks_dir": "masks",
+        "label_mapping": {"0": 1, "1": None},
+        "depth_scale": 0.001,
+        "max_depth": 10.0,
+    }
