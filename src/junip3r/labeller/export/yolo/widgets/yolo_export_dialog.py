@@ -15,13 +15,14 @@ from junip3r.labeller.data.types.abc import LabellerObjectType
 from junip3r.labeller.data.types.data import Instance
 from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import \
     MappingYoloDatasetMetadataGenerator, MappingYoloDatasetGenerator, MappingYoloPoseInstanceConverter
-from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig, YoloPoseInstance
+from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig
 from junip3r.labeller.export.yolo.serialization.yolo_dataset_metadata_writer import YoloPoseDatasetMetadataWriter
 from junip3r.labeller.export.yolo.serialization.yolo_dataset_writer import YoloDatasetWriter
 from junip3r.labeller.export.yolo.serialization.set_split_writer import SetSplitWriter
 from junip3r.labeller.export.yolo.set_split import SetSplitConfig, SetSplit, ISetSplitRepository, resolve_set_assignments
 from junip3r.labeller.export.yolo.widgets.set_split_dialog import SetSplitDialog
 from junip3r.labeller.model.abc import IReadOnlyAppModel
+from junip3r.labeller.yolo.labels.data import YoloBoxInstance
 
 
 @dataclass
@@ -34,7 +35,7 @@ class AppModelYoloImage:
     app_model: IReadOnlyAppModel
     image_index: int
     name: str
-    instances: Sequence[YoloPoseInstance]
+    instances: Sequence[YoloBoxInstance]
 
     @property
     def image(self) -> Optional[np.ndarray]:
@@ -49,6 +50,7 @@ class AppModelYoloImage:
 class ExportJob:
     target_folder: Path
     config: YoloDatasetConfig
+    instance_types: Sequence[InstanceType]
     set_split_config: SetSplitConfig
     model: IReadOnlyAppModel
     instance_filter: Callable[[Instance], bool]
@@ -95,7 +97,7 @@ class ExportWorker(QObject):
                 yolo_images.append((set_name, AppModelYoloImage(job.model, image_index, image_name, yolo_instances)))
 
             dataset = dataset_generator.generate(yolo_images)
-            metadata = metadata_generator.generate()
+            metadata = metadata_generator.generate(job.instance_types)
 
             dataset_writer = YoloDatasetWriter()
             for completed, total in dataset_writer.write(job.target_folder, dataset):
@@ -395,6 +397,7 @@ class YoloExportDialog(QDialog):
         job = ExportJob(
             target_folder,
             dataset_config,
+            selected_instance_types,
             self._set_split_config,
             self._model,
             instance_filter=lambda instance: instance.instance_type.name in selected_names,
