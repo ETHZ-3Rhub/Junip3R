@@ -4,9 +4,6 @@ from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.data.types.abc import Box, LabellerObjectType
 from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox
 from junip3r.labeller.export.yolo.data import (
-    YoloBox,
-    YoloKeypoint,
-    YoloPoseInstance,
     IYoloImage,
     YoloDatasetConfig,
     YoloKeypointType,
@@ -14,6 +11,7 @@ from junip3r.labeller.export.yolo.data import (
     YoloDatasetMetadata,
     YoloDataset,
 )
+from junip3r.labeller.yolo.labels.data import YoloBox, YoloBoxInstance, YoloKeypoint
 
 
 def _box_to_xywh(box: Box) -> YoloBox:
@@ -36,10 +34,10 @@ class MappingYoloPoseInstanceConverter:
     def __init__(self, config: YoloDatasetConfig):
         self._config = config
 
-    def convert(self, instances: Sequence[Instance]) -> Sequence[YoloPoseInstance]:
+    def convert(self, instances: Sequence[Instance]) -> Sequence[YoloBoxInstance]:
         num_keypoints = self._config.num_keypoints
 
-        yolo_instances: List[YoloPoseInstance] = []
+        yolo_instances: List[YoloBoxInstance] = []
         for instance in instances:
             mapping = self._config.instance_types[instance.instance_type.name]
 
@@ -64,11 +62,14 @@ class MappingYoloPoseInstanceConverter:
                 if member.name not in mapping.keypoints:
                     continue
 
-                keypoint_index = mapping.keypoints[member.name]
-                x, y = member.p if member.p is not None and member.visibility > 0.5 else (0., 0.)
-                keypoints[keypoint_index] = (x, y, member.visibility)
+                # A keypoint below the visibility threshold is written as fully absent
+                # (0,0,0) - junip3r's own policy for "no keypoint here", not part of the
+                # YOLO format itself (see YoloLabelSerializer).
+                if member.p is not None and member.visibility >= 0.5:
+                    keypoint_index = mapping.keypoints[member.name]
+                    keypoints[keypoint_index] = (member.p[0], member.p[1], member.visibility)
 
-            yolo_instance = YoloPoseInstance(mapping.class_index, bounding_box, keypoints)
+            yolo_instance = YoloBoxInstance(mapping.class_index, bounding_box, keypoints)
             yolo_instances.append(yolo_instance)
 
         return yolo_instances

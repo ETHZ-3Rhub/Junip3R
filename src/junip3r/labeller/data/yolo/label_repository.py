@@ -7,6 +7,8 @@ from junip3r.common.labels.data import Instance as DataInstance, Keypoint as Dat
 from junip3r.labeller.data.repository.abc import ILabelRepository
 from junip3r.labeller.data.types.abc import Box
 from junip3r.labeller.data.yolo.config_repository import YoloDatasetSchema
+from junip3r.labeller.yolo.labels.data import YoloBoxInstance
+from junip3r.labeller.yolo.labels.serializer import YoloLabelSerializer
 
 
 def _yolo_box_to_corners(cx: float, cy: float, w: float, h: float) -> Box:
@@ -14,26 +16,18 @@ def _yolo_box_to_corners(cx: float, cy: float, w: float, h: float) -> Box:
     return (cx - half_w, cy - half_h), (cx + half_w, cy + half_h)
 
 
-def _parse_line(line: str, schema: YoloDatasetSchema, instance_id: str, name: str) -> DataInstance:
-    tokens = line.split()
-    class_index = int(tokens[0])
-    instance_type = schema.class_index_to_instance_type.get(class_index)
+def _to_data_instance(box_instance: YoloBoxInstance, schema: YoloDatasetSchema, instance_id: str, name: str) -> DataInstance:
+    instance_type = schema.class_index_to_instance_type.get(box_instance.class_index)
     if instance_type is None:
-        raise ValueError(f"Label references unknown class index {class_index}")
+        raise ValueError(f"Label references unknown class index {box_instance.class_index}")
 
-    cx, cy, w, h = (float(t) for t in tokens[1:5])
     bbox_member = instance_type.members[0]
-    members: List[IDataMember] = [DataBoundingBox(name=bbox_member.name, box=_yolo_box_to_corners(cx, cy, w, h))]
+    members: List[IDataMember] = [DataBoundingBox(name=bbox_member.name, box=_yolo_box_to_corners(*box_instance.box))]
 
     if schema.mode == ConfigMode.YOLO_POSE:
-        keypoint_tokens = tokens[5:]
-        flat_keypoints = [
-            (float(keypoint_tokens[i]), float(keypoint_tokens[i + 1]), float(keypoint_tokens[i + 2]))
-            for i in range(0, len(keypoint_tokens), 3)
-        ]
         output_indices = schema.keypoint_output_indices.get(instance_type.name, [])
         for member, output_index in zip(instance_type.members[1:], output_indices):
-            x, y, visibility = flat_keypoints[output_index]
+            x, y, visibility = box_instance.keypoints[output_index]
             p = (x, y) if visibility >= 0.5 else None
             members.append(DataKeypoint(name=member.name, p=p, visibility=visibility))
 
@@ -44,22 +38,23 @@ def parse_yolo_label_file(label_file: Path, schema: YoloDatasetSchema) -> List[D
     instances: List[DataInstance] = []
     counts: Dict[str, int] = {}
 
+    # keypoint_dims is fixed at 3 (x, y, visibility) here - YoloDatasetSchema doesn't
+    # currently carry data.yaml's kpt_shape[1], so a 2-value pose dataset isn't
+    # supported by the read-only viewer yet, even though YoloLabelSerializer itself
+    # can already handle it.
+    box_instances = YoloLabelSerializer(keypoint_dims=3).read(label_file)
+
     # Ids must be stable across repeated calls, not freshly random each time -
     # LabelModel is deliberately stateless and re-parses on every read (see its
     # docstring), and PoseImageModel matches selection/undo state by instance id
     # across those re-parses. A line's position in the file is a stable, unique-per-
     # image identity to key off - there's nothing else in a plain YOLO label line to use.
-    for line_index, line in enumerate(label_file.read_text().splitlines()):
-        line = line.strip()
-        if not line:
-            continue
-
-        class_index = int(line.split()[0])
-        instance_type = schema.class_index_to_instance_type.get(class_index)
-        type_name = instance_type.name if instance_type is not None else str(class_index)
+    for line_index, box_instance in enumerate(box_instances):
+        instance_type = schema.class_index_to_instance_type.get(box_instance.class_index)
+        type_name = instance_type.name if instance_type is not None else str(box_instance.class_index)
         counts[type_name] = counts.get(type_name, 0) + 1
 
-        instances.append(_parse_line(line, schema, f"line-{line_index}", f"{type_name} {counts[type_name]}"))
+        instances.append(_to_data_instance(box_instance, schema, f"line-{line_index}", f"{type_name} {counts[type_name]}"))
 
     return instances
 

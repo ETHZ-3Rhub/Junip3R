@@ -319,13 +319,12 @@ def test_round_trips_a_real_junip3r_exported_dataset(tmp_path):
     from junip3r.labeller.config.data import InstanceType, MemberType, SkeletonType
     from junip3r.labeller.data.types.abc import LabellerObjectType
     from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import MappingYoloDatasetMetadataGenerator
-    from junip3r.labeller.export.yolo.data import (
-        YoloDataset, YoloDatasetConfig, YoloImage, YoloPoseInstance, YoloPoseInstanceTypeConfig,
-    )
+    from junip3r.labeller.export.yolo.data import YoloDataset, YoloDatasetConfig, YoloImage, YoloPoseInstanceTypeConfig
     from junip3r.labeller.export.yolo.serialization.yolo_dataset_metadata_writer import YoloPoseDatasetMetadataWriter
     from junip3r.labeller.export.yolo.serialization.yolo_dataset_writer import YoloDatasetWriter
     from junip3r.labeller.yolo.config.yolo_dataset_config import resolve_yolo_data_yaml
     from junip3r.labeller.yolo.data_yaml.serializer import YoloDataYamlSerializer
+    from junip3r.labeller.yolo.labels.data import YoloBoxInstance
 
     config = YoloDatasetConfig(
         class_names=["mouse"],
@@ -345,7 +344,7 @@ def test_round_trips_a_real_junip3r_exported_dataset(tmp_path):
 
     image = YoloImage(
         name="a",
-        instances=[YoloPoseInstance(class_index=0, box=(0.5, 0.5, 0.2, 0.4), keypoints=[(0.3, 0.3, 2.0), (0.7, 0.7, 1.0)])],
+        instances=[YoloBoxInstance(class_index=0, box=(0.5, 0.5, 0.2, 0.4), keypoints=[(0.3, 0.3, 2.0), (0.7, 0.7, 1.0)])],
         image=np.zeros((2, 2, 3), dtype=np.uint8),
     )
     # No val images at all - YoloDatasetWriter is expected to still emit a (empty)

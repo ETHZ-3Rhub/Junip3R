@@ -8,8 +8,7 @@ from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import (
     MappingYoloPoseInstanceConverter,
     _box_to_xywh,
 )
-from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstance, YoloPoseInstanceTypeConfig
-from junip3r.labeller.export.yolo.serialization.yolo_label_writer import YOLOPoseLabelWriter
+from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig
 
 
 class FakeInstanceType:
@@ -121,7 +120,7 @@ def test_convert_drops_keypoints_not_present_in_the_mapping():
     assert result[0].keypoints == [(1.0, 1.0, 1.0), (3.0, 1.0, 1.0)]
 
 
-def test_convert_zeroes_coordinates_but_keeps_raw_visibility_below_threshold():
+def test_convert_fully_zeroes_a_sub_threshold_keypoint():
     instance = _instance("mouse", [
         BoundingBox(name="box", box=((0.0, 0.0), (2.0, 2.0))),
         Keypoint(name="nose", p=(1.0, 1.0), visibility=0.3),
@@ -130,26 +129,7 @@ def test_convert_zeroes_coordinates_but_keeps_raw_visibility_below_threshold():
 
     result = MappingYoloPoseInstanceConverter(_config()).convert([instance])
 
-    # coordinates are zeroed for a sub-threshold keypoint, but the raw visibility value
-    # is passed through as-is (only YOLOPoseLabelWriter zeroes it fully on write, below).
-    assert result[0].keypoints[0] == (0.0, 0.0, 0.3)
-
-
-# --- YOLOPoseLabelWriter -----------------------------------------------------------
-
-def test_label_writer_fully_zeroes_low_visibility_keypoints_on_write(tmp_path):
-    instance = YoloPoseInstance(class_index=0, box=(0.5, 0.5, 1.0, 1.0), keypoints=[(1.0, 1.0, 0.3), (2.0, 2.0, 0.9)])
-    label_file = tmp_path / "a.txt"
-
-    YOLOPoseLabelWriter.write_instances(label_file, [instance])
-
-    line = label_file.read_text().strip()
-    assert line == "0 0.5 0.5 1.0 1.0 0.0 0.0 0.0 2.0 2.0 0.9"
-
-
-def test_label_writer_asserts_all_instances_share_keypoint_count(tmp_path):
-    a = YoloPoseInstance(0, (0, 0, 1, 1), [(0, 0, 1)])
-    b = YoloPoseInstance(0, (0, 0, 1, 1), [(0, 0, 1), (0, 0, 1)])
-
-    with pytest.raises(AssertionError):
-        YOLOPoseLabelWriter.write_instances(tmp_path / "a.txt", [a, b])
+    # A keypoint below the visibility threshold is written as fully absent (0,0,0),
+    # not just its coordinates zeroed - see MappingYoloPoseInstanceConverter.convert.
+    assert result[0].keypoints[0] == (0.0, 0.0, 0.0)
+    assert result[0].keypoints[1] == (3.0, 1.0, 1.0)

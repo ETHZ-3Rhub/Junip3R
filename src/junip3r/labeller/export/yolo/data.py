@@ -5,16 +5,7 @@ from typing import Sequence, Mapping, Tuple, Optional, Protocol
 import numpy as np
 
 from junip3r.labeller.data.types.abc import Color
-
-YoloBox = Tuple[float, float, float, float]  # cx, cy, w, h
-YoloKeypoint = Tuple[float, float, float]  # x, y, visibility
-
-
-@dataclass
-class YoloPoseInstance:
-    class_index: int
-    box: YoloBox
-    keypoints: Sequence[YoloKeypoint]
+from junip3r.labeller.yolo.labels.data import YoloBoxInstance
 
 
 class IYoloImage(Protocol):
@@ -22,7 +13,7 @@ class IYoloImage(Protocol):
     @property
     def name(self) -> str: ...
     @property
-    def instances(self) -> Sequence[YoloPoseInstance]: ...
+    def instances(self) -> Sequence[YoloBoxInstance]: ...
     @property
     def image(self) -> Optional[np.ndarray]: ...
     @property
@@ -39,7 +30,7 @@ class IYoloImage(Protocol):
 @dataclass
 class YoloImage:
     name: str
-    instances: Sequence[YoloPoseInstance]
+    instances: Sequence[YoloBoxInstance]
     image: Optional[np.ndarray] = None
     source_file: Optional[Path] = None
 

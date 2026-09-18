@@ -15,13 +15,14 @@ from junip3r.labeller.data.types.abc import LabellerObjectType
 from junip3r.labeller.data.types.data import Instance
 from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import \
     MappingYoloDatasetMetadataGenerator, MappingYoloDatasetGenerator, MappingYoloPoseInstanceConverter
-from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig, YoloPoseInstance
+from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig
 from junip3r.labeller.export.yolo.serialization.yolo_dataset_metadata_writer import YoloPoseDatasetMetadataWriter
 from junip3r.labeller.export.yolo.serialization.yolo_dataset_writer import YoloDatasetWriter
 from junip3r.labeller.export.yolo.serialization.set_split_writer import SetSplitWriter
 from junip3r.labeller.export.yolo.set_split import SetSplitConfig, SetSplit, ISetSplitRepository, resolve_set_assignments
 from junip3r.labeller.export.yolo.widgets.set_split_dialog import SetSplitDialog
 from junip3r.labeller.model.abc import IReadOnlyAppModel
+from junip3r.labeller.yolo.labels.data import YoloBoxInstance
 
 
 @dataclass
@@ -34,7 +35,7 @@ class AppModelYoloImage:
     app_model: IReadOnlyAppModel
     image_index: int
     name: str
-    instances: Sequence[YoloPoseInstance]
+    instances: Sequence[YoloBoxInstance]
 
     @property
     def image(self) -> Optional[np.ndarray]:

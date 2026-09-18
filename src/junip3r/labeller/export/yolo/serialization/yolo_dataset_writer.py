@@ -6,9 +6,9 @@ import cv2
 import yaml
 
 from junip3r.labeller.export.yolo.data import IYoloImage, YoloDataset
-from junip3r.labeller.export.yolo.serialization.yolo_label_writer import YOLOPoseLabelWriter
 from junip3r.labeller.yolo.data_yaml.data import YoloDataYaml
 from junip3r.labeller.yolo.data_yaml.serializer import YoloDataYamlSerializer
+from junip3r.labeller.yolo.labels.serializer import YoloLabelSerializer
 
 # train/val are always written, even empty - YoloDataYaml requires both, and our own
 # YOLO dataset reader expects both directories to exist (see discover_yolo_dataset_images).
@@ -20,6 +20,8 @@ class YoloDatasetWriter:
         """Write the dataset to disk, yielding (completed, total) after each image."""
         sets = self._all_sets(dataset)
         self._write_data_file(target_folder, dataset, sets)
+
+        label_serializer = YoloLabelSerializer(keypoint_dims=3)
 
         total = sum(len(images) for _, images in sets)
         completed = 0
@@ -47,7 +49,7 @@ class YoloDatasetWriter:
                 else:
                     raise ValueError(f"YoloImage '{image_name}' has neither a source_file nor image data")
 
-                YOLOPoseLabelWriter.write_instances(label_file, image.instances)
+                label_serializer.write(label_file, image.instances)
 
                 completed += 1
                 yield completed, total
