@@ -316,6 +316,8 @@ def test_selection_survives_repeated_image_state_recomputation(tmp_path):
 
 
 def test_round_trips_a_real_junip3r_exported_dataset(tmp_path):
+    from junip3r.labeller.config.data import InstanceType, MemberType, SkeletonType
+    from junip3r.labeller.data.types.abc import LabellerObjectType
     from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import MappingYoloDatasetMetadataGenerator
     from junip3r.labeller.export.yolo.data import (
         YoloDataset, YoloDatasetConfig, YoloImage, YoloPoseInstance, YoloPoseInstanceTypeConfig,
@@ -329,7 +331,17 @@ def test_round_trips_a_real_junip3r_exported_dataset(tmp_path):
         class_names=["mouse"],
         instance_types={"mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box="Bounding Box", keypoints={"nose": 0, "tail": 1})},
     )
-    metadata = MappingYoloDatasetMetadataGenerator(config).generate()
+    instance_type = InstanceType(
+        name="mouse",
+        members=[
+            MemberType(name="Bounding Box", type=LabellerObjectType.BOUNDING_BOX, color=(255, 0, 0)),
+            MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(0, 255, 0)),
+            MemberType(name="tail", type=LabellerObjectType.KEYPOINT, color=(0, 0, 255)),
+        ],
+        skeleton=SkeletonType(lines=[], color=(0, 0, 0)),
+        color=(255, 0, 0),
+    )
+    metadata = MappingYoloDatasetMetadataGenerator(config).generate([instance_type])
 
     image = YoloImage(
         name="a",

@@ -49,6 +49,7 @@ class AppModelYoloImage:
 class ExportJob:
     target_folder: Path
     config: YoloDatasetConfig
+    instance_types: Sequence[InstanceType]
     set_split_config: SetSplitConfig
     model: IReadOnlyAppModel
     instance_filter: Callable[[Instance], bool]
@@ -95,7 +96,7 @@ class ExportWorker(QObject):
                 yolo_images.append((set_name, AppModelYoloImage(job.model, image_index, image_name, yolo_instances)))
 
             dataset = dataset_generator.generate(yolo_images)
-            metadata = metadata_generator.generate()
+            metadata = metadata_generator.generate(job.instance_types)
 
             dataset_writer = YoloDatasetWriter()
             for completed, total in dataset_writer.write(job.target_folder, dataset):
@@ -395,6 +396,7 @@ class YoloExportDialog(QDialog):
         job = ExportJob(
             target_folder,
             dataset_config,
+            selected_instance_types,
             self._set_split_config,
             self._model,
             instance_filter=lambda instance: instance.instance_type.name in selected_names,
