@@ -16,7 +16,7 @@ from junip3r.labeller.data.types.abc import LabellerObjectType
 from junip3r.labeller.data.types.data import Instance
 from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import \
     MappingYoloDatasetMetadataGenerator, MappingYoloDatasetGenerator, MappingYoloPoseInstanceConverter
-from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig, YoloPoseInstance
+from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig
 from junip3r.labeller.export.yolo.export_profile import ExportProfile, IExportProfileRepository
 from junip3r.labeller.export.yolo.serialization.yolo_dataset_metadata_writer import YoloPoseDatasetMetadataWriter
 from junip3r.labeller.export.yolo.serialization.yolo_dataset_writer import YoloDatasetWriter
@@ -691,6 +691,7 @@ class YoloExportDialog(QDialog):
             target_folder,
             dataset_config,
             selected_instance_types,
+            set_split_config,
             self._model,
             instance_filter=lambda instance: instance.instance_type.name in selected_names,
             image_filter=(lambda instances: True) if include_empty else (lambda instances: bool(instances)),
