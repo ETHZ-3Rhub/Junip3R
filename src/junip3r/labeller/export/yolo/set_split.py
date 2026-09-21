@@ -1,7 +1,8 @@
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Mapping, Protocol, Dict, Iterable, Any
+from typing import Optional, List, Mapping, Protocol, Dict, Iterable, Any, Sequence
+from uuid import uuid4
 
 import yaml
 
@@ -53,25 +54,94 @@ class SetSplitConfigSerializer:
         return cls.deserialize(data)
 
 
+@dataclass
+class NamedSetSplit:
+    """A SetSplitConfig with stable identity, so multiple export profiles can share one
+    by reference. SetSplitConfig itself is left alone (no id field) - see
+    NamedSetSplitSerializer for why.
+    """
+    id: str
+    name: str
+    config: SetSplitConfig = field(default_factory=SetSplitConfig)
+
+
+class NamedSetSplitSerializer:
+    @classmethod
+    def serialize(cls, named_split: NamedSetSplit) -> Dict[str, Any]:
+        return {
+            "id": named_split.id,
+            "name": named_split.name,
+            **SetSplitConfigSerializer.serialize(named_split.config),
+        }
+
+    @classmethod
+    def deserialize(cls, data: Dict[str, Any]) -> NamedSetSplit:
+        return NamedSetSplit(
+            id=data.get("id") or str(uuid4()),
+            name=data.get("name", "Default"),
+            config=SetSplitConfigSerializer.deserialize(data),
+        )
+
+
 class ISetSplitRepository(Protocol):
-    def get(self) -> SetSplitConfig: ...
-    def set(self, config: SetSplitConfig) -> None: ...
+    def list(self) -> Sequence[NamedSetSplit]: ...
+    def get(self, split_id: str) -> Optional[NamedSetSplit]: ...
+    def set(self, named_split: NamedSetSplit) -> None: ...
+    def delete(self, split_id: str) -> None: ...
 
 
 class SetSplitRepository:
+    """No cache - every call round-trips through set_split_file, same convention as
+    LabelModel elsewhere in this codebase.
+    """
+
     def __init__(self, set_split_file: Path):
         self._set_split_file = set_split_file
 
-    def get(self) -> SetSplitConfig:
+    def list(self) -> List[NamedSetSplit]:
         if not self._set_split_file.exists():
-            return SetSplitConfig()
+            return []
 
-        return SetSplitConfigSerializer.load(self._set_split_file)
+        with self._set_split_file.open("r") as f:
+            data = yaml.safe_load(f)
 
-    def set(self, config: SetSplitConfig) -> None:
+        if not data:
+            return []
+
+        if "splits" not in data:
+            # Legacy flat single-config shape (pre-named-splits) - wrap it as one named
+            # split and persist the new shape immediately. This write is load-bearing,
+            # not cosmetic: list() has no cache and is called on every dialog refresh,
+            # so without persisting here, the fresh uuid4() below would be regenerated
+            # (differently) on every call, and any profile's set_split_id chosen against
+            # one call would stop matching by the very next one.
+            migrated = NamedSetSplit(id=str(uuid4()), name="Default",
+                                      config=SetSplitConfigSerializer.deserialize(data))
+            self._write([migrated])
+            return [migrated]
+
+        return [NamedSetSplitSerializer.deserialize(d) for d in data["splits"]]
+
+    def get(self, split_id: str) -> Optional[NamedSetSplit]:
+        return next((s for s in self.list() if s.id == split_id), None)
+
+    def set(self, named_split: NamedSetSplit) -> None:
+        splits = self.list()
+        for i, existing in enumerate(splits):
+            if existing.id == named_split.id:
+                splits[i] = named_split
+                break
+        else:
+            splits.append(named_split)
+        self._write(splits)
+
+    def delete(self, split_id: str) -> None:
+        self._write([s for s in self.list() if s.id != split_id])
+
+    def _write(self, splits: Sequence[NamedSetSplit]) -> None:
         self._set_split_file.parent.mkdir(parents=True, exist_ok=True)
         with self._set_split_file.open("w") as f:
-            yaml.dump(SetSplitConfigSerializer.serialize(config), f)
+            yaml.dump({"splits": [NamedSetSplitSerializer.serialize(s) for s in splits]}, f)
 
 
 class SetSplit:

@@ -19,6 +19,7 @@ from junip3r.labeller.data.repository.tag import TagRepository
 from junip3r.labeller.data.yolo.config_repository import YoloConfigRepository, build_yolo_dataset_schema
 from junip3r.labeller.data.yolo.discovery import discover_yolo_dataset_images, yolo_dataset_root
 from junip3r.labeller.data.yolo.label_repository import YoloLabelRepository
+from junip3r.labeller.export.yolo.export_profile import ExportProfileRepository
 from junip3r.labeller.export.yolo.set_split import SetSplitRepository
 from junip3r.labeller.legacy.legacy_label_converter import LegacyLabelConverter
 from junip3r.labeller.model.app_model import AppModel
@@ -89,6 +90,7 @@ def _from_junip3r_project(config_file: Path, config: dict, integrated: bool = Fa
     tag_repository = TagRepository(project_folder / "meta" / "tags", [i.image.stem for i in images])
 
     set_split_repository = SetSplitRepository(project_folder / "_labeller" / "set_split.yaml")
+    export_profile_repository = ExportProfileRepository(project_folder / "_labeller" / "export_profiles.yaml")
 
     app_model = AppModel(image_repository, label_model, SelectionRepository(), tag_repository=tag_repository)
 
@@ -96,6 +98,7 @@ def _from_junip3r_project(config_file: Path, config: dict, integrated: bool = Fa
     editor.set_model(app_model, context_repository, image_settings_model)
     editor.set_mode(labeller_config.mode)
     editor.set_set_split_repository(set_split_repository)
+    editor.set_export_profile_repository(export_profile_repository)
 
     return editor
 

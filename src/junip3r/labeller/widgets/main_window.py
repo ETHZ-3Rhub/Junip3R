@@ -4,6 +4,7 @@ from PySide6.QtCore import Signal
 
 from junip3r.common.config.abc import ConfigMode
 from junip3r.labeller.data.repository.abc import IContextRepository
+from junip3r.labeller.export.yolo.export_profile import IExportProfileRepository
 from junip3r.labeller.export.yolo.set_split import ISetSplitRepository
 from junip3r.labeller.export.yolo.widgets.yolo_export_dialog import YoloExportDialog
 from junip3r.labeller.layout.labeller_layout import EditorMainWindowLayout
@@ -24,6 +25,7 @@ class EditorMainWindow(EditorMainWindowLayout):
         self._model: Optional[AppModel] = None
         self._context_model: Optional[ContextModel] = None
         self._set_split_repository: Optional[ISetSplitRepository] = None
+        self._export_profile_repository: Optional[IExportProfileRepository] = None
 
         self.action_export_as_yolo_dataset.triggered.connect(self.export_yolo_dataset)
 
@@ -60,13 +62,16 @@ class EditorMainWindow(EditorMainWindowLayout):
     def set_set_split_repository(self, set_split_repository: ISetSplitRepository):
         self._set_split_repository = set_split_repository
 
+    def set_export_profile_repository(self, export_profile_repository: IExportProfileRepository):
+        self._export_profile_repository = export_profile_repository
+
     def switch_to_frame_extractor(self):
         self.switch_to.emit("frame_extractor")
 
     def export_yolo_dataset(self):
-        if self._model is None or self._set_split_repository is None:
+        if self._model is None or self._set_split_repository is None or self._export_profile_repository is None:
             return
-        dialog = YoloExportDialog(self._model, self._set_split_repository, self)
+        dialog = YoloExportDialog(self._model, self._set_split_repository, self._export_profile_repository, self)
         dialog.exec_()
 
     def closeEvent(self, event):
