@@ -10,6 +10,7 @@ from junip3r.labeller.config.data import InstanceType, MemberType, SkeletonType
 from junip3r.labeller.config.parser import color_from_hue
 from junip3r.labeller.data.repository.abc import IConfigRepository
 from junip3r.labeller.data.types.abc import Color, LabellerObjectType
+from junip3r.labeller.yolo.config.yolo_dataset_config import YoloDatasetConfig
 
 
 @dataclass
@@ -24,11 +25,19 @@ class YoloDatasetSchema:
     num_keypoints: int = 0
 
 
-def _class_names(raw: Dict[str, Any]) -> List[str]:
-    names = raw.get("names", {})
-    if isinstance(names, dict):
-        return [names[key] for key in sorted(names, key=int)]
-    return list(names)
+def _class_names(names: Mapping[int, str]) -> List[str]:
+    return [names[class_index] for class_index in sorted(names)]
+
+
+def _keypoint_names(
+        class_index: int,
+        kpt_names: Optional[Mapping[int, Sequence[str]]],
+        num_keypoints: int,
+) -> Sequence[str]:
+    names = (kpt_names or {}).get(class_index)
+    if names is not None and len(names) == num_keypoints:
+        return names
+    return [f"kp_{i}" for i in range(num_keypoints)]
 
 
 def _hex_to_color(hex_string: str) -> Color:
@@ -40,25 +49,30 @@ def _default_color(index: int, count: int) -> Color:
     return color_from_hue(index / count) if count > 1 else (0, 0, 255)
 
 
-def _generic_schema(raw: Dict[str, Any]) -> YoloDatasetSchema:
-    class_names = _class_names(raw)
-    kpt_shape = raw.get("kpt_shape")
-    num_keypoints = int(kpt_shape[0]) if kpt_shape else 0
+def _generic_schema(config: YoloDatasetConfig) -> YoloDatasetSchema:
+    num_keypoints = int(config.kpt_shape[0]) if config.kpt_shape else 0
     mode = ConfigMode.YOLO_POSE if num_keypoints > 0 else ConfigMode.YOLO_DETECT
 
     instance_types: List[InstanceType] = []
     class_index_to_instance_type: Dict[int, InstanceType] = {}
     keypoint_output_indices: Dict[str, Sequence[int]] = {}
 
-    count = len(class_names)
-    for index, name in enumerate(class_names):
-        color = _default_color(index, count)
+    class_indices = sorted(config.names)
+    count = len(class_indices)
+    for position, class_index in enumerate(class_indices):
+        name = config.names[class_index]
+        color = _default_color(position, count)
 
         if mode == ConfigMode.YOLO_DETECT:
             members = [MemberType(name=name, type=LabellerObjectType.BOUNDING_BOX, color=color)]
         else:
+            # kpt_names is a data.yaml convention some datasets use to name each
+            # class's keypoints - fall back to generic "kp_i" names when it's absent,
+            # same as when Junip3R's own richer meta/ folder (see _rich_schema) isn't
+            # present either.
+            keypoint_names = _keypoint_names(class_index, config.kpt_names, num_keypoints)
             keypoints = [
-                MemberType(name=f"kp_{i}", type=LabellerObjectType.KEYPOINT, color=_default_color(i, num_keypoints))
+                MemberType(name=keypoint_names[i], type=LabellerObjectType.KEYPOINT, color=_default_color(i, num_keypoints))
                 for i in range(num_keypoints)
             ]
             members = [MemberType(name="Bounding Box", type=LabellerObjectType.BOUNDING_BOX, color=color), *keypoints]
@@ -66,7 +80,7 @@ def _generic_schema(raw: Dict[str, Any]) -> YoloDatasetSchema:
 
         instance_type = InstanceType(name=name, members=members, skeleton=SkeletonType(lines=[], color=(0, 0, 0)), color=color)
         instance_types.append(instance_type)
-        class_index_to_instance_type[index] = instance_type
+        class_index_to_instance_type[class_index] = instance_type
 
     return YoloDatasetSchema(mode, instance_types, class_index_to_instance_type, keypoint_output_indices, num_keypoints)
 
@@ -112,8 +126,7 @@ def _build_skeleton(lines_field: Any, members: Sequence[MemberType]) -> Skeleton
     return SkeletonType(lines=lines, color=(0, 0, 0))
 
 
-def _rich_schema(dataset_root: Path, raw: Dict[str, Any]) -> YoloDatasetSchema:
-    class_names = _class_names(raw)
+def _rich_schema(dataset_root: Path, class_names: Sequence[str]) -> YoloDatasetSchema:
     output_mapping = _read_output_mapping(dataset_root / "meta" / "output_mapping.csv")
 
     points_by_instance: Dict[str, List[Tuple[str, int]]] = {}
@@ -158,11 +171,11 @@ def _rich_schema(dataset_root: Path, raw: Dict[str, Any]) -> YoloDatasetSchema:
     return YoloDatasetSchema(mode, instance_types, class_index_to_instance_type, keypoint_output_indices, num_keypoints)
 
 
-def build_yolo_dataset_schema(dataset_root: Path, raw: Dict[str, Any]) -> YoloDatasetSchema:
-    class_names = _class_names(raw)
+def build_yolo_dataset_schema(dataset_root: Path, config: YoloDatasetConfig) -> YoloDatasetSchema:
+    class_names = _class_names(config.names)
     if _meta_is_complete(dataset_root, class_names):
-        return _rich_schema(dataset_root, raw)
-    return _generic_schema(raw)
+        return _rich_schema(dataset_root, class_names)
+    return _generic_schema(config)
 
 
 class YoloConfigRepository(IConfigRepository):

@@ -1,11 +1,9 @@
-from typing import Sequence, List, Tuple, Iterable
+from typing import Sequence, List, Tuple, Iterable, Mapping
 
-from junip3r.labeller.data.types.abc import Box
+from junip3r.labeller.config.data import InstanceType
+from junip3r.labeller.data.types.abc import Box, LabellerObjectType
 from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox
 from junip3r.labeller.export.yolo.data import (
-    YoloBox,
-    YoloKeypoint,
-    YoloPoseInstance,
     IYoloImage,
     YoloDatasetConfig,
     YoloKeypointType,
@@ -13,6 +11,7 @@ from junip3r.labeller.export.yolo.data import (
     YoloDatasetMetadata,
     YoloDataset,
 )
+from junip3r.labeller.yolo.labels.data import YoloBox, YoloBoxInstance, YoloKeypoint
 
 
 def _box_to_xywh(box: Box) -> YoloBox:
@@ -35,10 +34,10 @@ class MappingYoloPoseInstanceConverter:
     def __init__(self, config: YoloDatasetConfig):
         self._config = config
 
-    def convert(self, instances: Sequence[Instance]) -> Sequence[YoloPoseInstance]:
+    def convert(self, instances: Sequence[Instance]) -> Sequence[YoloBoxInstance]:
         num_keypoints = self._config.num_keypoints
 
-        yolo_instances: List[YoloPoseInstance] = []
+        yolo_instances: List[YoloBoxInstance] = []
         for instance in instances:
             mapping = self._config.instance_types[instance.instance_type.name]
 
@@ -63,11 +62,14 @@ class MappingYoloPoseInstanceConverter:
                 if member.name not in mapping.keypoints:
                     continue
 
-                keypoint_index = mapping.keypoints[member.name]
-                x, y = member.p if member.p is not None and member.visibility > 0.5 else (0., 0.)
-                keypoints[keypoint_index] = (x, y, member.visibility)
+                # A keypoint below the visibility threshold is written as fully absent
+                # (0,0,0) - junip3r's own policy for "no keypoint here", not part of the
+                # YOLO format itself (see YoloLabelSerializer).
+                if member.p is not None and member.visibility >= 0.5:
+                    keypoint_index = mapping.keypoints[member.name]
+                    keypoints[keypoint_index] = (member.p[0], member.p[1], member.visibility)
 
-            yolo_instance = YoloPoseInstance(mapping.class_index, bounding_box, keypoints)
+            yolo_instance = YoloBoxInstance(mapping.class_index, bounding_box, keypoints)
             yolo_instances.append(yolo_instance)
 
         return yolo_instances
@@ -77,19 +79,31 @@ class MappingYoloDatasetMetadataGenerator:
     def __init__(self, config: YoloDatasetConfig):
         self._config = config
 
-    def generate(self) -> YoloDatasetMetadata:
-        instance_types = self._generate_instance_types()
+    def generate(self, instance_types: Sequence[InstanceType]) -> YoloDatasetMetadata:
+        instance_types_by_name = {it.name: it for it in instance_types}
+        generated_instance_types = self._generate_instance_types(instance_types_by_name)
         output_mapping = self._generate_output_mapping()
-        return YoloDatasetMetadata(instance_types, output_mapping)
+        return YoloDatasetMetadata(generated_instance_types, output_mapping)
 
-    def _generate_instance_types(self) -> Sequence[YoloPoseInstanceType]:
+    def _generate_instance_types(self, instance_types_by_name: Mapping[str, InstanceType]) -> Sequence[YoloPoseInstanceType]:
         instance_types: List[YoloPoseInstanceType] = []
         for instance_type_mapping in self._config.instance_types.values():
             instance_type_name = self._config.class_names[instance_type_mapping.class_index]
+            instance_type = instance_types_by_name[instance_type_name]
+            keypoint_colors = {
+                member.name: member.color
+                for member in instance_type.members
+                if member.type == LabellerObjectType.KEYPOINT
+            }
+
             keypoints: List[YoloKeypointType] = []
             for keypoint_name, output_index in instance_type_mapping.keypoints.items():
-                keypoints.append(YoloKeypointType(keypoint_name))
-            instance_types.append(YoloPoseInstanceType(instance_type_name, "", keypoints))
+                keypoints.append(YoloKeypointType(keypoint_name, color=keypoint_colors.get(keypoint_name)))
+
+            instance_types.append(YoloPoseInstanceType(
+                instance_type_name, "", keypoints,
+                bounding_box_color=instance_type.color,
+            ))
         return instance_types
 
     def _generate_output_mapping(self) -> List[Tuple[str, str, int]]:

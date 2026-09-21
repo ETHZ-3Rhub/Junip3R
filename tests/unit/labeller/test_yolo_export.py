@@ -1,12 +1,14 @@
 import pytest
 
+from junip3r.labeller.config.data import InstanceType, MemberType, SkeletonType
+from junip3r.labeller.data.types.abc import LabellerObjectType
 from junip3r.labeller.data.types.data import BoundingBox, Instance, Keypoint
 from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import (
+    MappingYoloDatasetMetadataGenerator,
     MappingYoloPoseInstanceConverter,
     _box_to_xywh,
 )
-from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstance, YoloPoseInstanceTypeConfig
-from junip3r.labeller.export.yolo.serialization.yolo_label_writer import YOLOPoseLabelWriter
+from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig
 
 
 class FakeInstanceType:
@@ -32,6 +34,35 @@ def _config(bounding_box="box", keypoints=None):
         class_names=["mouse"],
         instance_types={"mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box=bounding_box, keypoints=keypoints)},
     )
+
+
+# --- MappingYoloDatasetMetadataGenerator -------------------------------------------------
+
+def test_metadata_generator_carries_through_bounding_box_and_keypoint_colors():
+    config = YoloDatasetConfig(
+        class_names=["mouse"],
+        instance_types={
+            "mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box="Bounding Box", keypoints={"nose": 0, "tail": 1}),
+        },
+    )
+    instance_type = InstanceType(
+        name="mouse",
+        members=[
+            MemberType(name="Bounding Box", type=LabellerObjectType.BOUNDING_BOX, color=(255, 0, 0)),
+            MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(0, 255, 0)),
+            MemberType(name="tail", type=LabellerObjectType.KEYPOINT, color=(0, 0, 255)),
+        ],
+        skeleton=SkeletonType(lines=[], color=(0, 0, 0)),
+        color=(255, 0, 0),
+    )
+
+    metadata = MappingYoloDatasetMetadataGenerator(config).generate([instance_type])
+
+    mouse = metadata.instance_types[0]
+    assert mouse.bounding_box_color == (255, 0, 0)
+    nose, tail = mouse.keypoints
+    assert (nose.name, nose.color) == ("nose", (0, 255, 0))
+    assert (tail.name, tail.color) == ("tail", (0, 0, 255))
 
 
 def test_convert_maps_box_and_keypoints():
@@ -89,7 +120,7 @@ def test_convert_drops_keypoints_not_present_in_the_mapping():
     assert result[0].keypoints == [(1.0, 1.0, 1.0), (3.0, 1.0, 1.0)]
 
 
-def test_convert_zeroes_coordinates_but_keeps_raw_visibility_below_threshold():
+def test_convert_fully_zeroes_a_sub_threshold_keypoint():
     instance = _instance("mouse", [
         BoundingBox(name="box", box=((0.0, 0.0), (2.0, 2.0))),
         Keypoint(name="nose", p=(1.0, 1.0), visibility=0.3),
@@ -98,26 +129,7 @@ def test_convert_zeroes_coordinates_but_keeps_raw_visibility_below_threshold():
 
     result = MappingYoloPoseInstanceConverter(_config()).convert([instance])
 
-    # coordinates are zeroed for a sub-threshold keypoint, but the raw visibility value
-    # is passed through as-is (only YOLOPoseLabelWriter zeroes it fully on write, below).
-    assert result[0].keypoints[0] == (0.0, 0.0, 0.3)
-
-
-# --- YOLOPoseLabelWriter -----------------------------------------------------------
-
-def test_label_writer_fully_zeroes_low_visibility_keypoints_on_write(tmp_path):
-    instance = YoloPoseInstance(class_index=0, box=(0.5, 0.5, 1.0, 1.0), keypoints=[(1.0, 1.0, 0.3), (2.0, 2.0, 0.9)])
-    label_file = tmp_path / "a.txt"
-
-    YOLOPoseLabelWriter.write_instances(label_file, [instance])
-
-    line = label_file.read_text().strip()
-    assert line == "0 0.5 0.5 1.0 1.0 0.0 0.0 0.0 2.0 2.0 0.9"
-
-
-def test_label_writer_asserts_all_instances_share_keypoint_count(tmp_path):
-    a = YoloPoseInstance(0, (0, 0, 1, 1), [(0, 0, 1)])
-    b = YoloPoseInstance(0, (0, 0, 1, 1), [(0, 0, 1), (0, 0, 1)])
-
-    with pytest.raises(AssertionError):
-        YOLOPoseLabelWriter.write_instances(tmp_path / "a.txt", [a, b])
+    # A keypoint below the visibility threshold is written as fully absent (0,0,0),
+    # not just its coordinates zeroed - see MappingYoloPoseInstanceConverter.convert.
+    assert result[0].keypoints[0] == (0.0, 0.0, 0.0)
+    assert result[0].keypoints[1] == (3.0, 1.0, 1.0)

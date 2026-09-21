@@ -26,6 +26,8 @@ from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.model.image_settings_model import ImageSettingsModel
 from junip3r.labeller.model.label_model import LabelModel
 from junip3r.labeller.widgets.main_window import EditorMainWindow
+from junip3r.labeller.yolo.config.yolo_dataset_config import resolve_yolo_data_yaml
+from junip3r.labeller.yolo.data_yaml.serializer import YoloDataYamlSerializer
 from junip3r.logging_setup import create_logging_manager
 
 logger = logging.getLogger(__name__)
@@ -48,8 +50,12 @@ def _is_yolo_data_yaml(raw: dict) -> bool:
 
 def _from_yolo_dataset(data_yaml_file: Path, raw: dict, integrated: bool) -> EditorMainWindow:
     dataset_root = yolo_dataset_root(data_yaml_file, raw)
-    images = discover_yolo_dataset_images(data_yaml_file, raw)
-    schema = build_yolo_dataset_schema(dataset_root, raw)
+
+    data_yaml = YoloDataYamlSerializer().deserialize(raw)
+    resolved = resolve_yolo_data_yaml(data_yaml, data_yaml_file.parent)
+
+    images = discover_yolo_dataset_images(resolved)
+    schema = build_yolo_dataset_schema(dataset_root, resolved)
 
     image_repository = ImageRepository([i.image for i in images])
     config_repository = YoloConfigRepository(schema)

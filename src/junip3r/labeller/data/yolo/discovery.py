@@ -2,23 +2,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from junip3r.common.discovery import DEFAULT_IMAGE_EXTENSIONS, discover_images
-
-# Keys in a data.yaml that describe the dataset as a whole rather than naming an image
-# set - every other string-valued top-level key is treated as a set (train/val/test/...).
-_NON_SET_KEYS = {"path", "names", "nc", "kpt_shape", "flip_idx", "flip_v_idx", "download"}
+from junip3r.common.discovery import DEFAULT_IMAGE_EXTENSIONS
+from junip3r.labeller.yolo.config.yolo_dataset_config import YoloDatasetConfig
 
 
 @dataclass
 class YoloDatasetImage:
     image: Path
     label: Optional[Path]
-    set_name: str
-
-
-class DuplicateImageNameError(ValueError):
-    """Raised when the same image stem appears in more than one set - sets are merged
-    into a single flat list for browsing, so a duplicate would be ambiguous."""
 
 
 def yolo_dataset_root(data_yaml_file: Path, raw: Dict[str, Any]) -> Path:
@@ -28,45 +19,56 @@ def yolo_dataset_root(data_yaml_file: Path, raw: Dict[str, Any]) -> Path:
     return (data_yaml_file.parent / path).resolve()
 
 
-def _label_dir_for(dataset_root: Path, set_relative_path: str) -> Path:
-    # Mirrors the layout YoloDatasetWriter always produces (images/<set> next to
-    # labels/<set>) - see labeller/export/yolo/serialization/yolo_dataset_writer.py.
-    if "images" in Path(set_relative_path).parts:
-        label_relative = set_relative_path.replace("images", "labels", 1)
-    else:
-        label_relative = str(Path("labels") / set_relative_path)
-    return dataset_root / label_relative
+def discover_yolo_dataset_images(config: YoloDatasetConfig) -> List[YoloDatasetImage]:
+    """Resolves train/val/test the same way Ultralytics does: each entry is either an
+    image directory (scanned recursively) or a .txt file listing image paths, one per
+    line. All three sets are then concatenated - in train/val/test order - into a
+    single flat, browsable list, and each image's label file is found by swapping the
+    last "images" path segment for "labels" (Ultralytics' img2label_paths).
+    """
+    image_files: List[Path] = []
+    for entries in (config.train, config.val, config.test):
+        if entries is None:
+            continue
+        for entry in entries:
+            image_files.extend(_images_for_entry(entry))
+
+    return [YoloDatasetImage(image=image_file, label=_label_path_for(image_file)) for image_file in image_files]
 
 
-def discover_yolo_dataset_images(
-        data_yaml_file: Path,
-        raw: Dict[str, Any],
-        image_extensions=DEFAULT_IMAGE_EXTENSIONS,
-) -> List[YoloDatasetImage]:
-    dataset_root = yolo_dataset_root(data_yaml_file, raw)
+def _images_for_entry(entry: Path) -> List[Path]:
+    if entry.is_dir():
+        return sorted(
+            f for f in entry.rglob("*")
+            if f.is_file() and f.suffix.lower() in DEFAULT_IMAGE_EXTENSIONS
+        )
+    if entry.is_file():
+        return _images_from_list_file(entry)
+    raise FileNotFoundError(f"{entry} does not exist")
 
-    set_items = [(key, value) for key, value in raw.items()
-                 if key not in _NON_SET_KEYS and isinstance(value, str)]
 
-    images: List[YoloDatasetImage] = []
-    seen: Dict[str, str] = {}
+def _images_from_list_file(list_file: Path) -> List[Path]:
+    parent = list_file.parent
+    image_files = []
 
-    for set_name, set_relative_path in set_items:
-        image_dir = dataset_root / set_relative_path
-        label_dir = _label_dir_for(dataset_root, set_relative_path)
+    for line in list_file.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        path = Path(line)
+        image_files.append(path if path.is_absolute() else (parent / path).resolve())
 
-        for image_file in sorted(discover_images(image_dir, image_extensions)):
-            stem = image_file.stem
-            if stem in seen:
-                raise DuplicateImageNameError(
-                    f"Image '{stem}' appears in both '{seen[stem]}' and '{set_name}'")
-            seen[stem] = set_name
+    return image_files
 
-            label_file = label_dir / f"{stem}.txt"
-            images.append(YoloDatasetImage(
-                image=image_file,
-                label=label_file if label_file.exists() else None,
-                set_name=set_name,
-            ))
 
-    return images
+def _label_path_for(image_file: Path) -> Optional[Path]:
+    # Mirrors Ultralytics' img2label_paths(): swap the last "images" path segment for
+    # "labels", then use a .txt extension regardless of the image's own extension.
+    parts = list(image_file.parts)
+    for index in range(len(parts) - 1, -1, -1):
+        if parts[index] == "images":
+            label_parts = parts.copy()
+            label_parts[index] = "labels"
+            label_file = Path(*label_parts).with_suffix(".txt")
+            return label_file if label_file.exists() else None
+    return None
