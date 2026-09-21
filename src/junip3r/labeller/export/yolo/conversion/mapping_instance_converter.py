@@ -1,7 +1,7 @@
-from typing import Sequence, List, Tuple, Iterable, Mapping
+from typing import Sequence, List, Tuple, Iterable, Mapping, Optional
 
 from junip3r.labeller.config.data import InstanceType
-from junip3r.labeller.data.types.abc import Box, LabellerObjectType
+from junip3r.labeller.data.types.abc import Box, LabellerObjectType, Point
 from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox
 from junip3r.labeller.export.yolo.data import (
     IYoloImage,
@@ -30,6 +30,43 @@ def _box_to_xywh(box: Box) -> YoloBox:
     return cx, cy, w, h
 
 
+def _member_bounds(member) -> Optional[Box]:
+    """The bounds a single member contributes to a tight box around it: a Keypoint
+    contributes its own point (both "corners" the same), a BoundingBox contributes its
+    own two corners. A keypoint below the visibility threshold contributes nothing -
+    same policy as convert() uses for the keypoints output itself (see its "fully
+    absent" comment below): an unset/not-labeled point shouldn't pull the box towards
+    a meaningless position.
+    """
+    if isinstance(member, Keypoint):
+        if member.p is None or member.visibility < 0.5:
+            return None
+        return member.p, member.p
+    if isinstance(member, BoundingBox):
+        return member.box
+    return None
+
+
+def _tight_box(instance: Instance, member_names: Sequence[str]) -> Optional[Box]:
+    corners: List[Point] = []
+    for member in instance.members:
+        if member.name not in member_names:
+            continue
+        bounds = _member_bounds(member)
+        if bounds is None:
+            continue
+        (min_x, min_y), (max_x, max_y) = bounds
+        corners.append((min_x, min_y))
+        corners.append((max_x, max_y))
+
+    if not corners:
+        return None
+
+    xs = [x for x, _ in corners]
+    ys = [y for _, y in corners]
+    return (min(xs), min(ys)), (max(xs), max(ys))
+
+
 class MappingYoloPoseInstanceConverter:
     def __init__(self, config: YoloDatasetConfig):
         self._config = config
@@ -41,14 +78,13 @@ class MappingYoloPoseInstanceConverter:
         for instance in instances:
             mapping = self._config.instance_types[instance.instance_type.name]
 
-            if mapping.bounding_box is not None:
-                box_member = next((m for m in instance.members if isinstance(m, BoundingBox) and m.name == mapping.bounding_box), None)
-                if box_member is None:
-                    raise ValueError(f"Instance of type {instance.instance_type.name} is missing required bounding box member '{mapping.bounding_box}'")
-
-                bounding_box = box_member.box
+            if mapping.bounding_box_members:
+                bounding_box = _tight_box(instance, mapping.bounding_box_members)
                 if bounding_box is None:
-                    raise ValueError(f"Instance of type {instance.instance_type.name} is missing required bounding box member")
+                    raise ValueError(
+                        f"Instance of type {instance.instance_type.name} has none of its bounding "
+                        f"box members set: {list(mapping.bounding_box_members)}"
+                    )
 
                 bounding_box = _box_to_xywh(bounding_box)
             else:
@@ -100,10 +136,7 @@ class MappingYoloDatasetMetadataGenerator:
             for keypoint_name, output_index in instance_type_mapping.keypoints.items():
                 keypoints.append(YoloKeypointType(keypoint_name, color=keypoint_colors.get(keypoint_name)))
 
-            instance_types.append(YoloPoseInstanceType(
-                instance_type_name, "", keypoints,
-                bounding_box_color=instance_type.color,
-            ))
+            instance_types.append(YoloPoseInstanceType(instance_type_name, "", keypoints, color=instance_type.color))
         return instance_types
 
     def _generate_output_mapping(self) -> List[Tuple[str, str, int]]:

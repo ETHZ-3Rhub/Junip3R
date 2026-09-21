@@ -132,7 +132,7 @@ def _write_rich_meta(dataset_root):
         yaml.dump({
             "name": "mouse",
             "description": "",
-            "bounding_box": {"mode": "manual", "color": "#ff0000"},
+            "color": "#ff0000",
             "keypoints": [
                 {"name": "nose", "mirror_h": None, "mirror_v": None, "color": "#00ff00"},
                 {"name": "tail", "mirror_h": None, "mirror_v": None},
@@ -328,7 +328,7 @@ def test_round_trips_a_real_junip3r_exported_dataset(tmp_path):
 
     config = YoloDatasetConfig(
         class_names=["mouse"],
-        instance_types={"mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box="Bounding Box", keypoints={"nose": 0, "tail": 1})},
+        instance_types={"mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box_members=["Bounding Box"], keypoints={"nose": 0, "tail": 1})},
     )
     instance_type = InstanceType(
         name="mouse",

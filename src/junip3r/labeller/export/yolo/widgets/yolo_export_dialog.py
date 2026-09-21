@@ -653,18 +653,23 @@ class YoloExportDialog(QDialog):
         for instance_index, instance_type in enumerate(selected_instance_types):
             class_names.append(instance_type.name)
 
+            keypoint_mapping = {}
+            keypoint_members = [member for member in instance_type.members if member.type == LabellerObjectType.KEYPOINT]
+            for keypoint_index, keypoint in enumerate(keypoint_members):
+                keypoint_mapping[keypoint.name] = keypoint_index
+
             bounding_box_member = next(
                 (member for member in instance_type.members if member.type == LabellerObjectType.BOUNDING_BOX),
                 None,
             )
-            bounding_box_name = bounding_box_member.name if bounding_box_member is not None else None
+            if bounding_box_member is not None:
+                bounding_box_members = [bounding_box_member.name]
+            else:
+                # No explicit bounding box member - fall back to a tight box around all
+                # keypoints (MappingYoloPoseInstanceConverter._tight_box).
+                bounding_box_members = [keypoint.name for keypoint in keypoint_members]
 
-            keypoint_mapping = {}
-            keypoint_members = (member for member in instance_type.members if member.type == LabellerObjectType.KEYPOINT)
-            for keypoint_index, keypoint in enumerate(keypoint_members):
-                keypoint_mapping[keypoint.name] = keypoint_index
-
-            instance_types[instance_type.name] = YoloPoseInstanceTypeConfig(instance_index, bounding_box_name, keypoint_mapping)
+            instance_types[instance_type.name] = YoloPoseInstanceTypeConfig(instance_index, bounding_box_members, keypoint_mapping)
 
         dataset_config = YoloDatasetConfig(
             class_names=class_names,

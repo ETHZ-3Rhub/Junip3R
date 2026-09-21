@@ -38,8 +38,12 @@ class YoloImage:
 @dataclass
 class YoloPoseInstanceTypeConfig:
     class_index: int
-    bounding_box: Optional[str]
-    keypoints: Mapping[str, int]
+    # Tight box around these members' own bounds - a Keypoint contributes its single
+    # point, a BoundingBox contributes its own two corners. A single explicit
+    # bounding-box member is just the N=1 case of the same computation (the tight box
+    # around one box's own corners is that box). Empty = no box.
+    bounding_box_members: Sequence[str] = field(default_factory=tuple)
+    keypoints: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -71,8 +75,7 @@ class YoloPoseInstanceType:
     description: str = ""
     keypoints: Sequence[YoloKeypointType] = field(default_factory=tuple)
     skeleton: Sequence[Tuple[str, str]] = field(default_factory=tuple)
-    automatic_bounding_box: bool = False
-    bounding_box_color: Optional[Color] = None
+    color: Optional[Color] = None
 
 
 @dataclass

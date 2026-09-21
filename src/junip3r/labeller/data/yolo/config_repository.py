@@ -108,11 +108,8 @@ def _load_instance_type_meta(path: Path) -> Dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
-def _bounding_box_color(bounding_box_field: Any) -> Optional[Color]:
-    if not isinstance(bounding_box_field, dict):
-        return None
-    color_string = bounding_box_field.get("color")
-    return _hex_to_color(color_string) if color_string else None
+def _bounding_box_color(color_string: Any) -> Optional[Color]:
+    return _hex_to_color(color_string) if isinstance(color_string, str) else None
 
 
 def _keypoint_meta_by_name(keypoints_field: Any) -> Dict[str, Dict[str, Any]]:
@@ -146,7 +143,7 @@ def _rich_schema(dataset_root: Path, class_names: Sequence[str]) -> YoloDatasetS
     for index, name in enumerate(class_names):
         default_color = _default_color(index, count)
         meta = _load_instance_type_meta(dataset_root / "meta" / "instance_types" / f"{name}.yaml")
-        bbox_color = _bounding_box_color(meta.get("bounding_box")) or default_color
+        bbox_color = _bounding_box_color(meta.get("color")) or default_color
 
         if mode == ConfigMode.YOLO_DETECT:
             members = [MemberType(name=name, type=LabellerObjectType.BOUNDING_BOX, color=bbox_color)]

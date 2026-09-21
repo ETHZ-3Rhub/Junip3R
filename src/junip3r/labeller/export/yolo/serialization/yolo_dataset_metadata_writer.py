@@ -17,12 +17,8 @@ class YoloPoseInstanceTypeSerializer:
     def serialize(cls, instance_type: YoloPoseInstanceType) -> Dict[str, Any]:
         instance_dict: Dict[str, Any] = {"name": instance_type.name, "description": instance_type.description}
 
-        bounding_box_mode = "automatic" if instance_type.automatic_bounding_box else "manual"
-        bounding_box_color = instance_type.bounding_box_color
-        if bounding_box_color is not None:
-            instance_dict["bounding_box"] = {"mode": bounding_box_mode, "color": _color_to_hex(bounding_box_color)}
-        else:
-            instance_dict["bounding_box"] = bounding_box_mode
+        if instance_type.color is not None:
+            instance_dict["color"] = _color_to_hex(instance_type.color)
 
         keypoints = []
         for member in instance_type.keypoints:

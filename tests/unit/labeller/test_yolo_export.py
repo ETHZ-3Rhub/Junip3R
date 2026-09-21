@@ -28,11 +28,13 @@ def test_box_to_xywh_converts_corners_to_center_size():
 
 # --- MappingYoloPoseInstanceConverter ---------------------------------------------------
 
-def _config(bounding_box="box", keypoints=None):
-    keypoints = keypoints or {"nose": 0, "tail": 1}
+def _config(bounding_box_members=("box",), keypoints=None):
+    keypoints = keypoints if keypoints is not None else {"nose": 0, "tail": 1}
     return YoloDatasetConfig(
         class_names=["mouse"],
-        instance_types={"mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box=bounding_box, keypoints=keypoints)},
+        instance_types={
+            "mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box_members=bounding_box_members, keypoints=keypoints),
+        },
     )
 
 
@@ -42,7 +44,7 @@ def test_metadata_generator_carries_through_bounding_box_and_keypoint_colors():
     config = YoloDatasetConfig(
         class_names=["mouse"],
         instance_types={
-            "mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box="Bounding Box", keypoints={"nose": 0, "tail": 1}),
+            "mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box_members=["Bounding Box"], keypoints={"nose": 0, "tail": 1}),
         },
     )
     instance_type = InstanceType(
@@ -59,7 +61,7 @@ def test_metadata_generator_carries_through_bounding_box_and_keypoint_colors():
     metadata = MappingYoloDatasetMetadataGenerator(config).generate([instance_type])
 
     mouse = metadata.instance_types[0]
-    assert mouse.bounding_box_color == (255, 0, 0)
+    assert mouse.color == (255, 0, 0)
     nose, tail = mouse.keypoints
     assert (nose.name, nose.color) == ("nose", (0, 255, 0))
     assert (tail.name, tail.color) == ("tail", (0, 0, 255))
@@ -83,7 +85,7 @@ def test_convert_maps_box_and_keypoints():
 def test_convert_raises_when_required_bounding_box_member_is_missing():
     instance = _instance("mouse", [Keypoint(name="nose", p=(1.0, 1.0), visibility=1.0), Keypoint(name="tail", p=(3.0, 1.0), visibility=1.0)])
 
-    with pytest.raises(ValueError, match="missing required bounding box member"):
+    with pytest.raises(ValueError, match="none of its bounding box members set"):
         MappingYoloPoseInstanceConverter(_config()).convert([instance])
 
 
@@ -94,16 +96,68 @@ def test_convert_raises_when_bounding_box_member_is_unset():
         Keypoint(name="tail", p=(3.0, 1.0), visibility=1.0),
     ])
 
-    with pytest.raises(ValueError, match="missing required bounding box member"):
+    with pytest.raises(ValueError, match="none of its bounding box members set"):
         MappingYoloPoseInstanceConverter(_config()).convert([instance])
 
 
 def test_convert_defaults_box_to_zero_when_mapping_has_no_bounding_box():
     instance = _instance("mouse", [Keypoint(name="nose", p=(1.0, 1.0), visibility=1.0), Keypoint(name="tail", p=(3.0, 1.0), visibility=1.0)])
 
-    result = MappingYoloPoseInstanceConverter(_config(bounding_box=None)).convert([instance])
+    result = MappingYoloPoseInstanceConverter(_config(bounding_box_members=())).convert([instance])
 
     assert result[0].box == (0.0, 0.0, 0.0, 0.0)
+
+
+def test_convert_tight_box_around_a_single_bounding_box_member_equals_that_box():
+    """The N=1 case of the general algorithm should reduce to exactly the old
+    explicit-bounding-box behaviour - the whole point of unifying the two."""
+    instance = _instance("mouse", [BoundingBox(name="box", box=((0.0, 0.0), (4.0, 2.0)))])
+
+    result = MappingYoloPoseInstanceConverter(_config(bounding_box_members=["box"], keypoints={})).convert([instance])
+
+    assert result[0].box == (2.0, 1.0, 4.0, 2.0)
+
+
+def test_convert_computes_a_tight_box_around_multiple_keypoints():
+    instance = _instance("mouse", [
+        Keypoint(name="nose", p=(1.0, 0.0), visibility=1.0),
+        Keypoint(name="tail", p=(3.0, 2.0), visibility=1.0),
+    ])
+
+    result = MappingYoloPoseInstanceConverter(
+        _config(bounding_box_members=["nose", "tail"], keypoints={"nose": 0, "tail": 1})
+    ).convert([instance])
+
+    # corners (1,0)-(3,2) -> center (2,1), size (2,2)
+    assert result[0].box == (2.0, 1.0, 2.0, 2.0)
+
+
+def test_convert_tight_box_excludes_sub_threshold_keypoints():
+    instance = _instance("mouse", [
+        Keypoint(name="nose", p=(1.0, 1.0), visibility=0.3),  # below threshold - excluded
+        Keypoint(name="tail", p=(3.0, 1.0), visibility=1.0),
+    ])
+
+    result = MappingYoloPoseInstanceConverter(
+        _config(bounding_box_members=["nose", "tail"], keypoints={"nose": 0, "tail": 1})
+    ).convert([instance])
+
+    # only "tail" contributes -> degenerate point box at (3,1)
+    assert result[0].box == (3.0, 1.0, 0.0, 0.0)
+
+
+def test_convert_tight_box_unions_a_bounding_box_and_keypoint_members():
+    instance = _instance("mouse", [
+        BoundingBox(name="box", box=((0.0, 0.0), (1.0, 1.0))),
+        Keypoint(name="nose", p=(3.0, 3.0), visibility=1.0),
+    ])
+
+    result = MappingYoloPoseInstanceConverter(
+        _config(bounding_box_members=["box", "nose"], keypoints={})
+    ).convert([instance])
+
+    # union of box (0,0)-(1,1) and point (3,3) -> corners (0,0)-(3,3)
+    assert result[0].box == (1.5, 1.5, 3.0, 3.0)
 
 
 def test_convert_drops_keypoints_not_present_in_the_mapping():
