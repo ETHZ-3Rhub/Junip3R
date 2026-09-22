@@ -173,3 +173,26 @@ def test_read_only_model_defaults_selection_to_first_real_instance_on_load():
     model = PoseImageModel(app_model, read_only=True)
 
     assert model.get_selection() == ("i1", instance.members[0].id)
+
+
+def test_place_polyline_pushes_a_polyline_specific_undo_command():
+    # Regression test: _set_polyline used to push a SetPolygon command (calling
+    # AppModel.set_polygon under the hood) instead of a real SetPolyline one - it
+    # "worked" only by accident, since MutableInstance.get_polygon/get_polyline are both
+    # unchecked casts over the same get_member() lookup and MutablePolygon/MutablePolyline
+    # happen to share the same .points shape.
+    type_a = _instance_type("mouse", [MemberType(name="path", type=LabellerObjectType.POLYLINE, color=(255, 0, 0))])
+    model = _build_model([type_a])
+    instance = new_instance(type_a, "i1", "Mouse 1")
+    model._model.insert_instance(0, instance)
+    member_id = instance.members[0].id
+
+    model.place_polyline("i1", member_id, [(0.1, 0.1), (0.2, 0.2)])
+
+    updated = model.get_instance("i1").get_member(member_id)
+    assert [p.p for p in updated.points] == [(0.1, 0.1), (0.2, 0.2)]
+
+    model.undo()
+
+    reverted = model.get_instance("i1").get_member(member_id)
+    assert list(reverted.points) == []

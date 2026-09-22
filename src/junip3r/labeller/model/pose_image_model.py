@@ -14,7 +14,7 @@ from junip3r.labeller.model.image_state import ImageState, ImageNavigationState,
 from junip3r.labeller.model.instance_type_selection_strategy import EditorInstanceTypeWorkflow
 from junip3r.labeller.model.member_selection_strategy import EditorMemberSelectionStrategy
 from junip3r.labeller.model.undo_commands import AddInstance, SetKeypoint, SetSelection, RemoveInstance, SetBoundingBox, \
-    SetPolygon, SetPolygonPoint, AdvanceNewInstanceType, ChangeInstanceType, RenameInstance
+    SetPolygon, SetPolyline, SetPolygonPoint, AdvanceNewInstanceType, ChangeInstanceType, RenameInstance
 
 
 class PoseImageModel(QObject):
@@ -494,7 +494,7 @@ class PoseImageModel(QObject):
 
     def _set_polyline(self, instance_id: InstanceID, member_id: MemberID, points: List[Point]):
         assert instance_id is not None, "Instance ID should not be None"
-        self._undo_stack.push(SetPolygon(self._model, self, self._image_index, instance_id, member_id, points))
+        self._undo_stack.push(SetPolyline(self._model, self, self._image_index, instance_id, member_id, points))
 
     def _set_polygon_point(self, instance_id: InstanceID, member_id: MemberID, point_index: int, p: Point):
         assert instance_id is not None, "Instance ID should not be None"

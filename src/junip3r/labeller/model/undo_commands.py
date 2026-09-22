@@ -4,7 +4,7 @@ from PySide6.QtGui import QUndoCommand
 
 from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.data.types.abc import InstanceID, MemberID, Selection, Point, Box
-from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox, Polygon
+from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox, Polygon, Polyline
 from junip3r.labeller.model.abc import IChangeTracker, IUndoModel
 from junip3r.labeller.model.image_state import ImageStateChangeFlags
 from junip3r.labeller.model.instance_type_selection_strategy import EditorInstanceTypeWorkflow
@@ -327,6 +327,42 @@ class SetPolygon(QUndoCommand):
 
     def undo(self) -> None:
         self._model.set_polygon(self._image_index, (self._instance_id, self._member_id), self._previous_points)
+        self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)
+
+
+class SetPolyline(QUndoCommand):
+    def __init__(
+            self,
+            model: IUndoModel,
+            change_tracker: IChangeTracker,
+            image_index: int,
+            instance_id: str,
+            member_id: MemberID,
+            points: Sequence[Point],
+            name: str = "Set Polyline",
+    ) -> None:
+        super().__init__(name)
+
+        self._model = model
+        self._change_tracker = change_tracker
+        self._image_index = image_index
+        self._instance_id = instance_id
+        self._member_id = member_id
+        self._points = points
+
+        self._previous_points: Sequence[Point] = []
+
+    def redo(self) -> None:
+        polyline = cast(Optional[Polyline], self._model.get_member(self._image_index, (self._instance_id, self._member_id)))
+        if polyline is None:
+            return
+        self._previous_points = [p.p for p in polyline.points]
+
+        self._model.set_polyline(self._image_index, (self._instance_id, self._member_id), self._points)
+        self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)
+
+    def undo(self) -> None:
+        self._model.set_polyline(self._image_index, (self._instance_id, self._member_id), self._previous_points)
         self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.INSTANCES)
 
 
