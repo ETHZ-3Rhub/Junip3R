@@ -6,6 +6,7 @@ from typing import Sequence, Mapping, Tuple, Optional, Protocol
 import numpy as np
 
 from junip3r.labeller.data.types.abc import Color
+from junip3r.labeller.export.yolo.set_split import SetSplitConfig
 from junip3r.labeller.yolo.labels.data import YoloBoxInstance
 
 
@@ -88,6 +89,10 @@ class YoloPoseInstanceType:
 class YoloDatasetMetadata:
     instance_types: Sequence[YoloPoseInstanceType]
     output_mapping: Sequence[Tuple[str, str, int]]
+    # How images are split into train/val - bundled here (rather than passed to the
+    # export worker separately) so the worker only ever needs a YoloDataset +
+    # YoloDatasetMetadata to write a complete dataset to disk.
+    set_split: Optional[SetSplitConfig] = None
 
 
 @dataclass

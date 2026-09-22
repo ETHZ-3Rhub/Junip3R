@@ -1,22 +1,25 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence, Mapping, Optional, List, Set, Tuple
+from typing import Optional, List, Tuple
 from uuid import uuid4
 
-import numpy as np
 from PySide6.QtCore import Signal, QObject, Slot, QThread
 from PySide6.QtGui import QIcon, Qt
 from PySide6.QtWidgets import QComboBox, QDialog, QFormLayout, QLineEdit, QToolButton, QWidgetAction, QVBoxLayout, \
     QDialogButtonBox, QHBoxLayout, QLabel, QCheckBox, QProgressDialog, QMessageBox, QListWidget, QListWidgetItem, \
     QPushButton
 
-from junip3r.common.tags.data import TagValue
 from junip3r.labeller.config.data import InstanceType
-from junip3r.labeller.data.types.data import Instance
-from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import \
-    MappingYoloDatasetMetadataGenerator, MappingYoloDatasetGenerator, MappingYoloPoseInstanceConverter, \
-    build_instance_type_mapping
-from junip3r.labeller.export.yolo.data import ExportMode, YoloDatasetConfig
+from junip3r.labeller.export.yolo.data import ExportMode, YoloDataset, YoloDatasetMetadata
+from junip3r.labeller.export.yolo.export_pipeline import (
+    TaggedImage,
+    build_yolo_dataset,
+    generate_export_mapping,
+    generate_export_metadata,
+    included_image_indices,
+    selected_instance_types,
+    tagged_images,
+)
 from junip3r.labeller.export.yolo.export_profile import ExportProfile, IExportProfileRepository
 from junip3r.labeller.export.yolo.serialization.yolo_dataset_metadata_writer import YoloPoseDatasetMetadataWriter
 from junip3r.labeller.export.yolo.serialization.yolo_dataset_writer import YoloDatasetWriter
@@ -27,53 +30,25 @@ from junip3r.labeller.export.yolo.widgets.manage_items_dialog import ManageItems
 from junip3r.labeller.export.yolo.widgets.named_item_combo_box import NamedItemComboBox
 from junip3r.labeller.export.yolo.widgets.set_split_dialog import SetSplitDialog
 from junip3r.labeller.model.abc import IReadOnlyAppModel
-from junip3r.labeller.yolo.labels.data import YoloBoxInstance
-
-
-@dataclass
-class AppModelYoloImage:
-    """A YoloImage with no backing file, whose pixels are loaded from a model on demand.
-
-    Used when the underlying image repository is (fully or partially) in-memory and
-    `get_image_file` returns `None` for it.
-    """
-    app_model: IReadOnlyAppModel
-    image_index: int
-    name: str
-    instances: Sequence[YoloBoxInstance]
-
-    @property
-    def image(self) -> Optional[np.ndarray]:
-        return self.app_model.get_image(self.image_index)
-
-    @property
-    def source_file(self) -> Optional[Path]:
-        return self.app_model.get_image_file(self.image_index)
 
 
 @dataclass
 class ExportJob:
     target_folder: Path
-    config: YoloDatasetConfig
-    instance_types: Sequence[InstanceType]
-    set_split_config: SetSplitConfig
-    model: IReadOnlyAppModel
-    instance_filter: Callable[[Instance], bool]
-    image_filter: Callable[[Sequence[Instance]], bool]
-    set_mapper: Callable[[str], Optional[str]]
+    dataset: YoloDataset
+    metadata: YoloDatasetMetadata
     canceled: bool = False
 
     def cancel(self):
         self.canceled = True
 
 
-@dataclass
-class TaggedImage:
-    name: str
-    tags: Mapping[str, TagValue]
-
-
 class ExportWorker(QObject):
+    """Pure disk I/O - never touches the labeller model. Everything it needs to write a
+    complete dataset (images/labels/data.yaml/meta/set_split.yaml) is already resolved
+    into job.dataset/job.metadata by the time a job reaches here (see
+    YoloExportDialog._run_export and export_pipeline.py).
+    """
     progress_max_changed = Signal(int)
     progress_value_changed = Signal(int)
     finished = Signal()
@@ -83,39 +58,18 @@ class ExportWorker(QObject):
     @Slot(object)
     def run(self, job: ExportJob):
         try:
-            instance_converter = MappingYoloPoseInstanceConverter(job.config)
-            dataset_generator = MappingYoloDatasetGenerator(job.config)
-            metadata_generator = MappingYoloDatasetMetadataGenerator(job.config)
-
-            yolo_images = []
-            for image_index in range(job.model.get_num_images()):
-                image_name = job.model.get_image_name(image_index)
-                set_name = job.set_mapper(image_name)
-                if set_name is None:
-                    continue
-
-                instances = [i for i in job.model.get_instances(image_index) if job.instance_filter(i)]
-                if not job.image_filter(instances):
-                    continue
-
-                yolo_instances = instance_converter.convert(instances)
-                yolo_images.append((set_name, AppModelYoloImage(job.model, image_index, image_name, yolo_instances)))
-
-            dataset = dataset_generator.generate(yolo_images)
-            metadata = metadata_generator.generate(job.instance_types)
-
             dataset_writer = YoloDatasetWriter()
-            for completed, total in dataset_writer.write(job.target_folder, dataset):
+            for completed, total in dataset_writer.write(job.target_folder, job.dataset):
                 self.progress_max_changed.emit(total)
                 self.progress_value_changed.emit(completed)
                 if job.canceled:
                     break
 
             dataset_metadata_writer = YoloPoseDatasetMetadataWriter()
-            dataset_metadata_writer.write(job.target_folder, metadata)
+            dataset_metadata_writer.write(job.target_folder, job.metadata)
 
             set_split_writer = SetSplitWriter()
-            set_split_writer.write(job.target_folder, job.set_split_config)
+            set_split_writer.write(job.target_folder, job.metadata.set_split)
 
             if job.canceled:
                 self.canceled.emit()
@@ -563,40 +517,21 @@ class YoloExportDialog(QDialog):
 
     # --- image selection / stats / export -------------------------------------------
 
+    # Thin wrappers around export_pipeline.py's pure functions, applied to the current
+    # profile - used here for the live stat-label preview and the "Configure..." set
+    # split dialog, not just export itself. Safe to read the persisted profile rather
+    # than raw widget state: every widget change already persists to it immediately
+    # (_on_instance_types_changed, _on_include_empty_toggled, ...), so they're never
+    # out of sync.
+
     def _selected_instance_types(self) -> List[InstanceType]:
-        selected = []
-        for i in range(self.lst_instance_types.count()):
-            item = self.lst_instance_types.item(i)
-            if item.checkState() == Qt.CheckState.Checked:
-                selected.append(item.data(Qt.ItemDataRole.UserRole))
-        return selected
-
-    def _selected_instance_type_names(self) -> Set[str]:
-        return {instance_type.name for instance_type in self._selected_instance_types()}
-
-    def _filtered_instances(self, image_index: int, selected_names: Set[str]) -> List[Instance]:
-        return [
-            instance for instance in self._model.get_instances(image_index)
-            if instance.instance_type.name in selected_names
-        ]
+        return selected_instance_types(self._current_profile(), self._model)
 
     def _included_image_indices(self) -> List[int]:
-        indices = range(self._model.get_num_images())
-        if self.chk_include_empty.isChecked():
-            return list(indices)
-
-        selected_names = self._selected_instance_type_names()
-        return [
-            image_index for image_index in indices
-            if self._filtered_instances(image_index, selected_names)
-        ]
+        return included_image_indices(self._current_profile(), self._model)
 
     def _tagged_images(self) -> List[TaggedImage]:
-        images = []
-        for image_index in self._included_image_indices():
-            image_name = self._model.get_image_name(image_index)
-            images.append(TaggedImage(image_name, self._model.get_tags(image_index)))
-        return images
+        return tagged_images(self._current_profile(), self._model)
 
     def _update_set_split_labels(self):
         split = SetSplit(self._tagged_images(), self._current_split().config)
@@ -656,9 +591,9 @@ class YoloExportDialog(QDialog):
 
     def _run_export(self):
         target_folder = Path(self.txt_location.text())
+        profile = self._current_profile()
 
-        selected_instance_types = self._selected_instance_types()
-        if not selected_instance_types:
+        if not self._selected_instance_types():
             QMessageBox.warning(
                 self,
                 "Nothing to Export",
@@ -666,22 +601,10 @@ class YoloExportDialog(QDialog):
             )
             return
 
-        mode = self._current_profile().mode
-
-        class_names = []
-        instance_types = {}
-        for instance_index, instance_type in enumerate(selected_instance_types):
-            class_names.append(instance_type.name)
-            instance_types[instance_type.name] = build_instance_type_mapping(instance_type, instance_index, mode)
-
-        dataset_config = YoloDatasetConfig(
-            class_names=class_names,
-            instance_types=instance_types,
-        )
-
+        mapping = generate_export_mapping(profile, self._model)
         set_split_config = self._current_split().config
-        set_assignments = resolve_set_assignments(self._tagged_images(), set_split_config)
-        if not set_assignments:
+
+        if not resolve_set_assignments(self._tagged_images(), set_split_config):
             QMessageBox.warning(
                 self,
                 "Nothing to Export",
@@ -692,19 +615,10 @@ class YoloExportDialog(QDialog):
         if not self._confirm_target_folder(target_folder):
             return
 
-        selected_names = self._selected_instance_type_names()
-        include_empty = self.chk_include_empty.isChecked()
+        dataset = build_yolo_dataset(mapping, self._model, profile, set_split_config)
+        metadata = generate_export_metadata(profile, self._model, mapping, set_split_config)
 
-        job = ExportJob(
-            target_folder,
-            dataset_config,
-            selected_instance_types,
-            set_split_config,
-            self._model,
-            instance_filter=lambda instance: instance.instance_type.name in selected_names,
-            image_filter=(lambda instances: True) if include_empty else (lambda instances: bool(instances)),
-            set_mapper=set_assignments.get,
-        )
+        job = ExportJob(target_folder, dataset, metadata)
         self._current_job = job
         self._show_export_progress()
         self.run_export.emit(job)
