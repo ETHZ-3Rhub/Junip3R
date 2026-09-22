@@ -4,9 +4,11 @@ from PySide6.QtCore import Slot
 
 from junip3r.labeller.controller.editor_controller import EditorController
 from junip3r.labeller.layout.pose_editor import PoseEditorLayout
+from junip3r.labeller.model.annotation_source import ANNOTATION_SOURCE_TAG_KEY, MODEL_ANNOTATION_SOURCE
 from junip3r.labeller.model.camera_model import CameraModel
 from junip3r.labeller.model.context_model import ContextModel, ContextState
 from junip3r.labeller.model.image_settings_model import ImageSettingsModel
+from junip3r.labeller.model.image_state import ImageState, ImageStateChangeFlags
 from junip3r.labeller.model.pose_image_model import PoseImageModel
 
 
@@ -21,6 +23,7 @@ class PoseEditor(PoseEditorLayout):
 
         self._context_overlay.setVisible(False)
         self._settings_overlay.setVisible(False)
+        self._auto_annotated_overlay.setVisible(False)
 
         self._camera_model = CameraModel()
         self._pose_image.resized.connect(self._camera_model.set_view_size)
@@ -62,6 +65,7 @@ class PoseEditor(PoseEditorLayout):
         self._pose_image.mouse_moved.connect(self._controller.mouse_moved)
         self._pose_image.wheel_moved.connect(self._controller.wheel_moved)
         self._model.image_state_changed.connect(self._pose_image.set_image_state)
+        self._model.image_state_changed.connect(self._update_auto_annotated_overlay)
         self._controller.operation_state_changed.connect(self._pose_image.set_operation_state)
 
         self._model.refresh()
@@ -78,3 +82,9 @@ class PoseEditor(PoseEditorLayout):
     @Slot(object)
     def _context_changed(self, state: ContextState):
         self._context_overlay.setVisible(state.enabled)
+
+    @Slot(object, object)
+    def _update_auto_annotated_overlay(self, state: ImageState, flags: ImageStateChangeFlags):
+        assert self._model is not None
+        is_auto_annotated = self._model.get_tags().get(ANNOTATION_SOURCE_TAG_KEY) == MODEL_ANNOTATION_SOURCE
+        self._auto_annotated_overlay.setVisible(is_auto_annotated)

@@ -16,7 +16,8 @@ class ImageStateChangeFlags(IntFlag):
     INSTANCE_TYPES = auto()
     INSTANCES = auto()
     SELECTION = auto()
-    ALL = IMAGE | INSTANCE_TYPES | INSTANCES | SELECTION
+    TAGS = auto()
+    ALL = IMAGE | INSTANCE_TYPES | INSTANCES | SELECTION | TAGS
 
 
 @dataclass(frozen=True)

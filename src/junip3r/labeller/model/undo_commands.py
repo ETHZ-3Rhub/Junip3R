@@ -2,6 +2,7 @@ from typing import Sequence, Optional, Any, cast
 
 from PySide6.QtGui import QUndoCommand
 
+from junip3r.common.tags.data import Tags
 from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.data.types.abc import InstanceID, MemberID, Selection, Point, Box
 from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox, Polygon
@@ -178,6 +179,34 @@ class SetSelection(QUndoCommand):
     def undo(self) -> None:
         self._model.set_selection(self._image_index, self._previous_selection)
         self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.SELECTION)
+
+
+class SetTags(QUndoCommand):
+    def __init__(
+            self,
+            model: IUndoModel,
+            change_tracker: IChangeTracker,
+            image_index: int,
+            tags: Tags,
+            name: str = "Set Tags",
+    ) -> None:
+        super().__init__(name)
+
+        self._model = model
+        self._change_tracker = change_tracker
+        self._image_index = image_index
+        self._tags = tags
+
+        self._previous_tags: Tags = {}
+
+    def redo(self) -> None:
+        self._previous_tags = self._model.get_tags(self._image_index)
+        self._model.set_tags(self._image_index, self._tags)
+        self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.TAGS)
+
+    def undo(self) -> None:
+        self._model.set_tags(self._image_index, self._previous_tags)
+        self._change_tracker.set_flags(self._image_index, ImageStateChangeFlags.TAGS)
 
 
 class AdvanceNewInstanceType(QUndoCommand):

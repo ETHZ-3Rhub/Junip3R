@@ -140,6 +140,12 @@ class Editor(QWidget):
         self.redo_action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.addAction(self.redo_action)
 
+        # Prototype: human-in-the-loop pose assist (see prototype/pose_assist.py).
+        self.run_pose_model_action = QAction(self)
+        self.run_pose_model_action.setShortcut(QKeySequence("Ctrl+Shift+P"))
+        self.run_pose_model_action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self.addAction(self.run_pose_model_action)
+
     def set_mode(self, mode: ConfigMode):
         self.selection_controls.set_mode(mode)
 
@@ -149,6 +155,7 @@ class Editor(QWidget):
         self.paste_action.setEnabled(not read_only)
         self.undo_action.setEnabled(not read_only)
         self.redo_action.setEnabled(not read_only)
+        self.run_pose_model_action.setEnabled(not read_only)
 
     def set_footer_widget(self, widget: Optional[QWidget]) -> None:
         """Replace the image-navigation bar below the canvas with `widget`, or
@@ -195,6 +202,8 @@ class Editor(QWidget):
 
         self.undo_action.triggered.connect(self.model.undo)
         self.redo_action.triggered.connect(self.model.redo)
+
+        self.run_pose_model_action.triggered.connect(self.model.run_pose_model)
 
         self.modifier_tracker.set_inspect_all.connect(self.pose_editor.set_inspect_all)
         self.modifier_tracker.set_context_mode.connect(self.pose_editor.set_context_mode)

@@ -1,0 +1,2 @@
+ANNOTATION_SOURCE_TAG_KEY = "annotation_source"
+MODEL_ANNOTATION_SOURCE = "model"

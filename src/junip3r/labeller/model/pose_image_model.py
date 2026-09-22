@@ -6,15 +6,17 @@ import numpy as np
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QUndoStack
 
+from junip3r.common.tags.data import Tags
 from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.data.types.abc import InstanceID, MemberID, Selection, Point, Box, InstanceMember
 from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox, new_instance
+from junip3r.labeller.model.annotation_source import ANNOTATION_SOURCE_TAG_KEY, MODEL_ANNOTATION_SOURCE
 from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.model.image_state import ImageState, ImageNavigationState, ImageStateChangeFlags
 from junip3r.labeller.model.instance_type_selection_strategy import EditorInstanceTypeWorkflow
 from junip3r.labeller.model.member_selection_strategy import EditorMemberSelectionStrategy
 from junip3r.labeller.model.undo_commands import AddInstance, SetKeypoint, SetSelection, RemoveInstance, SetBoundingBox, \
-    SetPolygon, SetPolygonPoint, AdvanceNewInstanceType, ChangeInstanceType, RenameInstance
+    SetPolygon, SetPolygonPoint, AdvanceNewInstanceType, ChangeInstanceType, RenameInstance, SetTags
 
 
 class PoseImageModel(QObject):
@@ -136,6 +138,9 @@ class PoseImageModel(QObject):
     def get_selection(self) -> Optional[Selection]:
         return self._model.get_selection(self._image_index)
 
+    def get_tags(self) -> Tags:
+        return self._model.get_tags(self._image_index)
+
     def get_selected_instance(self) -> Optional[Instance]:
         selection = self.get_selection()
         if selection is None:
@@ -154,6 +159,7 @@ class PoseImageModel(QObject):
         if self._read_only:
             return
         with self.macro("Place Keypoint"):
+            self._clear_annotation_source()
             if instance_id is None:
                 instance_id = self._create_new_instance()
 
@@ -169,7 +175,9 @@ class PoseImageModel(QObject):
         if member is None:
             return
         visibility = member.visibility
-        self._set_keypoint(instance_id, member_id, p, visibility)
+        with self.macro("Move Keypoint"):
+            self._clear_annotation_source()
+            self._set_keypoint(instance_id, member_id, p, visibility)
         self._flush()
 
     def set_keypoint_visibility(self, instance_id: InstanceID, member_id: MemberID, visibility: float):
@@ -179,7 +187,9 @@ class PoseImageModel(QObject):
         member = cast(Optional[Keypoint], self.get_member(instance_id, member_id))
         if member is None or member.p is None:
             return
-        self._set_keypoint(instance_id, member_id, member.p, visibility)
+        with self.macro("Set Keypoint Visibility"):
+            self._clear_annotation_source()
+            self._set_keypoint(instance_id, member_id, member.p, visibility)
         self._flush()
 
     def delete_keypoint(self, instance_id: InstanceID, member_id: MemberID):
@@ -187,6 +197,7 @@ class PoseImageModel(QObject):
             return
         assert instance_id is not None, "Instance ID should not be None"
         with self.macro("Delete Keypoint"):
+            self._clear_annotation_source()
             self._set_keypoint(instance_id, member_id, None, 0.0)
             self._delete_instance_if_empty(instance_id)
         self._flush()
@@ -195,6 +206,7 @@ class PoseImageModel(QObject):
         if self._read_only:
             return
         with self.macro("Place Bounding Box"):
+            self._clear_annotation_source()
             if instance_id is None:
                 instance_id = self._create_new_instance()
 
@@ -218,7 +230,9 @@ class PoseImageModel(QObject):
     def move_bounding_box_corner(self, instance_id: InstanceID, member_id: MemberID, corner_index: int, p: Point):
         if self._read_only:
             return
-        self._move_bounding_box_corner(instance_id, member_id, corner_index, p)
+        with self.macro("Move Bounding Box Corner"):
+            self._clear_annotation_source()
+            self._move_bounding_box_corner(instance_id, member_id, corner_index, p)
         self._flush()
 
     def delete_bounding_box(self, instance_id: InstanceID, member_id: MemberID):
@@ -226,6 +240,7 @@ class PoseImageModel(QObject):
             return
         assert instance_id is not None, "Instance ID should not be None"
         with self.macro("Delete Bounding Box"):
+            self._clear_annotation_source()
             self._set_bounding_box(instance_id, member_id, None)
             self._delete_instance_if_empty(instance_id)
         self._flush()
@@ -234,6 +249,7 @@ class PoseImageModel(QObject):
         if self._read_only:
             return
         with self.macro("Place Polygon"):
+            self._clear_annotation_source()
             if instance_id is None:
                 instance_id = self._create_new_instance()
 
@@ -250,6 +266,7 @@ class PoseImageModel(QObject):
             return
         assert instance_id is not None, "Instance ID should not be None"
         with self.macro("Delete Polygon"):
+            self._clear_annotation_source()
             self._set_polygon(instance_id, member_id, [])
             self._delete_instance_if_empty(instance_id)
         self._flush()
@@ -258,6 +275,7 @@ class PoseImageModel(QObject):
         if self._read_only:
             return
         with self.macro("Place Polyline"):
+            self._clear_annotation_source()
             if instance_id is None:
                 instance_id = self._create_new_instance()
 
@@ -274,6 +292,7 @@ class PoseImageModel(QObject):
             return
         assert instance_id is not None, "Instance ID should not be None"
         with self.macro("Delete Polyline"):
+            self._clear_annotation_source()
             self._set_polyline(instance_id, member_id, [])
             self._delete_instance_if_empty(instance_id)
         self._flush()
@@ -281,7 +300,9 @@ class PoseImageModel(QObject):
     def move_polygon_point(self, instance_id: InstanceID, member_id: MemberID, point_index: int, p: Point):
         if self._read_only:
             return
-        self._set_polygon_point(instance_id, member_id, point_index, p)
+        with self.macro("Move Polygon Point"):
+            self._clear_annotation_source()
+            self._set_polygon_point(instance_id, member_id, point_index, p)
         self._flush()
 
     def select_instance(self, instance_id: InstanceID):
@@ -330,6 +351,7 @@ class PoseImageModel(QObject):
             self._set_selection(self._default_selection())
         else:
             with self.macro("Change Instance Type"):
+                self._clear_annotation_source()
                 self._undo_stack.push(ChangeInstanceType(self._model, self, self._image_index, instance_id, instance_type))
                 # The new type's members are freshly-created (own ids), so the
                 # previously-selected member id is no longer valid - reset to the
@@ -349,7 +371,9 @@ class PoseImageModel(QObject):
         if self._copied_instance is None:
             return
         instance = self._copied_instance.with_instance_id(str(uuid.uuid4()))
-        self._add_instance(instance)
+        with self.macro("Paste Instance"):
+            self._clear_annotation_source()
+            self._add_instance(instance)
         self._flush()
 
     def delete_instance(self):
@@ -363,6 +387,26 @@ class PoseImageModel(QObject):
             return
 
         self._delete_instance(instance_id)
+        self._flush()
+
+    def run_pose_model(self):
+        """Prototype: run the (hardcoded) pose model on the current image and insert its
+        output as new instances - see prototype/pose_assist.py. Imported lazily so this
+        prototype's heavy, optional deps (torch/ultralytics, via py3r.pose.yolo) don't
+        become a hard import-time dependency of the whole labeller.
+        """
+        if self._read_only:
+            return
+        from junip3r.labeller.prototype.pose_assist import predict_instances
+
+        instance_types = self._model.get_instance_types(self._image_index)
+        instances = predict_instances(self._get_image(), instance_types)
+        if not instances:
+            return
+        with self.macro("Run Pose Model"):
+            for instance in instances:
+                self._add_instance(instance)
+            self._set_annotation_source(MODEL_ANNOTATION_SOURCE)
         self._flush()
 
     def rename_instance(self, instance_id: InstanceID, name: str):
@@ -458,6 +502,24 @@ class PoseImageModel(QObject):
     def _add_instance(self, instance: Instance):
         self._undo_stack.push(AddInstance(self._model, self, self._image_index, instance))
 
+    def _clear_annotation_source(self):
+        """Any actual geometry edit (not a rename) drops the image's "annotation_source"
+        tag - see prototype/pose_assist.py for where that tag gets set. A no-op, pushing
+        nothing, when the tag isn't set - avoids polluting undo history with an identity
+        change on every single edit to an already-human image.
+        """
+        tags = self._model.get_tags(self._image_index)
+        if ANNOTATION_SOURCE_TAG_KEY not in tags:
+            return
+        new_tags = dict(tags)
+        del new_tags[ANNOTATION_SOURCE_TAG_KEY]
+        self._undo_stack.push(SetTags(self._model, self, self._image_index, new_tags))
+
+    def _set_annotation_source(self, value: str):
+        tags = dict(self._model.get_tags(self._image_index))
+        tags[ANNOTATION_SOURCE_TAG_KEY] = value
+        self._undo_stack.push(SetTags(self._model, self, self._image_index, tags))
+
     def _generate_new_instance_name(self, instance_type: InstanceType) -> str:
         instances = self._model.get_instances(self._image_index)
         existing_names = {instance.name for instance in instances if instance.instance_type == instance_type}
@@ -505,6 +567,7 @@ class PoseImageModel(QObject):
         assert self.get_instance(instance_id) is not None, "Instance not found"
 
         with self.macro("Delete Instance"):
+            self._clear_annotation_source()
             self._undo_stack.push(RemoveInstance(self._model, self, self._image_index, instance_id))
 
             selection = self._model.get_selection(self._image_index)

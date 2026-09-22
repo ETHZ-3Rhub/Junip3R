@@ -3,6 +3,7 @@ import numpy as np
 from junip3r.labeller.config.data import InstanceType, MemberType, SkeletonType
 from junip3r.labeller.data.types.abc import LabellerObjectType
 from junip3r.labeller.data.types.data import new_instance
+from junip3r.labeller.model.annotation_source import ANNOTATION_SOURCE_TAG_KEY, MODEL_ANNOTATION_SOURCE
 from junip3r.labeller.model.app_model import AppModel
 from junip3r.labeller.model.label_model import LabelModel
 from junip3r.labeller.model.pose_image_model import PoseImageModel
@@ -45,6 +46,17 @@ class FakeRawLabelRepository:
 
     def set_instances(self, image_index, instances):
         self._instances_by_image[image_index] = list(instances)
+
+
+class FakeTagRepository:
+    def __init__(self):
+        self._tags = {}
+
+    def get_tags(self, image_index):
+        return dict(self._tags.get(image_index, {}))
+
+    def set_tags(self, image_index, tags):
+        self._tags[image_index] = dict(tags)
 
 
 class FakeSelectionRepository:
@@ -173,3 +185,56 @@ def test_read_only_model_defaults_selection_to_first_real_instance_on_load():
     model = PoseImageModel(app_model, read_only=True)
 
     assert model.get_selection() == ("i1", instance.members[0].id)
+
+
+# --- annotation_source tag: cleared by geometry edits, not by renames -----------------
+
+def _build_model_with_model_tagged_instance():
+    type_a = _instance_type("mouse", [MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(255, 0, 0))])
+    config = FakeConfigRepository([type_a])
+    raw_labels = FakeRawLabelRepository()
+    label_model = LabelModel(config, raw_labels)
+    tag_repository = FakeTagRepository()
+    tag_repository.set_tags(0, {ANNOTATION_SOURCE_TAG_KEY: MODEL_ANNOTATION_SOURCE})
+    app_model = AppModel(FakeImageRepository(), label_model, FakeSelectionRepository(), tag_repository=tag_repository)
+    instance = new_instance(type_a, "i1", "Mouse 1")
+    app_model.insert_instance(0, instance)
+
+    model = PoseImageModel(app_model)
+    return model, app_model, instance
+
+
+def test_geometry_edit_clears_the_annotation_source_tag():
+    model, app_model, instance = _build_model_with_model_tagged_instance()
+
+    model.place_keypoint("i1", instance.members[0].id, (0.5, 0.5))
+
+    assert ANNOTATION_SOURCE_TAG_KEY not in app_model.get_tags(0)
+
+
+def test_undoing_a_geometry_edit_restores_the_annotation_source_tag():
+    model, app_model, instance = _build_model_with_model_tagged_instance()
+
+    model.place_keypoint("i1", instance.members[0].id, (0.5, 0.5))
+    assert ANNOTATION_SOURCE_TAG_KEY not in app_model.get_tags(0)
+
+    model.undo()
+
+    assert app_model.get_tags(0)[ANNOTATION_SOURCE_TAG_KEY] == MODEL_ANNOTATION_SOURCE
+
+
+def test_rename_instance_does_not_clear_the_annotation_source_tag():
+    model, app_model, instance = _build_model_with_model_tagged_instance()
+
+    model.rename_instance("i1", "New Name")
+
+    assert app_model.get_tags(0)[ANNOTATION_SOURCE_TAG_KEY] == MODEL_ANNOTATION_SOURCE
+
+
+def test_deleting_an_instance_clears_the_annotation_source_tag():
+    model, app_model, instance = _build_model_with_model_tagged_instance()
+    model.select_instance("i1")
+
+    model.delete_instance()
+
+    assert ANNOTATION_SOURCE_TAG_KEY not in app_model.get_tags(0)

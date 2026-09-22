@@ -1,6 +1,7 @@
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QGridLayout, QSizePolicy, QWidget
 
+from junip3r.labeller.widgets.auto_annotated_overlay import AutoAnnotatedOverlay
 from junip3r.labeller.widgets.context_overlay import ContextOverlay
 from junip3r.labeller.widgets.image_settings_overlay import ImageSettingsOverlay
 from junip3r.labeller.widgets.pose_image import PoseImage
@@ -10,6 +11,7 @@ class PoseEditorLayout(QWidget):
     _pose_image: PoseImage
     _context_overlay: ContextOverlay
     _settings_overlay: ImageSettingsOverlay
+    _auto_annotated_overlay: AutoAnnotatedOverlay
 
     def __init__(self, parent: QWidget = None) -> None:
         super().__init__(parent)
@@ -49,6 +51,12 @@ class PoseEditorLayout(QWidget):
         overlay_layout.addWidget(
             self._settings_overlay, 0, 2,
             alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
+        )
+
+        self._auto_annotated_overlay = AutoAnnotatedOverlay(self)
+        overlay_layout.addWidget(
+            self._auto_annotated_overlay, 1, 0,
+            alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft,
         )
 
         return overlay_layout
