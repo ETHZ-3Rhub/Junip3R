@@ -100,5 +100,8 @@ class YoloDataset:
     sets: Sequence[Tuple[str, Sequence[IYoloImage]]] = ()
     class_names: Sequence[str] = ()
     num_keypoints: int = 0
+    # Per-class keypoint names, by class index - the data.yaml "kpt_names" convention
+    # (see YoloDataYaml.kpt_names). None when the dataset has no keypoints at all.
+    kpt_names: Optional[Mapping[int, Sequence[str]]] = None
     flip_h_idx: Optional[Sequence[int]] = None
     flip_v_idx: Optional[Sequence[int]] = None

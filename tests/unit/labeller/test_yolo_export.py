@@ -4,6 +4,7 @@ from junip3r.labeller.config.data import InstanceType, MemberType, SkeletonType
 from junip3r.labeller.data.types.abc import LabellerObjectType
 from junip3r.labeller.data.types.data import BoundingBox, Instance, Keypoint
 from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import (
+    MappingYoloDatasetGenerator,
     MappingYoloDatasetMetadataGenerator,
     MappingYoloPoseInstanceConverter,
     build_instance_type_mapping,
@@ -240,3 +241,66 @@ def test_convert_fully_zeroes_a_sub_threshold_keypoint():
     # not just its coordinates zeroed - see MappingYoloPoseInstanceConverter.convert.
     assert result[0].keypoints[0] == (0.0, 0.0, 0.0)
     assert result[0].keypoints[1] == (3.0, 1.0, 1.0)
+
+
+# --- MappingYoloDatasetGenerator ---------------------------------------------------------
+
+def _multi_class_config():
+    return YoloDatasetConfig(
+        class_names=["mouse", "cat"],
+        instance_types={
+            "mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box_members=["box"], keypoints={"nose": 0, "tail": 1}),
+            "cat": YoloPoseInstanceTypeConfig(class_index=1, bounding_box_members=["box"],
+                                               keypoints={"nose": 0, "tail": 1, "ear": 2, "paw": 3}),
+        },
+    )
+
+
+def test_generate_groups_images_by_set():
+    dataset = MappingYoloDatasetGenerator(_config()).generate([("train", "img_a"), ("val", "img_b"), ("train", "img_c")])
+
+    sets_by_name = dict(dataset.sets)
+    assert sets_by_name["train"] == ["img_a", "img_c"]
+    assert sets_by_name["val"] == ["img_b"]
+
+
+def test_generate_kpt_names_is_none_for_a_detect_only_config():
+    config = YoloDatasetConfig(
+        class_names=["mouse"],
+        instance_types={"mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box_members=["box"], keypoints={})},
+    )
+
+    dataset = MappingYoloDatasetGenerator(config).generate([])
+
+    assert dataset.kpt_names is None
+
+
+def test_generate_kpt_names_places_each_class_names_at_its_own_output_indices():
+    dataset = MappingYoloDatasetGenerator(_multi_class_config()).generate([])
+
+    # cat maps all 4 of the dataset's global keypoint slots, so its names land
+    # directly at their own indices with no padding needed.
+    assert dataset.kpt_names[1] == ["nose", "tail", "ear", "paw"]
+
+
+def test_generate_kpt_names_pads_a_class_with_fewer_keypoints_to_the_global_count():
+    dataset = MappingYoloDatasetGenerator(_multi_class_config()).generate([])
+
+    # mouse only maps 2 of the dataset's global 4 keypoint slots - the rest get
+    # placeholder names, matching the always-zeroed columns those slots get in mouse's
+    # actual label rows (see MappingYoloPoseInstanceConverter.convert).
+    assert dataset.kpt_names[0] == ["nose", "tail", "kp_2", "kp_3"]
+
+
+def test_generate_kpt_names_omits_a_class_with_no_keypoints_mapped():
+    config = YoloDatasetConfig(
+        class_names=["mouse", "box_only"],
+        instance_types={
+            "mouse": YoloPoseInstanceTypeConfig(class_index=0, bounding_box_members=["box"], keypoints={"nose": 0}),
+            "box_only": YoloPoseInstanceTypeConfig(class_index=1, bounding_box_members=["box"], keypoints={}),
+        },
+    )
+
+    dataset = MappingYoloDatasetGenerator(config).generate([])
+
+    assert set(dataset.kpt_names.keys()) == {0}

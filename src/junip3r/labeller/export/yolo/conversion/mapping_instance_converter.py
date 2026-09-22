@@ -1,4 +1,4 @@
-from typing import Sequence, List, Tuple, Iterable, Mapping, Optional
+from typing import Sequence, List, Tuple, Iterable, Mapping, Dict, Optional
 
 from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.data.types.abc import Box, LabellerObjectType, Point
@@ -193,4 +193,27 @@ class MappingYoloDatasetGenerator:
         sets = [(set_name, images) for set_name, images in sets.items()]
 
         class_names = self._config.class_names
-        return YoloDataset(sets, class_names, num_keypoints)
+        kpt_names = self._build_kpt_names(num_keypoints)
+        return YoloDataset(sets, class_names, num_keypoints, kpt_names=kpt_names)
+
+    def _build_kpt_names(self, num_keypoints: int) -> Optional[Dict[int, List[str]]]:
+        if num_keypoints == 0:
+            return None
+
+        kpt_names: Dict[int, List[str]] = {}
+        for instance_type_mapping in self._config.instance_types.values():
+            if not instance_type_mapping.keypoints:
+                continue
+
+            # A class with fewer keypoints than the dataset's global num_keypoints
+            # still gets a full-length row in the label format (its unused slots are
+            # always zeroed/"not labeled" - see MappingYoloPoseInstanceConverter.convert)
+            # - kp_i placeholders for those slots keep the list exactly num_keypoints
+            # long, which the reader requires to trust it (see config_repository.py's
+            # _keypoint_names: a length mismatch falls back to fully generic names).
+            names = [f"kp_{i}" for i in range(num_keypoints)]
+            for keypoint_name, output_index in instance_type_mapping.keypoints.items():
+                names[output_index] = keypoint_name
+            kpt_names[instance_type_mapping.class_index] = names
+
+        return kpt_names

@@ -107,6 +107,7 @@ class YoloDatasetWriter:
             # datasets have no kpt_shape key at all, and it's how our own reader
             # (_is_yolo_data_yaml/build_yolo_dataset_schema) tells detect from pose.
             kpt_shape=[num_keypoints, 3] if num_keypoints > 0 else None,
+            kpt_names={class_index: list(names) for class_index, names in dataset.kpt_names.items()} if dataset.kpt_names else None,
             flip_idx=list(flip_h_idx) if flip_h_idx is not None else None,
             extras=extras,
         )
