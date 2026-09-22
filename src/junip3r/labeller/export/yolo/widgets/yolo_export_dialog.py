@@ -6,17 +6,17 @@ from uuid import uuid4
 import numpy as np
 from PySide6.QtCore import Signal, QObject, Slot, QThread
 from PySide6.QtGui import QIcon, Qt
-from PySide6.QtWidgets import QDialog, QFormLayout, QLineEdit, QToolButton, QWidgetAction, QVBoxLayout, \
+from PySide6.QtWidgets import QComboBox, QDialog, QFormLayout, QLineEdit, QToolButton, QWidgetAction, QVBoxLayout, \
     QDialogButtonBox, QHBoxLayout, QLabel, QCheckBox, QProgressDialog, QMessageBox, QListWidget, QListWidgetItem, \
     QPushButton
 
 from junip3r.common.tags.data import TagValue
 from junip3r.labeller.config.data import InstanceType
-from junip3r.labeller.data.types.abc import LabellerObjectType
 from junip3r.labeller.data.types.data import Instance
 from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import \
-    MappingYoloDatasetMetadataGenerator, MappingYoloDatasetGenerator, MappingYoloPoseInstanceConverter
-from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig
+    MappingYoloDatasetMetadataGenerator, MappingYoloDatasetGenerator, MappingYoloPoseInstanceConverter, \
+    build_instance_type_mapping
+from junip3r.labeller.export.yolo.data import ExportMode, YoloDatasetConfig
 from junip3r.labeller.export.yolo.export_profile import ExportProfile, IExportProfileRepository
 from junip3r.labeller.export.yolo.serialization.yolo_dataset_metadata_writer import YoloPoseDatasetMetadataWriter
 from junip3r.labeller.export.yolo.serialization.yolo_dataset_writer import YoloDatasetWriter
@@ -153,6 +153,12 @@ class YoloExportDialog(QDialog):
         self.cmb_profile.manage_requested.connect(self._manage_profiles)
         form_layout.addRow("Export Profile:", self.cmb_profile)
 
+        self.cmb_mode = QComboBox()
+        self.cmb_mode.addItem("Pose", ExportMode.POSE)
+        self.cmb_mode.addItem("Detect", ExportMode.DETECT)
+        self.cmb_mode.currentIndexChanged.connect(self._on_mode_changed)
+        form_layout.addRow("Mode:", self.cmb_mode)
+
         self.txt_location = QLineEdit()
         self.txt_location.setText("")
         self.txt_location.editingFinished.connect(self._on_target_folder_edited)
@@ -268,12 +274,13 @@ class YoloExportDialog(QDialog):
         profiles = self._export_profile_repository.list()
         if not profiles:
             # Matches today's actual default behaviour: every instance type starts
-            # checked, no target folder, "include empty" unchecked.
+            # checked, no target folder, "include empty" unchecked, pose mode.
             all_instance_type_names = [it.name for it in self._model.get_instance_types(0)]
             default_profile = ExportProfile(
                 id=str(uuid4()), name="Default",
                 instance_type_names=all_instance_type_names,
                 set_split_id=default_split_id,
+                mode=ExportMode.POSE,
             )
             self._export_profile_repository.set(default_profile)
             profiles = [default_profile]
@@ -295,6 +302,10 @@ class YoloExportDialog(QDialog):
 
         self.cmb_profile.set_items(
             [(p.id, p.name) for p in self._export_profile_repository.list()], self._current_profile_id)
+
+        self.cmb_mode.blockSignals(True)
+        self.cmb_mode.setCurrentIndex(self.cmb_mode.findData(profile.mode))
+        self.cmb_mode.blockSignals(False)
 
         self.txt_location.setText(profile.target_folder)
 
@@ -387,6 +398,7 @@ class YoloExportDialog(QDialog):
             id=str(uuid4()), name=name,
             instance_type_names=all_instance_type_names,
             set_split_id=default_split_id,
+            mode=ExportMode.POSE,
         )
         self._export_profile_repository.set(new_profile)
         return new_profile
@@ -400,6 +412,7 @@ class YoloExportDialog(QDialog):
             set_split_id=source.set_split_id,  # shared by reference, not duplicated
             target_folder=source.target_folder,
             include_empty_images=source.include_empty_images,
+            mode=source.mode,
         )
         self._export_profile_repository.set(new_profile)
         return new_profile
@@ -522,6 +535,11 @@ class YoloExportDialog(QDialog):
     def _on_target_folder_edited(self):
         profile = self._current_profile()
         profile.target_folder = self.txt_location.text()
+        self._export_profile_repository.set(profile)
+
+    def _on_mode_changed(self, index: int):
+        profile = self._current_profile()
+        profile.mode = self.cmb_mode.itemData(index)
         self._export_profile_repository.set(profile)
 
     def _on_include_empty_toggled(self, checked: bool):
@@ -648,28 +666,13 @@ class YoloExportDialog(QDialog):
             )
             return
 
+        mode = self._current_profile().mode
+
         class_names = []
         instance_types = {}
         for instance_index, instance_type in enumerate(selected_instance_types):
             class_names.append(instance_type.name)
-
-            keypoint_mapping = {}
-            keypoint_members = [member for member in instance_type.members if member.type == LabellerObjectType.KEYPOINT]
-            for keypoint_index, keypoint in enumerate(keypoint_members):
-                keypoint_mapping[keypoint.name] = keypoint_index
-
-            bounding_box_member = next(
-                (member for member in instance_type.members if member.type == LabellerObjectType.BOUNDING_BOX),
-                None,
-            )
-            if bounding_box_member is not None:
-                bounding_box_members = [bounding_box_member.name]
-            else:
-                # No explicit bounding box member - fall back to a tight box around all
-                # keypoints (MappingYoloPoseInstanceConverter._tight_box).
-                bounding_box_members = [keypoint.name for keypoint in keypoint_members]
-
-            instance_types[instance_type.name] = YoloPoseInstanceTypeConfig(instance_index, bounding_box_members, keypoint_mapping)
+            instance_types[instance_type.name] = build_instance_type_mapping(instance_type, instance_index, mode)
 
         dataset_config = YoloDatasetConfig(
             class_names=class_names,

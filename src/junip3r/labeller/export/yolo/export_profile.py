@@ -5,12 +5,17 @@ from uuid import uuid4
 
 import yaml
 
+from junip3r.labeller.export.yolo.data import ExportMode
+
 
 @dataclass
 class ExportProfile:
     """A named, reusable YOLO export configuration: which instance types to include,
-    where to export to, and which named SetSplit (set_split.py) to use - referenced by
-    id, not copied, so multiple profiles can deliberately share one split.
+    where to export to, which named SetSplit (set_split.py) to use - referenced by
+    id, not copied, so multiple profiles can deliberately share one split - and which
+    mode (pose/detect) to export them as. Mode applies uniformly to every instance type
+    in the profile - matches "one dataset, one kpt_shape" - so the same instance type
+    can be exported as pure detect in one profile and full pose in another.
     """
     id: str
     name: str
@@ -18,6 +23,7 @@ class ExportProfile:
     set_split_id: str = ""
     target_folder: str = ""
     include_empty_images: bool = False
+    mode: ExportMode = ExportMode.POSE
 
 
 class ExportProfileSerializer:
@@ -30,6 +36,7 @@ class ExportProfileSerializer:
             "set_split_id": profile.set_split_id,
             "target_folder": profile.target_folder,
             "include_empty_images": profile.include_empty_images,
+            "mode": cls._serialize_mode(profile.mode),
         }
 
     @classmethod
@@ -41,7 +48,28 @@ class ExportProfileSerializer:
             set_split_id=data.get("set_split_id", ""),
             target_folder=data.get("target_folder", ""),
             include_empty_images=data.get("include_empty_images", False),
+            mode=cls._deserialize_mode(data["mode"]),
         )
+
+    @classmethod
+    def _serialize_mode(cls, mode: ExportMode) -> str:
+        match mode:
+            case ExportMode.POSE:
+                return "pose"
+            case ExportMode.DETECT:
+                return "detect"
+            case _:
+                raise ValueError(f"Unknown mode: {mode}")
+
+    @classmethod
+    def _deserialize_mode(cls, mode_name: str) -> ExportMode:
+        match mode_name:
+            case "pose":
+                return ExportMode.POSE
+            case "detect":
+                return ExportMode.DETECT
+            case _:
+                raise ValueError(f"Unknown mode: {mode_name!r}")
 
 
 class IExportProfileRepository(Protocol):

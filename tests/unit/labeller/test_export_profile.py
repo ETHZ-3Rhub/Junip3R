@@ -1,3 +1,6 @@
+import pytest
+
+from junip3r.labeller.export.yolo.data import ExportMode
 from junip3r.labeller.export.yolo.export_profile import ExportProfile, ExportProfileRepository, ExportProfileSerializer
 
 
@@ -7,6 +10,7 @@ def test_serializer_round_trip():
     profile = ExportProfile(
         id="abc", name="Animals", instance_type_names=("fox", "deer"),
         set_split_id="split-1", target_folder="/data/animals", include_empty_images=True,
+        mode=ExportMode.DETECT,
     )
 
     data = ExportProfileSerializer.serialize(profile)
@@ -16,11 +20,22 @@ def test_serializer_round_trip():
 
 
 def test_serializer_deserialize_fills_defaults():
-    data = {"id": "abc", "name": "Default"}
+    data = {"id": "abc", "name": "Default", "mode": "pose"}
 
     restored = ExportProfileSerializer.deserialize(data)
 
     assert restored == ExportProfile(id="abc", name="Default")
+
+
+@pytest.mark.parametrize("mode, mode_name", [(ExportMode.POSE, "pose"), (ExportMode.DETECT, "detect")])
+def test_serializer_mode_round_trips_through_its_string_name(mode, mode_name):
+    profile = ExportProfile(id="abc", name="Default", mode=mode)
+
+    data = ExportProfileSerializer.serialize(profile)
+    assert data["mode"] == mode_name
+
+    restored = ExportProfileSerializer.deserialize(data)
+    assert restored.mode == mode
 
 
 # --- ExportProfileRepository ------------------------------------------------------------

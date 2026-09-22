@@ -6,9 +6,10 @@ from junip3r.labeller.data.types.data import BoundingBox, Instance, Keypoint
 from junip3r.labeller.export.yolo.conversion.mapping_instance_converter import (
     MappingYoloDatasetMetadataGenerator,
     MappingYoloPoseInstanceConverter,
+    build_instance_type_mapping,
     _box_to_xywh,
 )
-from junip3r.labeller.export.yolo.data import YoloDatasetConfig, YoloPoseInstanceTypeConfig
+from junip3r.labeller.export.yolo.data import ExportMode, YoloDatasetConfig, YoloPoseInstanceTypeConfig
 
 
 class FakeInstanceType:
@@ -24,6 +25,58 @@ def _instance(instance_type_name, members):
 
 def test_box_to_xywh_converts_corners_to_center_size():
     assert _box_to_xywh(((0.0, 0.0), (4.0, 2.0))) == (2.0, 1.0, 4.0, 2.0)
+
+
+# --- build_instance_type_mapping ---------------------------------------------------------
+
+def _instance_type(members):
+    return InstanceType(name="mouse", members=members, skeleton=SkeletonType(lines=[], color=(0, 0, 0)), color=(255, 0, 0))
+
+
+def test_build_mapping_pose_mode_maps_all_keypoints():
+    instance_type = _instance_type([
+        MemberType(name="Bounding Box", type=LabellerObjectType.BOUNDING_BOX, color=(255, 0, 0)),
+        MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(0, 255, 0)),
+        MemberType(name="tail", type=LabellerObjectType.KEYPOINT, color=(0, 0, 255)),
+    ])
+
+    mapping = build_instance_type_mapping(instance_type, class_index=0, mode=ExportMode.POSE)
+
+    assert mapping.keypoints == {"nose": 0, "tail": 1}
+    assert mapping.bounding_box_members == ["Bounding Box"]
+
+
+def test_build_mapping_pose_mode_falls_back_to_automatic_box_around_keypoints():
+    instance_type = _instance_type([
+        MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(0, 255, 0)),
+        MemberType(name="tail", type=LabellerObjectType.KEYPOINT, color=(0, 0, 255)),
+    ])
+
+    mapping = build_instance_type_mapping(instance_type, class_index=0, mode=ExportMode.POSE)
+
+    assert mapping.bounding_box_members == ["nose", "tail"]
+
+
+def test_build_mapping_detect_mode_never_maps_keypoints_even_if_present():
+    instance_type = _instance_type([
+        MemberType(name="Bounding Box", type=LabellerObjectType.BOUNDING_BOX, color=(255, 0, 0)),
+        MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(0, 255, 0)),
+    ])
+
+    mapping = build_instance_type_mapping(instance_type, class_index=0, mode=ExportMode.DETECT)
+
+    assert mapping.keypoints == {}
+    assert mapping.bounding_box_members == ["Bounding Box"]
+
+
+def test_build_mapping_detect_mode_has_no_box_and_never_falls_back_to_automatic():
+    instance_type = _instance_type([
+        MemberType(name="nose", type=LabellerObjectType.KEYPOINT, color=(0, 255, 0)),
+    ])
+
+    mapping = build_instance_type_mapping(instance_type, class_index=0, mode=ExportMode.DETECT)
+
+    assert mapping.bounding_box_members == []
 
 
 # --- MappingYoloPoseInstanceConverter ---------------------------------------------------

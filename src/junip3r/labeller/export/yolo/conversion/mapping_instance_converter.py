@@ -4,10 +4,12 @@ from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.data.types.abc import Box, LabellerObjectType, Point
 from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox
 from junip3r.labeller.export.yolo.data import (
+    ExportMode,
     IYoloImage,
     YoloDatasetConfig,
     YoloKeypointType,
     YoloPoseInstanceType,
+    YoloPoseInstanceTypeConfig,
     YoloDatasetMetadata,
     YoloDataset,
 )
@@ -65,6 +67,29 @@ def _tight_box(instance: Instance, member_names: Sequence[str]) -> Optional[Box]
     xs = [x for x, _ in corners]
     ys = [y for _, y in corners]
     return (min(xs), min(ys)), (max(xs), max(ys))
+
+
+def build_instance_type_mapping(instance_type: InstanceType, class_index: int, mode: ExportMode) -> YoloPoseInstanceTypeConfig:
+    """The only place "pose vs. detect" actually matters - everything downstream
+    (MappingYoloPoseInstanceConverter, MappingYoloDatasetMetadataGenerator) is already
+    mode-agnostic: it just does whatever this mapping says (no keypoints mapped is
+    already exactly what a detect instance is, see YoloBoxInstance). Detect mode never
+    maps keypoints, even if the instance type happens to have keypoint members, and
+    never falls back to an automatic box around them either - that fallback only makes
+    sense when keypoints are actually part of the exported shape.
+    """
+    keypoint_members = [m for m in instance_type.members if m.type == LabellerObjectType.KEYPOINT]
+    keypoint_mapping = {kp.name: i for i, kp in enumerate(keypoint_members)} if mode == ExportMode.POSE else {}
+
+    bbox_member = next((m for m in instance_type.members if m.type == LabellerObjectType.BOUNDING_BOX), None)
+    if bbox_member is not None:
+        bounding_box_members = [bbox_member.name]
+    elif mode == ExportMode.POSE:
+        bounding_box_members = [kp.name for kp in keypoint_members]
+    else:
+        bounding_box_members = []
+
+    return YoloPoseInstanceTypeConfig(class_index, bounding_box_members, keypoint_mapping)
 
 
 class MappingYoloPoseInstanceConverter:

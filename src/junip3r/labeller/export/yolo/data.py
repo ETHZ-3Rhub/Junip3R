@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from pathlib import Path
 from typing import Sequence, Mapping, Tuple, Optional, Protocol
 
@@ -6,6 +7,11 @@ import numpy as np
 
 from junip3r.labeller.data.types.abc import Color
 from junip3r.labeller.yolo.labels.data import YoloBoxInstance
+
+
+class ExportMode(Enum):
+    POSE = auto()
+    DETECT = auto()
 
 
 class IYoloImage(Protocol):

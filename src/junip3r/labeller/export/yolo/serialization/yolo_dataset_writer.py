@@ -103,7 +103,10 @@ class YoloDatasetWriter:
             path=target_folder.as_posix(),
             test=set_paths.get("test"),
             names=names,
-            kpt_shape=[num_keypoints, 3],
+            # Omitted (not [0, 3]) for a detect-only export - Ultralytics detect
+            # datasets have no kpt_shape key at all, and it's how our own reader
+            # (_is_yolo_data_yaml/build_yolo_dataset_schema) tells detect from pose.
+            kpt_shape=[num_keypoints, 3] if num_keypoints > 0 else None,
             flip_idx=list(flip_h_idx) if flip_h_idx is not None else None,
             extras=extras,
         )
