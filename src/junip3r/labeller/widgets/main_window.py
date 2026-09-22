@@ -26,6 +26,7 @@ class EditorMainWindow(EditorMainWindowLayout):
         self._context_model: Optional[ContextModel] = None
         self._set_split_repository: Optional[ISetSplitRepository] = None
         self._export_profile_repository: Optional[IExportProfileRepository] = None
+        self._config_mode: Optional[ConfigMode] = None
 
         self.action_export_as_yolo_dataset.triggered.connect(self.export_yolo_dataset)
 
@@ -57,6 +58,7 @@ class EditorMainWindow(EditorMainWindowLayout):
             self.stk_content.setCurrentIndex(1)
 
     def set_mode(self, mode: ConfigMode):
+        self._config_mode = mode
         self.editor.set_mode(mode)
 
     def set_set_split_repository(self, set_split_repository: ISetSplitRepository):
@@ -71,7 +73,9 @@ class EditorMainWindow(EditorMainWindowLayout):
     def export_yolo_dataset(self):
         if self._model is None or self._set_split_repository is None or self._export_profile_repository is None:
             return
-        dialog = YoloExportDialog(self._model, self._set_split_repository, self._export_profile_repository, self)
+        assert self._config_mode is not None, "set_mode should always be called before export is reachable"
+        dialog = YoloExportDialog(
+            self._model, self._set_split_repository, self._export_profile_repository, self._config_mode, self)
         dialog.exec_()
 
     def closeEvent(self, event):

@@ -80,6 +80,20 @@ def test_build_mapping_detect_mode_has_no_box_and_never_falls_back_to_automatic(
     assert mapping.bounding_box_members == []
 
 
+def test_build_mapping_uses_the_first_bounding_box_member_when_several_are_present():
+    # Freeform instance types aren't restricted to a single BOUNDING_BOX-typed member
+    # the way YOLO_POSE/YOLO_DETECT ones are - the first one found is used as a
+    # sensible default, pending a real freeform export-mapping UI to pick a specific one.
+    instance_type = _instance_type([
+        MemberType(name="Outer Box", type=LabellerObjectType.BOUNDING_BOX, color=(255, 0, 0)),
+        MemberType(name="Inner Box", type=LabellerObjectType.BOUNDING_BOX, color=(0, 255, 0)),
+    ])
+
+    mapping = build_instance_type_mapping(instance_type, class_index=0, mode=ExportMode.DETECT)
+
+    assert mapping.bounding_box_members == ["Outer Box"]
+
+
 # --- MappingYoloPoseInstanceConverter ---------------------------------------------------
 
 def _config(bounding_box_members=("box",), keypoints=None):

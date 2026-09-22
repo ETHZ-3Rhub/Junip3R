@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QComboBox, QDialog, QFormLayout, QLineEdit, QToolB
     QDialogButtonBox, QHBoxLayout, QLabel, QCheckBox, QProgressDialog, QMessageBox, QListWidget, QListWidgetItem, \
     QPushButton
 
+from junip3r.common.config.abc import ConfigMode
 from junip3r.labeller.config.data import InstanceType
 from junip3r.labeller.export.yolo.data import ExportMode, YoloDataset, YoloDatasetMetadata
 from junip3r.labeller.export.yolo.export_pipeline import (
@@ -84,12 +85,13 @@ class YoloExportDialog(QDialog):
     run_export = Signal(object)
 
     def __init__(self, model: IReadOnlyAppModel, set_split_repository: ISetSplitRepository,
-                 export_profile_repository: IExportProfileRepository, parent=None):
+                 export_profile_repository: IExportProfileRepository, config_mode: ConfigMode, parent=None):
         super().__init__(parent)
 
         self._model = model
         self._set_split_repository = set_split_repository
         self._export_profile_repository = export_profile_repository
+        self._config_mode = config_mode
         self._current_profile_id: str = ""
         self._progress_dialog: Optional[QProgressDialog] = None
         self._current_job: Optional[ExportJob] = None
@@ -108,7 +110,11 @@ class YoloExportDialog(QDialog):
         form_layout.addRow("Export Profile:", self.cmb_profile)
 
         self.cmb_mode = QComboBox()
-        self.cmb_mode.addItem("Pose", ExportMode.POSE)
+        # A detect-only project has no keypoints to export in the first place - pose
+        # export doesn't even make sense to offer there. Pose and freeform projects
+        # both offer either mode.
+        if self._config_mode != ConfigMode.YOLO_DETECT:
+            self.cmb_mode.addItem("Pose", ExportMode.POSE)
         self.cmb_mode.addItem("Detect", ExportMode.DETECT)
         self.cmb_mode.currentIndexChanged.connect(self._on_mode_changed)
         form_layout.addRow("Mode:", self.cmb_mode)
@@ -217,6 +223,11 @@ class YoloExportDialog(QDialog):
 
     # --- seeding / current profile & split -----------------------------------------
 
+    def _default_export_mode(self) -> ExportMode:
+        # Matches cmb_mode's available items - a detect-only project can't default to
+        # Pose, since that item doesn't even exist in its combo box.
+        return ExportMode.DETECT if self._config_mode == ConfigMode.YOLO_DETECT else ExportMode.POSE
+
     def _seed_defaults_if_needed(self):
         splits = self._set_split_repository.list()
         if not splits:
@@ -228,13 +239,13 @@ class YoloExportDialog(QDialog):
         profiles = self._export_profile_repository.list()
         if not profiles:
             # Matches today's actual default behaviour: every instance type starts
-            # checked, no target folder, "include empty" unchecked, pose mode.
+            # checked, no target folder, "include empty" unchecked.
             all_instance_type_names = [it.name for it in self._model.get_instance_types(0)]
             default_profile = ExportProfile(
                 id=str(uuid4()), name="Default",
                 instance_type_names=all_instance_type_names,
                 set_split_id=default_split_id,
-                mode=ExportMode.POSE,
+                mode=self._default_export_mode(),
             )
             self._export_profile_repository.set(default_profile)
             profiles = [default_profile]
@@ -352,7 +363,7 @@ class YoloExportDialog(QDialog):
             id=str(uuid4()), name=name,
             instance_type_names=all_instance_type_names,
             set_split_id=default_split_id,
-            mode=ExportMode.POSE,
+            mode=self._default_export_mode(),
         )
         self._export_profile_repository.set(new_profile)
         return new_profile

@@ -77,6 +77,12 @@ def build_instance_type_mapping(instance_type: InstanceType, class_index: int, m
     maps keypoints, even if the instance type happens to have keypoint members, and
     never falls back to an automatic box around them either - that fallback only makes
     sense when keypoints are actually part of the exported shape.
+
+    The box itself is always the first BOUNDING_BOX-typed member found (if any), or else
+    - in pose mode only - an automatic box around the mapped keypoints. This is a
+    sensible default for FREEFORM projects too (which have no "the" bounding box
+    convention the way YOLO_POSE/YOLO_DETECT do, and may have several BOUNDING_BOX-typed
+    members) pending a real freeform export-mapping UI to pick a specific one.
     """
     keypoint_members = [m for m in instance_type.members if m.type == LabellerObjectType.KEYPOINT]
     keypoint_mapping = {kp.name: i for i, kp in enumerate(keypoint_members)} if mode == ExportMode.POSE else {}
