@@ -181,6 +181,7 @@ class Editor(QWidget):
         self.selection_controls.member_selected.connect(self.model.select_member)
         self.selection_controls.instance_type_selected.connect(self.model.select_instance_type)
         self.selection_controls.instance_renamed.connect(self.model.rename_instance)
+        self.selection_controls.instance_hovered.connect(self.pose_editor.set_highlighted_instance)
         self.model.image_state_changed.connect(self.selection_controls.set_image_state)
 
         self.act_left.triggered.connect(self.model.previous_image)

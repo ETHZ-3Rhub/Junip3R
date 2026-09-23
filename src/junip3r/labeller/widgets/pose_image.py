@@ -10,7 +10,7 @@ from PySide6.QtGui import QMouseEvent, QImage
 from PySide6.QtWidgets import QLabel
 
 from junip3r.labeller.controller.geometry import clamp_to_image01
-from junip3r.labeller.data.types.abc import LabellerObject, LabellerObjectType, Point, Box
+from junip3r.labeller.data.types.abc import LabellerObject, LabellerObjectType, Point, Box, InstanceID
 from junip3r.labeller.data.types.data import Instance, Keypoint, BoundingBox, Polygon, Polyline, PolygonPoint, \
     BoundingBoxCorner
 from junip3r.labeller.model.camera_model import CameraState
@@ -169,6 +169,8 @@ class PoseImage(QLabel):
         self._hovered_members: List[LabellerObject] = []
         self._new_hovered_members: List[LabellerObject] = []
 
+        self._highlighted_instance_id = None
+
         self._update_timer = QtCore.QTimer()
         self._update_timer.setInterval(1000 // 60)
         self._update_timer.timeout.connect(self._update_if_needed)
@@ -200,6 +202,12 @@ class PoseImage(QLabel):
         
     def set_operation_state(self, operation_state: OperationState):
         self._operation_state = operation_state
+        self._update_pending = True
+
+    def set_highlighted_instance(self, instance_id: InstanceID):
+        if instance_id == self._highlighted_instance_id:
+            return
+        self._highlighted_instance_id = instance_id
         self._update_pending = True
 
     def set_camera_state(self, camera_state: CameraState):
@@ -414,6 +422,11 @@ class PoseImage(QLabel):
             for member in instance.members:
                 self._draw_label(rc, member)
 
+    def _draw_highlighted_instance(self, rc: RenderingContext):
+        instance = next((i for i in self._state.instances if i.instance_id == self._highlighted_instance_id), None)
+        if instance is not None:
+            self._draw_label(rc, instance)
+
     def _draw_crosshair(self, rc: RenderingContext, pos_view: Point):
         rc.renderer.draw_crosshair(pos_view)
 
@@ -513,6 +526,7 @@ class PoseImage(QLabel):
         if self._operation_state.inspect_all:
             self._draw_all_labels(rc)
         else:
+            self._draw_highlighted_instance(rc)
             self._draw_hovered_label(rc)
 
         painter.end()

@@ -1,6 +1,6 @@
 from typing import Dict, Optional, Sequence, Hashable
 
-from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, Signal
+from PySide6.QtCore import QAbstractListModel, QEvent, Qt, QModelIndex, Signal
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QSplitter, QLabel, \
     QListView, QComboBox, QSizePolicy
@@ -176,6 +176,7 @@ class SelectionControls(QWidget):
     instance_type_selected = Signal(object)
 
     instance_renamed = Signal(object, object)  # instance_id, new_name
+    instance_hovered = Signal(object)  # instance_id, or None when nothing's hovered
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -239,6 +240,16 @@ class SelectionControls(QWidget):
 
         self.dpd_instance_type.installEventFilter(self)
 
+        # QAbstractItemView's own hover styling isn't driven by entered()/a "left" signal
+        # at all - it resolves indexAt() on every MouseMove over the viewport, so moving
+        # off an item onto empty space (still inside the widget) clears it immediately.
+        # entered() only fires when moving onto a *new valid* index - it has no event for
+        # "moved onto no index" - so it can't reproduce that on its own; resolving
+        # indexAt() ourselves on every move is the one mechanism that covers all three
+        # transitions (item -> item, item -> empty space, item -> outside the widget).
+        self.lst_instances.setMouseTracking(True)
+        self.lst_instances.viewport().installEventFilter(self)
+
         # Only react to user interactions (not programmatic selection changes).
         self.lst_instances.clicked.connect(self._select_instance)
         self.lst_members.clicked.connect(self._select_member)
@@ -247,6 +258,7 @@ class SelectionControls(QWidget):
         self.instance_list_model.instance_renamed.connect(self.instance_renamed)
 
         self._instance_type: Optional[InstanceType] = None
+        self._hovered_instance_id: Optional[str] = None
 
     def set_mode(self, mode: ConfigMode):
         # The member list is redundant in yolo_detect - every instance has exactly
@@ -332,10 +344,22 @@ class SelectionControls(QWidget):
         instance_type = self.dpd_instance_type.currentData(TypeListModel.InstanceTypeRole)
         self.instance_type_selected.emit(instance_type)
 
+    def _update_hovered_instance(self, index: QModelIndex):
+        instance_id = index.data(InstanceListModel.InstanceIDRole) if index.isValid() else None
+        if instance_id == self._hovered_instance_id:
+            return
+        self._hovered_instance_id = instance_id
+        self.instance_hovered.emit(instance_id)
+
     def eventFilter(self, obj, event):
         # Prevent the instance type dropdown from changing the selected type when the user scrolls
         if obj == self.dpd_instance_type:
             if event.type() == 31:
                 event.ignore()
                 return True
+        elif obj is self.lst_instances.viewport():
+            if event.type() == QEvent.Type.MouseMove:
+                self._update_hovered_instance(self.lst_instances.indexAt(event.position().toPoint()))
+            elif event.type() == QEvent.Type.Leave:
+                self._update_hovered_instance(QModelIndex())
         return False

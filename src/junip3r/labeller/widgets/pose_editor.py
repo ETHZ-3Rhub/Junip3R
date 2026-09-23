@@ -3,6 +3,7 @@ from typing import Optional
 from PySide6.QtCore import Slot
 
 from junip3r.labeller.controller.editor_controller import EditorController
+from junip3r.labeller.data.types.abc import InstanceID
 from junip3r.labeller.layout.pose_editor import PoseEditorLayout
 from junip3r.labeller.model.camera_model import CameraModel
 from junip3r.labeller.model.context_model import ContextModel, ContextState
@@ -52,6 +53,9 @@ class PoseEditor(PoseEditorLayout):
     def set_context_mode(self, context_mode: bool):
         if self._controller is not None:
             self._controller.set_context_mode(context_mode)
+
+    def set_highlighted_instance(self, instance_id: InstanceID):
+        self._pose_image.set_highlighted_instance(instance_id)
 
     def _connect_model(self):
         assert self._model is not None
