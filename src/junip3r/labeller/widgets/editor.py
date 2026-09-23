@@ -1,4 +1,4 @@
-from typing import Optional, cast
+from typing import Optional, Sequence, Tuple, cast
 
 from PySide6.QtCore import Qt, QObject, QEvent, Signal
 from PySide6.QtGui import QAction, QKeySequence, QKeyEvent
@@ -11,6 +11,7 @@ from junip3r.labeller.model.pose_image_model import PoseImageModel
 from junip3r.labeller.widgets.image_navigation import ImageNavigation
 from junip3r.labeller.widgets.pose_editor import PoseEditor
 from junip3r.labeller.widgets.selection_controls import SelectionControls
+from junip3r.labeller.widgets.video_image_navigation import VideoImageNavigation
 
 
 class ModifierTracker(QObject):
@@ -164,6 +165,18 @@ class Editor(QWidget):
         self._left_layout.addWidget(new_footer)
         new_footer.setVisible(True)
         self._footer_widget = new_footer
+
+    def set_video_layout(self, video_layout: Optional[Sequence[Tuple[str, int]]]) -> None:
+        """Swap the default flat ImageNavigation for a two-slider video/frame navigator
+        (see VideoImageNavigation) - video_layout is (video_name, num_frames) pairs, in
+        flat image_index order. Must be called before set_model(), since _connect_model
+        wires up whatever self.image_navigation currently points to.
+        """
+        if video_layout is None:
+            return
+        video_navigation = VideoImageNavigation(video_layout, self.image_navigation.parent())
+        self.set_footer_widget(video_navigation)
+        self.image_navigation = video_navigation
 
     def set_model(self, model: PoseImageModel, context_model: Optional[ContextModel] = None, image_settings_model: Optional[ImageSettingsModel] = None):
         self.model = model

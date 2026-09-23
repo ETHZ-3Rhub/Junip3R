@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Sequence, Tuple
 
 from PySide6.QtCore import Signal
 
@@ -35,6 +35,9 @@ class EditorMainWindow(EditorMainWindowLayout):
             self.btn_open_frame_extractor.clicked.connect(self.switch_to_frame_extractor)
         else:
             self.btn_open_frame_extractor.hide()
+
+    def set_video_layout(self, video_layout: Optional[Sequence[Tuple[str, int]]]) -> None:
+        self.editor.set_video_layout(video_layout)
 
     def set_model(self, model: AppModel, context_repository: Optional[IContextRepository] = None,
                   image_settings_model: Optional[ImageSettingsModel] = None, read_only: bool = False):

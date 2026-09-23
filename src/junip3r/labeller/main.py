@@ -16,6 +16,9 @@ from junip3r.labeller.data.repository.image import ImageRepository
 from junip3r.labeller.data.repository.label import JuniperLabelRepository
 from junip3r.labeller.data.repository.selection import SelectionRepository
 from junip3r.labeller.data.repository.tag import TagRepository
+from junip3r.labeller.data.repository.video_context import VideoContextRepository
+from junip3r.labeller.data.repository.video_image import VideoFrameImageRepository
+from junip3r.labeller.data.video_discovery import discover_labeller_videos, is_video_mode_project
 from junip3r.labeller.data.yolo.config_repository import YoloConfigRepository, build_yolo_dataset_schema
 from junip3r.labeller.data.yolo.discovery import discover_yolo_dataset_images, yolo_dataset_root
 from junip3r.labeller.data.yolo.label_repository import YoloLabelRepository
@@ -74,6 +77,9 @@ def _from_yolo_dataset(data_yaml_file: Path, raw: dict, integrated: bool) -> Edi
 def _from_junip3r_project(config_file: Path, config: dict, integrated: bool = False) -> EditorMainWindow:
     project_folder = config_file.parent
 
+    if is_video_mode_project(project_folder):
+        return _from_junip3r_video_project(config_file, config, integrated)
+
     labeller_config = parse_config(config)
     config_repository = ConfigRepository(labeller_config)
 
@@ -105,6 +111,37 @@ def _from_junip3r_project(config_file: Path, config: dict, integrated: bool = Fa
     editor.set_mode(labeller_config.mode)
     editor.set_set_split_repository(set_split_repository)
     editor.set_export_profile_repository(export_profile_repository)
+
+    return editor
+
+
+def _from_junip3r_video_project(config_file: Path, config: dict, integrated: bool = False) -> EditorMainWindow:
+    """Prototype: same config.yaml/instance-type shape as a real project, but the images
+    come straight from whole video files (a "videos" folder) instead of pre-extracted
+    frames - see data/video_discovery.py. Export is out of scope for now (its
+    repositories are deliberately left unwired below, so the menu action just no-ops).
+    """
+    project_folder = config_file.parent
+
+    labeller_config = parse_config(config)
+    config_repository = ConfigRepository(labeller_config)
+
+    videos, frames = discover_labeller_videos(project_folder)
+    image_repository = VideoFrameImageRepository(videos, frames)
+    context_repository = VideoContextRepository(videos, frames)
+
+    image_settings_model = ImageSettingsModel()
+
+    label_repository = JuniperLabelRepository([f.label for f in frames])
+    label_model = LabelModel(config_repository, label_repository)
+    tag_repository = TagRepository(project_folder / "meta" / "tags", [f.name for f in frames])
+
+    app_model = AppModel(image_repository, label_model, SelectionRepository(), tag_repository=tag_repository)
+
+    editor = EditorMainWindow(integrated=integrated)
+    editor.set_video_layout([(video.video.stem, video.num_frames) for video in videos])
+    editor.set_model(app_model, context_repository, image_settings_model)
+    editor.set_mode(labeller_config.mode)
 
     return editor
 
